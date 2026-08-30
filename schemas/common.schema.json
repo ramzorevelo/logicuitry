@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lcir/common.schema.json",
+  "title": "Shared definitions for Logicuitry file formats",
+  "$defs": {
+    "point": {
+      "type": "object",
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+      "required": ["x", "y"],
+      "additionalProperties": false
+    },
+    "paramValue": { "type": ["string", "number", "boolean"] },
+    "pinRole": { "enum": ["data", "clock", "enable", "asyncSet", "asyncClear", "select"] },
+    "width": { "type": "integer", "minimum": 1, "maximum": 32 },
+    "component": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "defId": { "type": "string" },
+        "pos": { "$ref": "#/$defs/point" },
+        "rot": { "enum": [0, 90, 180, 270] },
+        "mirror": { "type": "boolean" },
+        "label": { "type": "string" },
+        "group": { "type": "string" },
+        "nameOffset": { "$ref": "#/$defs/point" },
+        "params": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/paramValue" }
+        }
+      },
+      "required": ["id", "kind", "pos"],
+      "additionalProperties": false,
+      "if": { "properties": { "kind": { "const": "chip" } } },
+      "then": { "required": ["id", "kind", "pos", "defId"] }
+    },
+    "bitRange": {
+      "type": "object",
+      "properties": {
+        "hi": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "lo": { "type": "integer", "minimum": 0, "maximum": 31 }
+      },
+      "required": ["hi", "lo"],
+      "additionalProperties": false
+    },
+    "wireEnd": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "pin" },
+            "component": { "type": "string" },
+            "pin": { "type": "string" }
+          },
+          "required": ["kind", "component", "pin"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "junction" },
+            "junction": { "type": "string" }
+          },
+          "required": ["kind", "junction"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "tap" },
+            "wire": { "type": "string" },
+            "range": { "$ref": "#/$defs/bitRange" },
+            "pos": { "$ref": "#/$defs/point" }
+          },
+          "required": ["kind", "wire", "range", "pos"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "free" },
+            "pos": { "$ref": "#/$defs/point" }
+          },
+          "required": ["kind", "pos"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "wire": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "a": { "$ref": "#/$defs/wireEnd" },
+        "b": { "$ref": "#/$defs/wireEnd" },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+        "busLabelT": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["id", "a", "b", "points"],
+      "additionalProperties": false
+    },
+    "junction": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "pos": { "$ref": "#/$defs/point" }
+      },
+      "required": ["id", "pos"],
+      "additionalProperties": false
+    }
+  }
+}

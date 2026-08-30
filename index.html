@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Logicuitry</title>
+    <style>
+      /* Literal colours: the token sheet is part of the bundle and has not
+         loaded yet. Replaced wholesale by the first React render. */
+      #boot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        height: 100dvh;
+        color: #7e8694;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+      #boot b {
+        color: #15181d;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      @media (prefers-color-scheme: dark) {
+        #boot {
+          background: #14181f;
+          color: #8a93a3;
+        }
+        #boot b {
+          color: #e8ecf2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- A blank white screen is indistinguishable from a crash; this says
+         which of the two is happening until the app paints over it. -->
+    <div id="root">
+      <div id="boot"><b>Logicuitry</b><span>Loading…</span></div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lcir/lesson.schema.json",
+  "title": "Logicuitry lesson script (*.lesson.json)",
+  "type": "object",
+  "properties": {
+    "format": { "const": "lcir.lesson" },
+    "formatVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "workbench": { "enum": ["numbers", "gates", "circuit", "devicelab"] },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "prose": { "type": "string" },
+          "params": { "type": "object" }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["format", "formatVersion", "id", "title", "workbench", "steps"],
+  "additionalProperties": false
+}

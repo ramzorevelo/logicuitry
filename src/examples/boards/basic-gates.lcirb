@@ -1,0 +1,660 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "basic-gates",
+  "name": "Basic gates",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 24
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 32,
+        "y": 320
+      },
+      "label": "B"
+    },
+    {
+      "id": "g_and",
+      "kind": "and",
+      "pos": {
+        "x": 160,
+        "y": 32
+      }
+    },
+    {
+      "id": "g_or",
+      "kind": "or",
+      "pos": {
+        "x": 160,
+        "y": 88
+      }
+    },
+    {
+      "id": "g_xor",
+      "kind": "xor",
+      "pos": {
+        "x": 160,
+        "y": 144
+      }
+    },
+    {
+      "id": "g_nand",
+      "kind": "nand",
+      "pos": {
+        "x": 160,
+        "y": 200
+      }
+    },
+    {
+      "id": "g_not",
+      "kind": "not",
+      "pos": {
+        "x": 160,
+        "y": -24
+      }
+    },
+    {
+      "id": "l_and",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 24
+      },
+      "label": "AND"
+    },
+    {
+      "id": "l_or",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 80
+      },
+      "label": "OR"
+    },
+    {
+      "id": "l_xor",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 136
+      },
+      "label": "XOR"
+    },
+    {
+      "id": "l_nand",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 192
+      },
+      "label": "NAND"
+    },
+    {
+      "id": "l_not",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": -32
+      },
+      "label": "NOT A"
+    },
+    {
+      "id": "xnor24",
+      "kind": "xnor",
+      "pos": {
+        "x": 160,
+        "y": 312
+      }
+    },
+    {
+      "id": "nor27",
+      "kind": "nor",
+      "pos": {
+        "x": 160,
+        "y": 256
+      }
+    },
+    {
+      "id": "led28",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 248
+      },
+      "label": "NOR",
+      "params": {
+        "width": 1,
+        "pinView": ""
+      }
+    },
+    {
+      "id": "led29",
+      "kind": "led",
+      "pos": {
+        "x": 280,
+        "y": 304
+      },
+      "label": "XNOR",
+      "params": {
+        "width": 1,
+        "pinView": ""
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w19",
+      "a": {
+        "kind": "pin",
+        "component": "g_not",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j7"
+      },
+      "points": [
+        {
+          "x": 152,
+          "y": -8
+        }
+      ]
+    },
+    {
+      "id": "w20",
+      "a": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j6"
+      },
+      "points": []
+    },
+    {
+      "id": "w21",
+      "a": {
+        "kind": "junction",
+        "junction": "j6"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j7"
+      },
+      "points": []
+    },
+    {
+      "id": "w22",
+      "a": {
+        "kind": "junction",
+        "junction": "j6"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j8"
+      },
+      "points": []
+    },
+    {
+      "id": "w23",
+      "a": {
+        "kind": "junction",
+        "junction": "j7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_and",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w24",
+      "a": {
+        "kind": "junction",
+        "junction": "j8"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w25",
+      "a": {
+        "kind": "junction",
+        "junction": "j8"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j9"
+      },
+      "points": []
+    },
+    {
+      "id": "w26",
+      "a": {
+        "kind": "junction",
+        "junction": "j9"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_xor",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w27",
+      "a": {
+        "kind": "junction",
+        "junction": "j9"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j10"
+      },
+      "points": []
+    },
+    {
+      "id": "w28",
+      "a": {
+        "kind": "junction",
+        "junction": "j10"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w29",
+      "a": {
+        "kind": "junction",
+        "junction": "j10"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j11"
+      },
+      "points": []
+    },
+    {
+      "id": "w30",
+      "a": {
+        "kind": "junction",
+        "junction": "j11"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nor27",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w31",
+      "a": {
+        "kind": "junction",
+        "junction": "j11"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "xnor24",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 136,
+          "y": 320
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "g_and",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 152,
+          "y": 56
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": []
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_xor",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "points": []
+    },
+    {
+      "id": "w13",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w14",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "points": []
+    },
+    {
+      "id": "w15",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nor27",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j5"
+      },
+      "points": []
+    },
+    {
+      "id": "w17",
+      "a": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j5"
+      },
+      "points": []
+    },
+    {
+      "id": "w18",
+      "a": {
+        "kind": "junction",
+        "junction": "j5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "xnor24",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "g_and",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l_and",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l_or",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "g_xor",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l_xor",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l_nand",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "g_not",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l_not",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "nor27",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "led28",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "xnor24",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "led29",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j6",
+      "pos": {
+        "x": 136,
+        "y": 40
+      }
+    },
+    {
+      "id": "j7",
+      "pos": {
+        "x": 152,
+        "y": 40
+      }
+    },
+    {
+      "id": "j8",
+      "pos": {
+        "x": 136,
+        "y": 96
+      }
+    },
+    {
+      "id": "j9",
+      "pos": {
+        "x": 136,
+        "y": 152
+      }
+    },
+    {
+      "id": "j10",
+      "pos": {
+        "x": 136,
+        "y": 208
+      }
+    },
+    {
+      "id": "j11",
+      "pos": {
+        "x": 136,
+        "y": 264
+      }
+    },
+    {
+      "id": "j1",
+      "pos": {
+        "x": 152,
+        "y": 112
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 152,
+        "y": 168
+      }
+    },
+    {
+      "id": "j3",
+      "pos": {
+        "x": 152,
+        "y": 224
+      }
+    },
+    {
+      "id": "j4",
+      "pos": {
+        "x": 152,
+        "y": 280
+      }
+    },
+    {
+      "id": "j5",
+      "pos": {
+        "x": 152,
+        "y": 336
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

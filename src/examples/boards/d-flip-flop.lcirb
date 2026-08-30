@@ -1,0 +1,142 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "d-flip-flop",
+  "name": "D flip-flop",
+  "components": [
+    {
+      "id": "d",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "label": "D"
+    },
+    {
+      "id": "clk",
+      "kind": "clock",
+      "pos": {
+        "x": 48,
+        "y": 120
+      },
+      "label": "CLK",
+      "params": {
+        "periodPs": 20000
+      }
+    },
+    {
+      "id": "ff",
+      "kind": "dff",
+      "pos": {
+        "x": 184,
+        "y": 24
+      }
+    },
+    {
+      "id": "lq",
+      "kind": "led",
+      "pos": {
+        "x": 352,
+        "y": 40
+      },
+      "label": "Q"
+    },
+    {
+      "id": "lqn",
+      "kind": "led",
+      "pos": {
+        "x": 352,
+        "y": 112
+      },
+      "label": "Q NOT"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "d",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "d"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "clk"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 80
+        },
+        {
+          "x": 176,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lq",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "qn"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lqn",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 288,
+          "y": 80
+        },
+        {
+          "x": 288,
+          "y": 136
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

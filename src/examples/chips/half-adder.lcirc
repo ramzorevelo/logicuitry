@@ -1,0 +1,92 @@
+{
+  "format": "lcir.chip",
+  "formatVersion": 3,
+  "id": "example-half-adder",
+  "name": "Half adder",
+  "version": 1,
+  "pins": [
+    {
+      "id": "pin-in_a",
+      "name": "A",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 0,
+      "boundComponent": "in_a"
+    },
+    {
+      "id": "pin-in_b",
+      "name": "B",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 1,
+      "boundComponent": "in_b"
+    },
+    {
+      "id": "pin-out_s",
+      "name": "S",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 0,
+      "boundComponent": "out_s"
+    },
+    {
+      "id": "pin-out_c",
+      "name": "C",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 1,
+      "boundComponent": "out_c"
+    }
+  ],
+  "components": [
+    { "id": "in_a", "kind": "inport", "pos": { "x": 48, "y": 48 }, "label": "A" },
+    { "id": "in_b", "kind": "inport", "pos": { "x": 48, "y": 144 }, "label": "B" },
+    { "id": "g_sum", "kind": "xor", "pos": { "x": 208, "y": 48 } },
+    { "id": "g_carry", "kind": "and", "pos": { "x": 208, "y": 144 } },
+    { "id": "out_s", "kind": "outport", "pos": { "x": 368, "y": 48 }, "label": "S" },
+    { "id": "out_c", "kind": "outport", "pos": { "x": 368, "y": 144 }, "label": "C" }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "a": { "kind": "pin", "component": "in_a", "pin": "y" },
+      "b": { "kind": "pin", "component": "g_sum", "pin": "a" },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": { "kind": "pin", "component": "in_b", "pin": "y" },
+      "b": { "kind": "pin", "component": "g_sum", "pin": "b" },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": { "kind": "pin", "component": "in_a", "pin": "y" },
+      "b": { "kind": "pin", "component": "g_carry", "pin": "a" },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": { "kind": "pin", "component": "in_b", "pin": "y" },
+      "b": { "kind": "pin", "component": "g_carry", "pin": "b" },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": { "kind": "pin", "component": "g_sum", "pin": "y" },
+      "b": { "kind": "pin", "component": "out_s", "pin": "a" },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": { "kind": "pin", "component": "g_carry", "pin": "y" },
+      "b": { "kind": "pin", "component": "out_c", "pin": "a" },
+      "points": []
+    }
+  ],
+  "junctions": []
+}

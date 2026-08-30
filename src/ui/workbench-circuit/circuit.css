@@ -1,0 +1,1267 @@
+.circuit-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.circuit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  flex-wrap: wrap;
+  padding: calc(var(--space-unit) * 1.5);
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-group {
+  display: flex;
+  gap: 2px;
+  padding-right: var(--space-unit);
+  border-right: 1px solid var(--line);
+}
+
+.tool-group:last-of-type {
+  border-right: none;
+}
+
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  font: var(--text-secondary) / 1 var(--font-ui);
+  padding: calc(var(--space-unit) * 1.25 + 1px) calc(var(--space-unit) * 2 + 1px);
+  color: var(--ink);
+  cursor: pointer;
+  /* Holding a button raises its label (HoldTip); without these the same press
+     selects the label's text and raises the OS callout on top of it. */
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.tool-icon {
+  flex: none;
+}
+
+/* Presentation mode: the toolbar collapses to an icon rail. A button with no
+   icon keeps its text, so nothing becomes unreachable. */
+:root.presentation .tool-btn:has(.tool-icon) .tool-btn__label {
+  display: none;
+}
+
+:root .tool-btn:hover {
+  background: var(--accent);
+}
+
+:root .tool-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent);
+}
+
+:root .tool-btn[aria-pressed='true']::before {
+  background: var(--accent-fill);
+}
+
+.tool-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.circuit-error {
+  color: var(--warn);
+  font: var(--text-secondary) / 1.2 var(--font-mono);
+}
+
+.circuit-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.circuit-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+  width: 116px;
+  padding: var(--space-unit);
+  overflow-y: auto;
+}
+
+/* Same handle as the waveform panel's, rotated: it sits on the palette's own
+   right border, which is why the palette above no longer draws one. */
+.circuit-palette__resize {
+  flex: none;
+  width: 5px;
+  cursor: ew-resize;
+  margin-left: -1px;
+  border-left: 1px solid var(--line);
+  touch-action: none;
+}
+
+.circuit-palette__resize:hover,
+.circuit-palette__resize:active {
+  border-left: 2px solid var(--accent);
+}
+
+/* A collapsed group is hidden, not unmounted, so re-opening it does not redraw
+   a canvas per item. The wrapper keeps the rail's single column. */
+.palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-group[hidden] {
+  display: none;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  font: var(--text-secondary) / 1 var(--font-mono);
+  text-align: left;
+  padding: 2px var(--space-unit);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid transparent;
+  border-radius: var(--chrome-radius);
+  cursor: pointer;
+}
+
+.palette-item__glyph {
+  flex: none;
+}
+
+.palette-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-item:hover {
+  border-color: var(--line);
+}
+
+.palette-item--active {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.circuit-canvas-wrap {
+  flex: 1;
+  /* BOTH axes. A flex item defaults to min-*: auto, i.e. "never smaller than
+     my content"; the canvas inside is height:100%, so in a column layout the
+     wrap and the canvas can size each other upward without ever settling.
+     min-height:0 breaks that cycle, and is why the compact layout (which
+     stacks .circuit-body) could hang the renderer. */
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+/* The browser must not claim these gestures: without this, a one-finger drag
+   scrolls the page instead of panning the board, and a double tap zooms the
+   document instead of reaching the editor. */
+.circuit-canvas,
+.wave-panel__canvas {
+  touch-action: none;
+}
+
+.circuit-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* P2.5: inline In/Out pin rename, positioned in screen space at the glyph's
+   world position (worldToScreen), overlaid on the canvas it edits. */
+.circuit-pin-rename {
+  position: absolute;
+  z-index: 10;
+  font: var(--text-secondary) / 1 var(--font-mono);
+  padding: 2px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 4ch;
+  /* Long enough for a real name. 12ch cut off "OR of inverses" at 14. */
+  width: 26ch;
+}
+
+/* Plain caption beside the pressed Bubble push button, not a chip of its own:
+   the button already carries the mode's state. */
+.bubble-mode-badge {
+  font: var(--text-secondary) / 1 var(--font-ui);
+  color: var(--muted);
+  white-space: nowrap;
+  align-self: center;
+}
+
+.palette-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sim-status {
+  font: 12px var(--font-mono);
+  color: var(--muted);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.circuit-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 calc(var(--space-unit) * 1.5);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.circuit-tab {
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+}
+
+.circuit-tab--active {
+  border-bottom-color: var(--accent);
+}
+
+.circuit-tab__label {
+  font: var(--text-secondary) / 1 var(--font-mono);
+  padding: calc(var(--space-unit) * 1.5) var(--space-unit);
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.circuit-tab--active .circuit-tab__label {
+  color: var(--accent);
+}
+
+.circuit-tab__close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 var(--space-unit) 0 0;
+}
+
+.circuit-tab__close:hover {
+  color: var(--warn);
+}
+
+.palette-section-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  font: var(--text-secondary) / 1 var(--font-ui);
+  text-align: left;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  margin-top: var(--space-unit);
+  padding: var(--space-unit) 0 2px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.palette-section-label:hover {
+  color: var(--ink);
+}
+
+.palette-section-label__chevron {
+  font-family: var(--font-mono);
+}
+
+.palette-section-label:first-child {
+  margin-top: 0;
+  border-top: 0;
+}
+
+/* Dialog chrome (.package-overlay / .package-dialog) moved to ui/dialog.css:
+   it is app-wide, and living here is how it acquired a Circuit-sized
+   min-width that no phone could satisfy. */
+
+.package-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: var(--text-secondary) / 1 var(--font-ui);
+}
+
+/* Chip colour: token swatches, not a free-text field -- a chip keeps its
+   colour across every theme because the def stores the token name. */
+.package-swatches {
+  display: flex;
+  gap: var(--space-unit);
+  padding-top: 2px;
+}
+
+/* Deliberately NOT chamfered (see tokens.css): the chamfer's inset ::before
+   paints the surface over the fill, leaving only a 1px ring of the colour --
+   which is indistinguishable swatch to swatch. A swatch is its colour. */
+.package-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.package-swatch--none {
+  background: linear-gradient(
+      to bottom right,
+      transparent calc(50% - 1px),
+      var(--muted) calc(50% - 1px),
+      var(--muted) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    var(--paper);
+}
+
+/* Selection rings the swatch from OUTSIDE, with a gap in the dialog's own
+   ground, so it never eats into the colour it is marking. */
+.package-swatch.is-selected {
+  border-color: var(--ink);
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 0 4px var(--ink);
+}
+
+.package-swatch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.package-field input {
+  font: var(--text-secondary) / 1 var(--font-mono);
+  padding: var(--space-unit);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.package-pins {
+  display: flex;
+  gap: calc(var(--space-unit) * 4);
+}
+
+.package-pin-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.package-pin-col h4 {
+  font: var(--text-secondary) / 1 var(--font-ui);
+  margin: 0 0 var(--space-unit);
+}
+
+.package-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.package-pin-name {
+  flex: 1;
+  min-width: 0;
+  font: var(--text-secondary) / 1 var(--font-mono);
+  padding: 2px var(--space-unit);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.package-pin-width {
+  font: 11px var(--font-mono);
+  color: var(--muted);
+}
+
+.package-pin-empty {
+  font: var(--text-secondary) / 1 var(--font-ui);
+  color: var(--muted);
+}
+
+.package-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-unit);
+}
+
+/* Analyze drawer (kmap-analyze.md) */
+.analyze-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  outline: none;
+  min-width: 260px;
+}
+.analyze-drawer h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.analyze-error {
+  color: var(--warn);
+}
+.analyze-outputs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* K-map layout selector (axis-swap segmented control). */
+.analyze-layouts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.analyze-layouts .tool-btn {
+  font-family: var(--font-mono);
+}
+
+/* Truth-table column reorder buttons (drawer-local input order). */
+.analyze-col-move {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.analyze-col-move:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.analyze-col-move:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.analyze-table-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.analyze-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.analyze-table th,
+.analyze-table td {
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+  text-align: center;
+}
+.analyze-table__out {
+  background: var(--accent-fill);
+}
+.analyze-table__x {
+  color: var(--muted);
+}
+.analyze-heatstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  max-width: 260px;
+}
+.analyze-heatcell {
+  width: 7px;
+  height: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.analyze-heatcell--1 {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.analyze-heatcell--X {
+  background: var(--warn);
+}
+.analyze-heatcell--u {
+  background: var(--muted);
+}
+.analyze-kmap {
+  touch-action: none;
+  align-self: flex-start;
+}
+.analyze-sop {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.analyze-status,
+.analyze-muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+.analyze-reveal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Label-conflict dialog (label sharing): one radio group per conflicting
+   net, picked locally and committed together via Apply. */
+.label-conflict-dialog {
+  min-width: 280px;
+}
+
+.label-conflict-hint {
+  font: var(--text-secondary) / 1.3 var(--font-ui);
+  color: var(--muted);
+  margin: 0;
+}
+
+.label-conflict-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-unit);
+  margin: var(--space-unit) 0 0;
+}
+
+.label-conflict-net {
+  font: var(--text-secondary) / 1.3 var(--font-mono);
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.label-conflict-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 4);
+}
+
+.label-conflict-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.label-conflict-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-unit);
+  margin-top: calc(var(--space-unit) * 2);
+}
+
+.label-conflict-actions .tool-btn {
+  font-family: var(--font-mono);
+}
+
+/* Rejected rename (label already used on a different net): warn flash. */
+.circuit-pin-rename--warn {
+  border-color: var(--warn);
+  animation: rename-warn-flash 0.6s;
+}
+
+@keyframes rename-warn-flash {
+  0%,
+  100% {
+    background: var(--surface);
+  }
+  50% {
+    background: var(--warn);
+  }
+}
+
+/* K-map focus view (Maximize): the whole K-map section screen-centered. */
+.analyze-kmap-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.analyze-max-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.analyze-max-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: calc(var(--space-unit) * 6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--space-unit) * 3);
+  max-width: 92vw;
+  max-height: 92vh;
+  overflow: auto;
+  outline: none;
+}
+
+/* --- M6 waveform panel (bottom-docked collapsible slot) --- */
+
+.wave-panel {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  flex: none;
+}
+
+.wave-panel__resize {
+  height: 5px;
+  cursor: ns-resize;
+  /* Sits on the panel's top border; accent on hover so it reads as a handle. */
+  margin-top: -1px;
+  border-top: 1px solid var(--line);
+  touch-action: none;
+}
+
+.wave-panel__resize:hover,
+.wave-panel__resize:active {
+  border-top: 2px solid var(--accent);
+}
+
+.wave-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: 2px var(--space-unit);
+  flex-wrap: wrap;
+}
+
+.wave-panel__body {
+  max-height: 40vh;
+  /* Horizontal panning belongs to the time scrollbar below the plot, never to
+     the body itself (that scrolled labels + waveform together). */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px var(--space-unit) var(--space-unit);
+}
+
+.wave-panel__timescroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+}
+
+.wave-panel__timescroll > div {
+  height: 1px;
+}
+
+.wave-panel__canvas {
+  display: block;
+  outline: none;
+}
+
+.wave-panel__canvas:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.wave-panel__empty {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  padding: var(--space-unit);
+}
+
+/* Autofit / Autoscroll. Checkboxes rather than buttons: they describe a
+   standing behaviour, not a one-off action, and the state has to be readable
+   at a glance from the back of a lecture hall. */
+.wave-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wave-panel__toggle:has(input:checked) {
+  color: var(--ink);
+}
+
+.wave-panel__toggle:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wave-panel__threshold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.wave-panel__threshold input {
+  width: 5ch;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 1px 3px;
+}
+
+/* Anchor only. Grouping this with the popover below put the wrapper itself
+   out of the header's flex flow and, with no positioned ancestor, dropped it
+   past the canvas to the panel's bottom edge. */
+.wave-panel__signals {
+  position: relative;
+}
+
+.wave-panel__signals-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 6px 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+}
+
+.wave-panel__signals-pop label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.wave-panel__hint {
+  color: var(--accent);
+  font-size: var(--text-secondary);
+}
+
+.wave-panel__footnote {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+/* --- clock/component param overlay (double-click a clock or width-editable glyph) --- */
+
+.circuit-clock-edit,
+.circuit-param-edit {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-unit);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-secondary);
+}
+
+.circuit-clock-edit label,
+.circuit-param-edit label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: space-between;
+}
+
+.circuit-clock-edit input,
+.circuit-param-edit input,
+.circuit-param-edit textarea {
+  width: 8ch;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 1px 3px;
+}
+
+.circuit-clock-edit__hint,
+.circuit-param-edit__hint {
+  color: var(--muted);
+}
+
+.circuit-param-edit__segmented {
+  display: flex;
+  gap: 2px;
+}
+
+/* M6.6 Phase 6: per-lane bus expand/collapse checkboxes, one row per pin --
+   can run to arity+1 rows (gate) so it scrolls instead of growing the popup
+   past the canvas. */
+.circuit-param-edit__pinview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 8em;
+  overflow-y: auto;
+}
+
+/* --- STA overlay slack card --- */
+
+.sta-card {
+  position: absolute;
+  z-index: 9;
+  top: var(--space-unit);
+  right: var(--space-unit);
+  max-width: 380px;
+  max-height: 60%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-unit);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-secondary);
+}
+
+.sta-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-unit);
+  font-weight: 600;
+}
+
+.sta-card__muted {
+  color: var(--muted);
+}
+
+.sta-card__seq {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sta-ineq {
+  font-family: var(--font-mono);
+}
+
+.sta-ineq--fail {
+  color: var(--warn);
+}
+
+.sta-ineq__sym {
+  color: var(--muted);
+}
+
+/* View-only: the board can be driven but not built. The palette and every
+   editing control are simply not rendered, so there is nothing to disable. */
+.circuit-viewonly-note {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.circuit-inspector {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  background: var(--surface);
+  border-top: var(--stroke-min) solid var(--line);
+}
+
+/* One scrolling row rather than a wrapping block. Wrapping ate three or four
+   rows of a screen that has none to spare; a horizontal strip costs one row
+   and everything stays reachable by swiping it. */
+.app-shell--compact .circuit-toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-shell--compact .circuit-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--compact .circuit-toolbar > * {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.app-shell--compact .tool-btn {
+  min-height: 44px;
+}
+
+/* Examples list. Also the first thing reached on a phone, so the rows are
+   touch-sized. Sizing and scrolling come from the shared dialog primitive;
+   this only narrows the desktop cap, since a list of names does not need the
+   full width a form does. */
+.examples-dialog {
+  max-width: min(560px, 92vw);
+  max-height: 80vh;
+}
+
+.examples-list {
+  list-style: none;
+  margin: calc(var(--space-unit) * 2) 0;
+  padding: 0;
+}
+
+.examples-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: var(--stroke-min) solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.examples-item:hover,
+.examples-item:focus-visible {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.examples-item__desc {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+/* The name field holds a caption ("OR of inverses"), not a number, so it does
+   not inherit the numeric fields' 8ch. Captions may also be multi-line, in
+   which case the field grows with them rather than scrolling. */
+.circuit-param-edit__name {
+  width: 26ch;
+  resize: vertical;
+  min-height: 1.4em;
+  font: inherit;
+  line-height: 1.25;
+}
+
+/* Heading over a run of examples that share a group, so the algebra boards
+   read as a set rather than as more entries on one long list. */
+.examples-group {
+  margin: var(--space-unit) 0 calc(var(--space-unit) / 2);
+  color: var(--muted);
+  font: var(--text-secondary) / 1 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Selection action bar: the touch stand-in for Ctrl/Alt and the hover-scoped
+   shortcuts. Floats over the canvas at the bottom, inside the thumb zone, and
+   scrolls sideways rather than wrapping, so a wide selection's actions never
+   eat the drawing. */
+.selection-actions {
+  position: absolute;
+  inset: auto calc(var(--space-unit) * 2) calc(var(--space-unit) * 2) calc(var(--space-unit) * 2);
+  z-index: 20;
+  display: flex;
+  gap: var(--space-unit);
+  padding: var(--space-unit);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.selection-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.selection-actions .tool-btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+/* Parts palette on a phone. The desktop rail has no room here, so it becomes
+   a scrolling strip above the reference/nav chrome: still the same
+   PALETTE_GROUPS, still 44px targets. */
+
+/* --- Parts palette, compact ------------------------------------------------
+   A band above the board rather than a rail beside it, and in the flow rather
+   than floating: pinned to the bottom it covered the waveform panel and the
+   parameter popup, both of which live inside the canvas wrap.
+
+   Two rows only. Row 1 is the group tabs, all of them visible and exactly one
+   selected. Row 2 is that group's parts, scrolling sideways. The board keeps
+   everything below. */
+.app-shell--compact .circuit-body {
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-shell--compact .circuit-palette {
+  display: flex;
+  /* Anchor for the floating parts drawer below, and overflow must stay visible
+     or the base rail's `overflow-y: auto` clips it away. */
+  position: relative;
+  overflow: visible;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  width: auto;
+  gap: var(--space-unit);
+  padding: var(--space-unit);
+  border-right: 0;
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+/* The rail's own collapsible headings; the tab row replaces them here. */
+.app-shell--compact .palette-section-label,
+.app-shell--compact .circuit-palette__resize {
+  display: none;
+}
+
+.app-shell--compact .palette-tabs,
+.app-shell--compact .palette-group {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-unit);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-shell--compact .palette-tabs::-webkit-scrollbar,
+.app-shell--compact .palette-group::-webkit-scrollbar {
+  display: none;
+}
+
+/* The parts row is a drawer over the board, not a row above it: opening a
+   group must not move the canvas. A reflow there re-centres whatever was being
+   pointed at, and on a phone it is most of the visible board. Above the quick
+   panel deliberately, so the drawer covers it while open. */
+.app-shell--compact .palette-group {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: var(--space-unit);
+  background: var(--surface);
+  border-bottom: var(--stroke-min) solid var(--line);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
+}
+
+.app-shell--compact .palette-group[hidden] {
+  display: none;
+}
+
+.app-shell--compact .palette-item {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+.app-shell--compact .palette-tab {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 calc(var(--space-unit) * 2);
+  font: inherit;
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-shell--compact .palette-tab[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* A latched palette item keeps placing until it is tapped again. It has to
+   read differently from a merely armed one, or there is no way to tell that
+   the next drop will not be the last. */
+.palette-item--repeat {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Mobile: the controls that must never scroll out of reach. A floating panel
+   over the canvas at top-left, under the toolbar, rather than pinned inside
+   the scrolling toolbar, which would eat most of a 360px row. Icons only;
+   the label lives in the tooltip a long press raises. */
+.circuit-quick {
+  position: absolute;
+  top: var(--space-unit);
+  left: var(--space-unit);
+  z-index: 22;
+  display: flex;
+  /* Portrait: one row directly under the tools, where the parts drawer covers
+     it when open. Width is what portrait has to spare; height is not. */
+  flex-direction: row;
+  max-width: calc(100% - var(--space-unit) * 2);
+  flex-wrap: wrap;
+  gap: var(--space-unit);
+  padding: var(--space-unit);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 16%);
+}
+
+.circuit-quick .tool-btn {
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.circuit-quick .tool-btn__label {
+  display: none;
+}
+
+/* An open parts drawer replaces the quick panel rather than merely covering
+   it: the two are the same size within a few pixels, and a sliver of buttons
+   poking out from under the drawer reads as a rendering fault. */
+.app-shell--compact .circuit-body:has(.palette-group:not([hidden])) .circuit-quick {
+  visibility: hidden;
+}
+
+/* Landscape: the same panel turned the other way, for the same reason. A
+   rotated phone leaves barely 120px of board, so a row across the top would
+   sit on the only band of canvas there is; a column costs a corner. */
+.app-shell--landscape .circuit-quick {
+  flex-direction: column;
+  max-width: none;
+  max-height: calc(100% - var(--space-unit) * 2);
+}
+
+/* Power, Run, Undo and Redo live in the floating quick panel on a phone.
+   Leaving them in the scrolling toolbar too would offer the same control
+   twice and push everything else further out of reach. */
+.app-shell--compact .circuit-toolbar .tool-btn[data-quick] {
+  display: none;
+}
+
+/* Compact: the toolbar is icons. A 360px row cannot carry "Package as chip..."
+   and still reach Analyze, and the name is one press-and-hold away in the
+   tooltip. Same guard presentation mode uses: a button with no icon keeps its
+   text rather than becoming a blank square. */
+.app-shell--compact .circuit-toolbar .tool-btn:has(.tool-icon) .tool-btn__label {
+  display: none;
+}
+
+/* --- Landscape phone: the chrome moves to the edges -------------------------
+   Rotated, the shell is short of height and has width to spare, which is the
+   opposite of what the portrait rules assume. Stacking a toolbar, a palette
+   band and a waveform strip above and below the board leaves about 120px of
+   canvas out of 390. The tools go to the left edge instead, where the width
+   they cost is width there is.
+
+   Absolutely positioned inside .circuit-editor rather than a grid: the editor's
+   children are conditional (board tabs, dialogs), and auto-placement of an
+   unassigned child into an explicit template is how that breaks silently. */
+.app-shell--landscape .circuit-editor {
+  --rail-w: 72px;
+  padding-left: var(--rail-w);
+}
+
+.app-shell--landscape .circuit-toolbar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  /* There is no global border-box reset, and the rail's own padding and border
+     would otherwise push it 13px wider than the gutter the editor reserves. */
+  box-sizing: border-box;
+  width: var(--rail-w);
+  flex-direction: column;
+  align-items: stretch;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: var(--stroke-min) solid var(--line);
+  border-bottom: 0;
+}
+
+/* The separators run the other way once the strip does. */
+.app-shell--landscape .tool-group {
+  flex-direction: column;
+  padding-right: 0;
+  padding-bottom: var(--space-unit);
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--landscape .tool-group:last-of-type {
+  border-bottom: none;
+}
+
+/* A button with no icon keeps its text (the fullscreen guard), and in a 72px
+   rail that text has to wrap rather than force the rail wider. */
+.app-shell--landscape .circuit-toolbar .tool-btn {
+  justify-content: center;
+}
+
+.app-shell--landscape .circuit-toolbar .tool-btn__label,
+.app-shell--landscape .circuit-error,
+.app-shell--landscape .sim-status {
+  white-space: normal;
+  text-align: center;
+}
+
+/* The pending smart-connect proposal's controls. Bottom-centre over the board:
+   the proposal itself is drawn on the canvas, so the chrome sits clear of it
+   rather than beside the parts being wired. */
+.connect-cycle {
+  position: absolute;
+  inset: auto auto calc(var(--space-unit) * 2) 50%;
+  transform: translateX(-50%);
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: var(--space-unit);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+  white-space: nowrap;
+}
+
+.connect-cycle .tool-btn {
+  min-height: 44px;
+  justify-content: center;
+}
+
+.connect-cycle__count {
+  font: var(--text-secondary) / 1 var(--font-mono);
+  color: var(--muted);
+  padding: 0 var(--space-unit);
+}

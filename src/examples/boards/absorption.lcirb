@@ -1,0 +1,221 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "absorption",
+  "name": "Absorption",
+  "components": [
+    {
+      "id": "a1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "group": "gl",
+      "label": "A"
+    },
+    {
+      "id": "b1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 144
+      },
+      "group": "gl",
+      "label": "B"
+    },
+    {
+      "id": "ab",
+      "kind": "and",
+      "pos": {
+        "x": 136,
+        "y": 136
+      },
+      "group": "gl"
+    },
+    {
+      "id": "sum",
+      "kind": "or",
+      "pos": {
+        "x": 240,
+        "y": 128
+      },
+      "group": "gl"
+    },
+    {
+      "id": "lhs",
+      "kind": "led",
+      "pos": {
+        "x": 344,
+        "y": 120
+      },
+      "group": "gl",
+      "label": "A + AB"
+    },
+    {
+      "id": "a2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 232
+      },
+      "group": "gr",
+      "label": "A"
+    },
+    {
+      "id": "rhs",
+      "kind": "led",
+      "pos": {
+        "x": 136,
+        "y": 224
+      },
+      "group": "gr",
+      "label": "A"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 64
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 120
+        },
+        {
+          "x": 232,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "b1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lhs",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "a2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rhs",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 128,
+        "y": 120
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "gl",
+      "name": "Unsimplified"
+    },
+    {
+      "id": "gr",
+      "name": "Simplified"
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

@@ -1,0 +1,224 @@
+{
+  "note": "Physical DIP pinouts, transcribed pin-by-pin from the datasheets named in each entry's `source`. Vendor summary pages disagree with the silicon often enough that only datasheet connection diagrams are used here. `pins` is index 0 -> pin 1. `gate` groups a pin with the internal gate it belongs to; `fn` is that gate's role for the pin ('a'/'b' input, 'y' output). Power pins carry fn 'vcc'/'gnd' and no gate.",
+  "packages": [
+    {
+      "part": "74LS00",
+      "package": "DIP14",
+      "device": "quad 2-input NAND",
+      "primitive": "nand2",
+      "gates": 4,
+      "verified": true,
+      "source": "TI SDLS025D rev May 2017, Pin Configuration and Functions (PDIP) + Pin Functions table",
+      "comment": "Gate 3/4 input labels run B-then-A (9=3B, 10=3A), the reverse of the '32/'86 order. A NAND is symmetric in its inputs, so this is a printed-label difference only -- recorded as the datasheet has it rather than normalised.",
+      "pins": [
+        { "pin": 1, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 2, "name": "1B", "gate": 1, "fn": "b" },
+        { "pin": 3, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 4, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 5, "name": "2B", "gate": 2, "fn": "b" },
+        { "pin": 6, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 9, "name": "3B", "gate": 3, "fn": "b" },
+        { "pin": 10, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 11, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 12, "name": "4B", "gate": 4, "fn": "b" },
+        { "pin": 13, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS02",
+      "package": "DIP14",
+      "device": "quad 2-input NOR",
+      "primitive": "nor2",
+      "gates": 4,
+      "verified": true,
+      "source": "TI SDLS027 rev March 1988, N package connection diagram",
+      "comment": "The odd one out of the quad gates: gates 1 and 2 put the output FIRST (1Y,1A,1B), while gates 3 and 4 put it LAST (3A,3B,3Y). Wiring a '02 as if it were an '08 is the classic breadboard mistake this pinout exists to expose.",
+      "pins": [
+        { "pin": 1, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 2, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 3, "name": "1B", "gate": 1, "fn": "b" },
+        { "pin": 4, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 5, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 6, "name": "2B", "gate": 2, "fn": "b" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 9, "name": "3B", "gate": 3, "fn": "b" },
+        { "pin": 10, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 11, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 12, "name": "4B", "gate": 4, "fn": "b" },
+        { "pin": 13, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS04",
+      "package": "DIP14",
+      "device": "hex inverter",
+      "primitive": "not",
+      "gates": 6,
+      "verified": true,
+      "source": "TI SDLS029C rev January 2004, N package connection diagram",
+      "pins": [
+        { "pin": 1, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 2, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 3, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 4, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 5, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 6, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 9, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 10, "name": "5Y", "gate": 5, "fn": "y" },
+        { "pin": 11, "name": "5A", "gate": 5, "fn": "a" },
+        { "pin": 12, "name": "6Y", "gate": 6, "fn": "y" },
+        { "pin": 13, "name": "6A", "gate": 6, "fn": "a" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS08",
+      "package": "DIP14",
+      "device": "quad 2-input AND",
+      "primitive": "and2",
+      "gates": 4,
+      "verified": true,
+      "source": "ON Semi SN74LS08/D rev 6, December 1999, connection diagram (pictorial: 1,2->3; 4,5->6; 9,10->8; 12,13->11)",
+      "pins": [
+        { "pin": 1, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 2, "name": "1B", "gate": 1, "fn": "b" },
+        { "pin": 3, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 4, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 5, "name": "2B", "gate": 2, "fn": "b" },
+        { "pin": 6, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 9, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 10, "name": "3B", "gate": 3, "fn": "b" },
+        { "pin": 11, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 12, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 13, "name": "4B", "gate": 4, "fn": "b" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS32",
+      "package": "DIP14",
+      "device": "quad 2-input OR",
+      "primitive": "or2",
+      "gates": 4,
+      "verified": true,
+      "source": "TI SDLS100 rev March 1988, N package connection diagram",
+      "pins": [
+        { "pin": 1, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 2, "name": "1B", "gate": 1, "fn": "b" },
+        { "pin": 3, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 4, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 5, "name": "2B", "gate": 2, "fn": "b" },
+        { "pin": 6, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 9, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 10, "name": "3B", "gate": 3, "fn": "b" },
+        { "pin": 11, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 12, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 13, "name": "4B", "gate": 4, "fn": "b" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS86",
+      "package": "DIP14",
+      "device": "quad 2-input XOR",
+      "primitive": "xor2",
+      "gates": 4,
+      "verified": true,
+      "source": "TI SDLS124 rev March 1988 (SN74LS86A), N package connection diagram",
+      "pins": [
+        { "pin": 1, "name": "1A", "gate": 1, "fn": "a" },
+        { "pin": 2, "name": "1B", "gate": 1, "fn": "b" },
+        { "pin": 3, "name": "1Y", "gate": 1, "fn": "y" },
+        { "pin": 4, "name": "2A", "gate": 2, "fn": "a" },
+        { "pin": 5, "name": "2B", "gate": 2, "fn": "b" },
+        { "pin": 6, "name": "2Y", "gate": 2, "fn": "y" },
+        { "pin": 7, "name": "GND", "fn": "gnd" },
+        { "pin": 8, "name": "3Y", "gate": 3, "fn": "y" },
+        { "pin": 9, "name": "3A", "gate": 3, "fn": "a" },
+        { "pin": 10, "name": "3B", "gate": 3, "fn": "b" },
+        { "pin": 11, "name": "4Y", "gate": 4, "fn": "y" },
+        { "pin": 12, "name": "4A", "gate": 4, "fn": "a" },
+        { "pin": 13, "name": "4B", "gate": 4, "fn": "b" },
+        { "pin": 14, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS47",
+      "package": "DIP16",
+      "device": "BCD to 7-segment decoder/driver, active-low open-collector outputs, for common-anode displays",
+      "primitive": "bcd7seg",
+      "gates": 1,
+      "activeLow": true,
+      "display": "anode",
+      "verified": true,
+      "source": "ON Semi SN74LS47/D rev 6, December 1999, connection diagram DIP (top view)",
+      "comment": "Outputs are open-collector and active LOW: a lit segment is driven to 0, an unlit one is high-impedance, not 1. Pin 4 (BI/RBO) is a bidirectional wired-AND node; modelled as an input only, so ripple-blanking cascade between digits is not simulated.",
+      "pins": [
+        { "pin": 1, "name": "A1", "alias": "B", "gate": 1, "fn": "a1" },
+        { "pin": 2, "name": "A2", "alias": "C", "gate": 1, "fn": "a2" },
+        { "pin": 3, "name": "/LT", "gate": 1, "fn": "lt" },
+        { "pin": 4, "name": "/BI_RBO", "gate": 1, "fn": "bi" },
+        { "pin": 5, "name": "/RBI", "gate": 1, "fn": "rbi" },
+        { "pin": 6, "name": "A3", "alias": "D", "gate": 1, "fn": "a3" },
+        { "pin": 7, "name": "A0", "alias": "A", "gate": 1, "fn": "a0" },
+        { "pin": 8, "name": "GND", "fn": "gnd" },
+        { "pin": 9, "name": "e", "gate": 1, "fn": "seg_e" },
+        { "pin": 10, "name": "d", "gate": 1, "fn": "seg_d" },
+        { "pin": 11, "name": "c", "gate": 1, "fn": "seg_c" },
+        { "pin": 12, "name": "b", "gate": 1, "fn": "seg_b" },
+        { "pin": 13, "name": "a", "gate": 1, "fn": "seg_a" },
+        { "pin": 14, "name": "g", "gate": 1, "fn": "seg_g" },
+        { "pin": 15, "name": "f", "gate": 1, "fn": "seg_f" },
+        { "pin": 16, "name": "VCC", "fn": "vcc" }
+      ]
+    },
+
+    {
+      "part": "74LS48",
+      "package": "DIP16",
+      "device": "BCD to 7-segment decoder, active-high outputs with internal pull-ups, for common-cathode displays",
+      "primitive": "bcd7seg",
+      "gates": 1,
+      "activeLow": false,
+      "display": "cathode",
+      "verified": true,
+      "source": "National DM74LS48 TL/F/10172, January 1992, connection diagram",
+      "comment": "Pin-identical to the 74LS47. Outputs have internal pull-up resistors rather than totem-pole drivers, and a HIGH output lights a segment. National labels the BCD inputs A0..A3 where ON labels the same pins A..D on the '47; A0/A is the LSB on pin 7 in both.",
+      "pins": [
+        { "pin": 1, "name": "A1", "alias": "B", "gate": 1, "fn": "a1" },
+        { "pin": 2, "name": "A2", "alias": "C", "gate": 1, "fn": "a2" },
+        { "pin": 3, "name": "/LT", "gate": 1, "fn": "lt" },
+        { "pin": 4, "name": "/BI_RBO", "gate": 1, "fn": "bi" },
+        { "pin": 5, "name": "/RBI", "gate": 1, "fn": "rbi" },
+        { "pin": 6, "name": "A3", "alias": "D", "gate": 1, "fn": "a3" },
+        { "pin": 7, "name": "A0", "alias": "A", "gate": 1, "fn": "a0" },
+        { "pin": 8, "name": "GND", "fn": "gnd" },
+        { "pin": 9, "name": "e", "gate": 1, "fn": "seg_e" },
+        { "pin": 10, "name": "d", "gate": 1, "fn": "seg_d" },
+        { "pin": 11, "name": "c", "gate": 1, "fn": "seg_c" },
+        { "pin": 12, "name": "b", "gate": 1, "fn": "seg_b" },
+        { "pin": 13, "name": "a", "gate": 1, "fn": "seg_a" },
+        { "pin": 14, "name": "g", "gate": 1, "fn": "seg_g" },
+        { "pin": 15, "name": "f", "gate": 1, "fn": "seg_f" },
+        { "pin": 16, "name": "VCC", "fn": "vcc" }
+      ]
+    }
+  ]
+}

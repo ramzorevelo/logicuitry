@@ -1,0 +1,376 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "three-to-eight-decoder",
+  "name": "Three-to-eight decoder",
+  "components": [
+    {
+      "id": "a0",
+      "kind": "toggle",
+      "pos": {
+        "x": 144,
+        "y": 312
+      },
+      "label": "A0"
+    },
+    {
+      "id": "a1",
+      "kind": "toggle",
+      "pos": {
+        "x": 144,
+        "y": 256
+      },
+      "label": "A1"
+    },
+    {
+      "id": "a2",
+      "kind": "toggle",
+      "pos": {
+        "x": 144,
+        "y": 200
+      },
+      "label": "A2"
+    },
+    {
+      "id": "dec",
+      "kind": "decoder",
+      "pos": {
+        "x": 248,
+        "y": 216
+      },
+      "params": {
+        "addressBits": 3,
+        "pinView": "a=expanded"
+      }
+    },
+    {
+      "id": "l0",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 120
+      },
+      "label": "Y0"
+    },
+    {
+      "id": "l1",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 168
+      },
+      "label": "Y1"
+    },
+    {
+      "id": "l2",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 216
+      },
+      "label": "Y2"
+    },
+    {
+      "id": "l3",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 264
+      },
+      "label": "Y3"
+    },
+    {
+      "id": "l4",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 312
+      },
+      "label": "Y4"
+    },
+    {
+      "id": "l5",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 360
+      },
+      "label": "Y5"
+    },
+    {
+      "id": "l6",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 408
+      },
+      "label": "Y6"
+    },
+    {
+      "id": "l7",
+      "kind": "led",
+      "pos": {
+        "x": 480,
+        "y": 456
+      },
+      "label": "Y7"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a0",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 192,
+          "y": 288
+        },
+        {
+          "x": 192,
+          "y": 328
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a1"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "a2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a2"
+      },
+      "points": [
+        {
+          "x": 192,
+          "y": 216
+        },
+        {
+          "x": 192,
+          "y": 256
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "pin",
+        "component": "l0",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y0"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 144
+        },
+        {
+          "x": 448,
+          "y": 256
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "l1",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y1"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 192
+        },
+        {
+          "x": 464,
+          "y": 272
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "l2",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y2"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 240
+        },
+        {
+          "x": 368,
+          "y": 288
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "l3",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y3"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 288
+        },
+        {
+          "x": 368,
+          "y": 304
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l4",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 320
+        },
+        {
+          "x": 368,
+          "y": 336
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l5",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 336
+        },
+        {
+          "x": 368,
+          "y": 384
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y6"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l6",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 352
+        },
+        {
+          "x": 464,
+          "y": 432
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l7",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 368
+        },
+        {
+          "x": 448,
+          "y": 480
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

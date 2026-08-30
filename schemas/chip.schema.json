@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lcir/chip.schema.json",
+  "title": "Logicuitry chip definition (*.chip.json)",
+  "type": "object",
+  "properties": {
+    "format": { "const": "lcir.chip" },
+    "formatVersion": { "const": 3 },
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "dir": { "enum": ["in", "out"] },
+          "width": { "$ref": "common.schema.json#/$defs/width" },
+          "role": { "$ref": "common.schema.json#/$defs/pinRole" },
+          "order": { "type": "integer", "minimum": 0 },
+          "boundComponent": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id", "name", "dir", "width", "role", "order", "boundComponent"],
+        "additionalProperties": false
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/component" }
+    },
+    "wires": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/wire" }
+    },
+    "junctions": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/junction" }
+    },
+    "appearance": {
+      "type": "object",
+      "properties": {
+        "color": { "type": "string" },
+        "borderColor": { "type": "string" },
+        "widthUnits": { "type": "integer", "minimum": 1 },
+        "heightUnits": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["format", "formatVersion", "id", "name", "version", "pins", "components", "wires", "junctions"],
+  "additionalProperties": false
+}

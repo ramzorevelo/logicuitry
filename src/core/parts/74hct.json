@@ -1,0 +1,14 @@
+{
+  "family": "74HCT",
+  "condition": "5 V system; limits are the datasheet guarantees at VCC = 4.5-5.5 V, IOH = -4 mA / IOL = 4 mA, over temperature (TTL-compatible input thresholds)",
+  "levels": { "vcc": 5, "vohMin": 3.84, "volMax": 0.33, "vihMin": 2.0, "vilMax": 0.8 },
+  "source": "TI SN74HCT00 (SCLS200): Recommended Operating Conditions (VIH 2.0 V, VIL 0.8 V at VCC=4.5-5.5 V) and DC Electrical Characteristics (VOH 3.84 V at IOH=-4 mA, VOL 0.33 V at IOL=4 mA, over temperature)",
+  "parts": [
+    {
+      "part": "74HCT00",
+      "primitive": "nand2",
+      "verified": true,
+      "source": "TI SN74HCT00 SCLS200"
+    }
+  ]
+}

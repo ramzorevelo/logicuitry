@@ -1,0 +1,85 @@
+/* Shared modal dialog chrome, used by Examples, Settings, About, Bug report,
+   Package as chip and the label-conflict dialog. App-wide on purpose: this
+   used to live in the Circuit workbench's sheet, where it picked up a hard
+   420px min-width that no phone viewport can satisfy. min-width beats
+   max-width, so every dialog hung off both edges of a narrow screen however
+   tight its own max-width was.
+
+   The desktop values below are the originals, unchanged. The only difference
+   is that the 420px floor is now capped by the viewport, so it collapses
+   instead of overflowing when there is less room than that. */
+
+.package-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.package-dialog {
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: calc(var(--space-unit) * 4);
+  /* Was `min-width: 420px`. Same width wherever there is room for it. */
+  min-width: min(420px, 100% - 2rem);
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+}
+
+/* A modal has to cover the bottom navigation bar, which is fixed at z-index
+   55 inside the toolbar's stacking context. Without this the sheet's action
+   row (Cancel, Save) hides behind the nav and cannot be read or pressed. */
+.package-overlay {
+  z-index: 80;
+}
+
+/* Compact: a bottom sheet rather than a centred box. A picker belongs under
+   the thumb, and full-bleed buys back the side gutters a phone cannot spare.
+   Fixed rather than absolute so the sheet meets the true viewport edge even
+   when the overlay is rendered inside the Circuit editor. */
+.app-shell--compact .package-overlay {
+  position: fixed;
+  align-items: flex-end;
+}
+
+.app-shell--compact .package-dialog {
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+  /* Short enough to still show what it covers, so the sheet reads as sitting
+     over the workbench rather than replacing it. */
+  max-height: 70dvh;
+  border-width: 1px 0 0 0;
+  border-radius: calc(var(--radius) * 2) calc(var(--radius) * 2) 0 0;
+  padding-bottom: max(calc(var(--space-unit) * 4), env(safe-area-inset-bottom));
+  /* The sheet itself no longer scrolls; its list does, so the heading and the
+     action row stay put instead of scrolling off. */
+  overflow: hidden;
+}
+
+/* The one scrolling region inside a sheet. */
+.app-shell--compact .package-dialog .examples-list,
+.app-shell--compact .package-dialog .package-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Action rows stay visible at the foot of the sheet. */
+.app-shell--compact .package-dialog .label-conflict-buttons,
+.app-shell--compact .package-dialog .package-buttons {
+  flex: 0 0 auto;
+  padding-top: var(--space-unit);
+  border-top: var(--stroke-min) solid var(--line);
+}

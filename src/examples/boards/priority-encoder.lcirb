@@ -1,0 +1,218 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "priority-encoder",
+  "name": "Priority encoder",
+  "components": [
+    {
+      "id": "i0",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 40
+      },
+      "label": "I0"
+    },
+    {
+      "id": "i1",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 112
+      },
+      "label": "I1"
+    },
+    {
+      "id": "i2",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 176
+      },
+      "label": "I2"
+    },
+    {
+      "id": "i3",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 248
+      },
+      "label": "I3"
+    },
+    {
+      "id": "enc",
+      "kind": "encoder",
+      "pos": {
+        "x": 208,
+        "y": 96
+      },
+      "params": {
+        "addressBits": 2
+      }
+    },
+    {
+      "id": "out",
+      "kind": "busdisplay",
+      "pos": {
+        "x": 392,
+        "y": 128
+      },
+      "label": "A",
+      "params": {
+        "width": 2
+      }
+    },
+    {
+      "id": "v",
+      "kind": "led",
+      "pos": {
+        "x": 384,
+        "y": 232
+      },
+      "label": "VALID"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "i0",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "i0"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 56
+        },
+        {
+          "x": 200,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "i1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "i1"
+      },
+      "points": [
+        {
+          "x": 88,
+          "y": 128
+        },
+        {
+          "x": 88,
+          "y": 152
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "i2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "i2",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 88,
+          "y": 168
+        },
+        {
+          "x": 88,
+          "y": 192
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "i3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "i3",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 184
+        },
+        {
+          "x": 200,
+          "y": 264
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "out",
+        "pin": "value"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "enc",
+        "pin": "valid"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "v",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 376,
+          "y": 152
+        },
+        {
+          "x": 376,
+          "y": 256
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

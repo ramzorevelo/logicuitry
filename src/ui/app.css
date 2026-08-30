@@ -1,0 +1,889 @@
+/* A phone browser counts the collapsed URL bar in 100vh, so a 100vh shell
+   overflows the visible area and the document itself drags: the toolbar then
+   slides over content that should sit below it. dvh tracks what is actually
+   visible. overscroll-behavior kills pull-to-refresh and rubber-banding, both
+   of which read as the app coming apart. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+}
+
+/* Shell: fixed-height column filling the viewport. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  position: relative;
+}
+
+/* Zone III: static frame texture behind the panels, off unless a theme opts
+   in. Static by construction -- a moving ground competes with the pointer on
+   a 65" screen. */
+.app-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--texture-opacity);
+  background: repeating-linear-gradient(0deg, var(--ink) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(60deg, var(--accent) 0 1px, transparent 1px 64px);
+}
+
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* The header outranks the body, not just ties it. `.app-shell > *` makes every
+   child its own stacking context, so at equal z-index the LATER element (the
+   body) paints over the header and a menu popup's own z-index is trapped
+   inside the header's context, however high it goes. */
+.app-toolbar {
+  z-index: 50;
+}
+
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 4);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 4);
+  background: var(--surface);
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+/* Headings are the display face's whole scope: never data, never canvas text. */
+h1,
+h2,
+h3 {
+  font-family: var(--display-font);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* Mode toggles (theme / presentation / library) */
+.toolbar-modes {
+  display: flex;
+  gap: var(--space-unit);
+  margin-left: auto;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-family: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.mode-btn[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+/* Theme picker: same chrome as a mode button, wrapping a native select so the
+   seven themes stay reachable without a bespoke menu. */
+.theme-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: calc(var(--space-unit) + 1px) calc(var(--space-unit) * 2 + 1px);
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.theme-picker__select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+/* The dropped-open list is painted by the OS, which defaults to white however
+   dark the page is; option colours have to be stated explicitly. */
+.theme-picker__select option {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+/* Workbench switcher */
+.workbench-switcher {
+  display: flex;
+  gap: var(--space-unit);
+}
+
+.workbench-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-family: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.workbench-tab[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.workbench-tab__key {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.workbench-tab[aria-pressed='true'] .workbench-tab__key {
+  color: var(--accent);
+}
+
+/* Body: palette | workbench | drawer strip */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The parts palette is .circuit-palette, styled in circuit.css: it belongs
+   to the Circuit workbench, not the shell. */
+
+.workbench-area {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* Workbenches take the full window width by default; the centered column cap
+   (--workbench-max opt-in per workbench root) applies only while the reference
+   drawer is open, when the panel already balances the layout. */
+.workbench-area > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-body:has(.ref-drawer--open) .workbench-area > * {
+  max-width: var(--workbench-max, 1200px);
+}
+
+.workbench-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-unit) * 4);
+  height: 100%;
+}
+
+.workbench-placeholder {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+/* Right-edge reference drawer: persistent vertical tab + width-animated panel
+   (the bitwise.html #tt-sidebar pattern). Rendered only when a workbench
+   supplies content. */
+.ref-drawer {
+  display: flex;
+  flex-direction: row;
+  background: var(--surface);
+  border-left: var(--stroke-min) solid var(--line);
+  overflow: hidden;
+}
+
+.ref-drawer__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-unit) * 2);
+  width: calc(var(--space-unit) * 9);
+  padding: calc(var(--space-unit) * 3) 0;
+  font: inherit;
+  color: var(--muted);
+  background: var(--paper);
+  border: none;
+  border-right: var(--stroke-min) solid var(--line);
+  cursor: pointer;
+}
+
+.ref-drawer__tab:hover,
+.ref-drawer--open .ref-drawer__tab {
+  color: var(--accent);
+  background: var(--accent-fill);
+}
+
+.ref-drawer__chevron {
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+}
+
+.ref-drawer__tab-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ref-drawer__inner {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.ref-drawer--open .ref-drawer__inner {
+  width: var(--ref-drawer-width, 340px);
+}
+
+.ref-drawer__content {
+  box-sizing: border-box;
+  width: var(--ref-drawer-width, 340px);
+  height: 100%;
+  padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 4);
+  overflow-y: auto;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+}
+
+/* Stub lesson side panel */
+.lesson-overlay {
+  width: calc(var(--space-unit) * 72);
+  padding: calc(var(--space-unit) * 4);
+  background: var(--surface);
+  border-left: var(--stroke-min) solid var(--line);
+}
+
+.lesson-overlay__header {
+  font-weight: 600;
+  margin-bottom: calc(var(--space-unit) * 2);
+}
+
+.theme-proof {
+  display: block;
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Presentation mode trims chrome via CSS only; no component special-casing.
+   The toolbar collapses to an icon rail: title, hint, and tab labels drop out,
+   leaving the switcher number keys and mode glyphs for the back row to follow. */
+/* The palette rail goes; the canvas is the whole point on a TV. Targets
+   .circuit-palette, which is what PaletteRail actually renders: this rule
+   named `.palette` for a long time and so quietly did nothing. */
+:root.presentation .circuit-palette {
+  display: none;
+}
+
+/* The menu bar deliberately survives presentation mode: it is the only
+   pointer route to the commands that left the toolbar. */
+:root.presentation .workbench-tab__label,
+:root.presentation .mode-btn,
+:root.presentation .theme-picker {
+  display: none;
+}
+
+/* Render errors degrade to a warn-styled panel instead of unmounting the app. */
+.error-boundary {
+  margin: 16px;
+  padding: 12px 16px;
+  border: var(--stroke-min) solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--warn);
+  overflow: auto;
+}
+
+.error-boundary pre {
+  font: 12px var(--font-mono);
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* The theme's own mark, in the accent so it reads as identity, not chrome. */
+.theme-mark {
+  vertical-align: -3px;
+  margin-right: var(--space-unit);
+  color: var(--accent);
+}
+
+/* --- Menu bar ------------------------------------------------------------
+   WAI-ARIA menubar: one row with the workbench tabs, no app title (the window
+   or tab title already carries it). */
+.menubar {
+  display: flex;
+  gap: 2px;
+}
+
+.menubar__menu {
+  position: relative;
+}
+
+.menubar__title {
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-family: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  background: transparent;
+  border: var(--stroke-min) solid transparent;
+  cursor: pointer;
+}
+
+.menubar__title:hover,
+.menubar__title[aria-expanded='true'] {
+  background: var(--surface-raised, var(--paper));
+  border-color: var(--line);
+}
+
+.menubar__popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  min-width: 220px;
+  /* A long menu scrolls itself. Without this it simply grew past the shell,
+     and since the shell is the viewport's height, the document grew with it:
+     opening Edit put scrollbars on the whole app. */
+  max-height: 70dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-unit) 0;
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+}
+
+/* Positioning context for the flyout, and a plain block so the parent item
+   still fills the popup's width. */
+.menubar__submenu {
+  position: relative;
+}
+
+/* Opens beside its parent item rather than below the bar. Right-aligned to
+   the parent's left edge would overlap it, so it starts at the popup's edge. */
+.menubar__popup--sub {
+  top: 0;
+  left: 100%;
+  margin-top: calc(var(--space-unit) * -1);
+}
+
+.menubar__item {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+  width: 100%;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-family: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.menubar__item[data-active] {
+  background: var(--accent-fill, var(--paper));
+}
+
+.menubar__item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.menubar__check {
+  width: 1em;
+  flex: none;
+}
+
+.menubar__label {
+  flex: 1;
+}
+
+/* Shortcut text is a hint, never the point: muted, mono, and it must not
+   push the label around as menus change. */
+.menubar__key {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+.menubar__sep {
+  height: var(--stroke-min);
+  margin: var(--space-unit) 0;
+  background: var(--line);
+}
+
+/* --- Settings ------------------------------------------------------------ */
+.settings-dialog {
+  min-width: 460px;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.settings-dialog h4 {
+  margin: calc(var(--space-unit) * 3) 0 var(--space-unit);
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) 0;
+}
+
+.settings-row__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-row__hint {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.settings-about {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+/* --- Bug report ---------------------------------------------------------- */
+.bug-report-dialog {
+  min-width: 520px;
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.bug-report__description {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+}
+
+/* The preview is the promise that nothing leaves unseen, so it must be
+   readable, not a one-line teaser. */
+.bug-report__preview {
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-unit);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+}
+
+/* --- Update banner -------------------------------------------------------
+   Bottom-centred so it never covers the toolbar or the menu bar mid-lecture. */
+.update-banner {
+  position: fixed;
+  bottom: calc(var(--space-unit) * 3);
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-size: var(--text-secondary);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+  transform: translateX(-50%);
+}
+
+.about-dialog {
+  max-width: 460px;
+}
+
+/* --- Compact (phone) shell ----------------------------------------------
+   Driven by the .app-shell--compact class the shell stamps from one JS
+   breakpoint, never by a media query of this sheet's own -- a second
+   threshold here is how layout and behaviour drift apart. Presentation mode
+   targets TVs and is unaffected. */
+.app-shell--compact .app-toolbar {
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+}
+
+/* The switcher leaves the top bar entirely and becomes a bottom navigation
+   bar: switching workbench is the most frequent action on a phone and the top
+   of a tall screen is the hardest place to reach one-handed. Fixed to the
+   bottom edge, inside the safe area, and out of the shell's flex flow so the
+   workbench keeps the space the old wrapped row was eating. */
+.app-shell--compact .workbench-switcher {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 55;
+  gap: 0;
+  background: var(--surface);
+  border-top: var(--stroke-min) solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app-shell--compact .workbench-tab {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+}
+
+/* The bottom bar floats over the workbench, so the workbench needs to end
+   above it or its last row is unreachable. */
+.app-shell--compact .app-body {
+  padding-bottom: calc(52px + env(safe-area-inset-bottom));
+}
+
+.app-shell--compact .app-body:has(.ref-drawer) {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* Ctrl+1..3 needs a keyboard; the number is noise on a phone. */
+.app-shell--compact .workbench-tab__key {
+  display: none;
+}
+
+.app-shell--compact .toolbar-modes {
+  order: 2;
+}
+
+/* Touch targets: 44px is the smallest reliably tappable chrome. */
+.app-shell--compact .menubar__title,
+.app-shell--compact .menubar__item,
+.app-shell--compact .workbench-tab,
+.app-shell--compact .mode-btn {
+  min-height: 44px;
+}
+
+/* The theme picker is a whole bar's worth of width for something changed once
+   a term. Settings > Preferences carries the same control, so on a phone this
+   is the one place it lives. */
+.app-shell--compact .theme-picker {
+  display: none;
+}
+
+/* Safari zooms the whole page when a focused field's text is under 16px, and
+   never zooms back out. Every control that can take focus needs the floor. */
+.app-shell--compact input,
+.app-shell--compact textarea,
+.app-shell--compact select {
+  font-size: max(16px, var(--text-secondary));
+}
+
+/* A flex child defaults to min-width:auto and so refuses to shrink below its
+   content, which is how one long board name or net label makes the whole page
+   scroll sideways. */
+.app-shell--compact .app-toolbar > *,
+.app-shell--compact .app-body > *,
+.app-shell--compact .workbench-area > * {
+  min-width: 0;
+}
+
+.app-shell--compact .menubar {
+  flex-wrap: wrap;
+}
+
+/* The palette used to be hidden here, because editing was desktop-only. It is
+   not any more; circuit.css restyles it as a horizontal strip. */
+
+/* The right-edge drawer becomes a bottom sheet: a 340px panel beside a
+   phone-width canvas leaves neither usable. It must NOT be inset:0 -- the
+   toolbar sits in a z-index:50 stacking context and .app-body in a z-index:1
+   one, so a full-viewport sheet has its top edge (and with it the tab that
+   closes it) painted underneath the toolbar, whatever z-index it carries. A
+   sheet anchored to the bottom is clear of that context, and leaves the
+   instrument itself visible above it. */
+.app-shell--compact .ref-drawer--open {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 60;
+  flex-direction: column;
+  max-height: 70dvh;
+  border-top: var(--stroke-min) solid var(--line);
+  border-radius: calc(var(--radius) * 2) calc(var(--radius) * 2) 0 0;
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+
+/* Dims the instrument rather than replacing it, so the sheet reads as sitting
+   over the workbench instead of as the workbench going blank. Desktop keeps
+   the drawer as a side panel, where a scrim would be wrong. */
+.ref-drawer__scrim {
+  display: none;
+}
+
+/* Catches a tap outside the sheet so it closes, but does NOT dim: the
+   reference drawer is informational, not modal, and darkening the whole
+   instrument to show a note about binary places reads as something having
+   gone wrong. Dialogs, which really are modal, keep their scrim. */
+.app-shell--compact .ref-drawer__scrim {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: transparent;
+}
+
+/* Closed, the drawer is a full-width strip above the bottom nav rather than a
+   vertical rail down the right edge: a phone cannot spare a column, and
+   sideways text is the least readable label on the smallest screen. */
+.app-shell--compact .ref-drawer {
+  position: fixed;
+  inset: auto 0 calc(52px + env(safe-area-inset-bottom)) 0;
+  z-index: 54;
+  flex-direction: column;
+  border-top: var(--stroke-min) solid var(--line);
+}
+
+.app-shell--compact .ref-drawer__tab {
+  flex-direction: row;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  border-right: none;
+}
+
+.app-shell--compact .ref-drawer__tab-label {
+  writing-mode: horizontal-tb;
+  transform: none;
+}
+
+/* Closed, the panel is a zero-WIDTH sliver on desktop; stacked as a column it
+   would instead keep its height and leave a blank band above the nav. */
+.app-shell--compact .ref-drawer:not(.ref-drawer--open) .ref-drawer__inner {
+  display: none;
+}
+
+/* Open, it is the sheet itself and owns the bottom edge, nav included. */
+.app-shell--compact .ref-drawer--open .ref-drawer__tab {
+  flex-direction: row;
+  width: auto;
+  min-height: 44px;
+  padding: 0 calc(var(--space-unit) * 2);
+  border-right: none;
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+.app-shell--compact .ref-drawer--open .ref-drawer__tab-label {
+  writing-mode: horizontal-tb;
+  transform: none;
+}
+
+.app-shell--compact .ref-drawer--open .ref-drawer__inner,
+.app-shell--compact .ref-drawer--open .ref-drawer__content {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-shell--compact .ref-drawer--open .ref-drawer__content {
+  overscroll-behavior: contain;
+}
+
+/* The held-button label (HoldTip). Sits above every panel and sheet because
+   the buttons that need it live in floating chrome of their own, and is
+   pointer-transparent so it can never eat the lift that dismisses it. */
+.hold-tip {
+  position: fixed;
+  z-index: 90;
+  transform: translate(-50%, calc(var(--space-unit) * 1.5));
+  max-width: min(80vw, 320px);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font: var(--text-secondary) / 1.3 var(--font-ui);
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 22%);
+  pointer-events: none;
+}
+
+/* --- Landscape phone --------------------------------------------------------
+   The bottom navigation bar would cost a rotated phone a seventh of its
+   height. It moves to the bottom-right corner as a column instead: still the
+   nearest corner to the thumb, and the height it gave back is the height the
+   board was short of. Anchored to the corner rather than the full edge so it
+   stays clear of the menu bar's stacking context. */
+.app-shell--landscape .workbench-switcher {
+  inset: auto 0 0 auto;
+  flex-direction: column;
+  width: 72px;
+  border-top: 0;
+  border-left: var(--stroke-min) solid var(--line);
+  padding-bottom: 0;
+  padding-right: env(safe-area-inset-right);
+}
+
+.app-shell--landscape .workbench-tab {
+  min-height: 44px;
+}
+
+/* A right gutter, not a bottom one: nothing must end up underneath the rail. */
+.app-shell--landscape .app-body,
+.app-shell--landscape .app-body:has(.ref-drawer) {
+  padding-bottom: 0;
+  padding-right: calc(72px + env(safe-area-inset-right));
+}
+
+/* The reference drawer keeps the bottom edge, inside that gutter. The open
+   state needs the same treatment at the compact rule's specificity, or the
+   sheet reopens across the nav rail. */
+.app-shell--landscape .ref-drawer,
+.app-shell--landscape .ref-drawer--open {
+  inset: auto calc(72px + env(safe-area-inset-right)) 0 0;
+}
+
+.app-shell--landscape .ref-drawer--open .ref-drawer__inner {
+  max-height: 78dvh;
+}
+
+/* --- Keys and gestures sheet ------------------------------------------------
+   Wider than a form dialog and scrolled inside itself: it is a reference to
+   read, not a decision to make, and the whole point is that it is long. */
+.help-dialog {
+  max-width: min(760px, 92vw);
+}
+
+.help-sheet {
+  max-height: 60dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.help-section {
+  margin-bottom: calc(var(--space-unit) * 3);
+}
+
+.help-section__title {
+  margin: 0 0 var(--space-unit);
+  font: var(--text-secondary) / 1 var(--font-ui);
+  color: var(--accent);
+}
+
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-secondary);
+}
+
+.help-table th,
+.help-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-unit) var(--space-unit) var(--space-unit) 0;
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+.help-table tbody th {
+  font-weight: normal;
+  color: var(--ink);
+  width: 55%;
+}
+
+.help-table td {
+  color: var(--muted);
+  width: 45%;
+}
+
+.help-table kbd {
+  font: var(--text-secondary) / 1.4 var(--font-mono);
+  color: var(--ink);
+  white-space: normal;
+}
+
+/* Two narrow columns are unreadable at phone width, so the table turns into a
+   list: the action, then the gesture under it. */
+.app-shell--compact .help-table tr {
+  display: block;
+  padding: var(--space-unit) 0;
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+.app-shell--compact .help-table th,
+.app-shell--compact .help-table td {
+  display: block;
+  width: auto;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.app-shell--compact .help-table td:empty {
+  display: none;
+}
+
+/* The user agent string is one long unbreakable token; without this the
+   preview scrolls sideways and takes the dialog with it. */
+.bug-report__preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- Menus at phone width ---------------------------------------------------
+   A 220px popup opened from a title near the right edge runs off a 360px
+   screen, and the overflow scrolled the whole app sideways rather than the
+   menu. The popup is capped to the viewport, and the menus in the right half
+   of the bar open leftwards from their own right edge. */
+.app-shell--compact .menubar__popup {
+  max-width: calc(100vw - var(--space-unit) * 2);
+}
+
+.app-shell--compact .menubar__menu:nth-last-child(-n + 3) .menubar__popup {
+  left: auto;
+  right: 0;
+}
+
+/* A submenu flying out sideways has nowhere to go here, so it expands in
+   place instead, indented under the item that opened it. */
+.app-shell--compact .menubar__popup--sub {
+  position: static;
+  min-width: 0;
+  max-height: none;
+  margin-top: 0;
+  padding: 0 0 0 calc(var(--space-unit) * 2);
+  border: 0;
+  box-shadow: none;
+}

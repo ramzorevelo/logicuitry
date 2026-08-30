@@ -1,0 +1,16 @@
+/* D-DIN, bundled offline (SIL OFL-1.1), see src/assets/fonts/d-din/OFL-1.1.txt */
+@font-face {
+  font-family: 'D-DIN';
+  src: url('../../assets/fonts/d-din/D-DIN.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'D-DIN';
+  src: url('../../assets/fonts/d-din/D-DIN-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

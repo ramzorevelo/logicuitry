@@ -1,0 +1,199 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "divide-by-two",
+  "name": "Divide by two",
+  "components": [
+    {
+      "id": "clk",
+      "kind": "clock",
+      "pos": {
+        "x": 64,
+        "y": 120
+      },
+      "label": "CLK",
+      "params": {
+        "periodPs": 20000
+      }
+    },
+    {
+      "id": "rst",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 232
+      },
+      "label": "/CLR",
+      "params": {
+        "initial": 0
+      }
+    },
+    {
+      "id": "ff",
+      "kind": "dff",
+      "pos": {
+        "x": 288,
+        "y": 32
+      },
+      "params": {
+        "asyncClear": true
+      }
+    },
+    {
+      "id": "lclk",
+      "kind": "led",
+      "pos": {
+        "x": 184,
+        "y": 168
+      },
+      "label": "CLK"
+    },
+    {
+      "id": "lq",
+      "kind": "led",
+      "pos": {
+        "x": 432,
+        "y": 48
+      },
+      "label": "Q"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "clk"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 88
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lclk",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 192
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "d"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "qn"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 72
+        },
+        {
+          "x": 280,
+          "y": 128
+        },
+        {
+          "x": 392,
+          "y": 128
+        },
+        {
+          "x": 392,
+          "y": 88
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lq",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "ff",
+        "pin": "clr"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rst",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 264,
+          "y": 104
+        },
+        {
+          "x": 264,
+          "y": 248
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 176,
+        "y": 136
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "register-to-register-path",
+  "name": "Register-to-register path",
+  "components": [
+    {
+      "id": "clk",
+      "kind": "clock",
+      "pos": {
+        "x": 104,
+        "y": 192
+      },
+      "label": "CLK",
+      "params": {
+        "periodPs": 20000
+      }
+    },
+    {
+      "id": "din",
+      "kind": "toggle",
+      "pos": {
+        "x": 104,
+        "y": 48
+      },
+      "label": "D"
+    },
+    {
+      "id": "sel",
+      "kind": "toggle",
+      "pos": {
+        "x": 104,
+        "y": 120
+      },
+      "label": "S"
+    },
+    {
+      "id": "ff1",
+      "kind": "dff",
+      "pos": {
+        "x": 208,
+        "y": 24
+      }
+    },
+    {
+      "id": "inv",
+      "kind": "not",
+      "pos": {
+        "x": 352,
+        "y": 48
+      }
+    },
+    {
+      "id": "g",
+      "kind": "xor",
+      "pos": {
+        "x": 480,
+        "y": 56
+      }
+    },
+    {
+      "id": "ff2",
+      "kind": "dff",
+      "pos": {
+        "x": 600,
+        "y": 32
+      }
+    },
+    {
+      "id": "lq",
+      "kind": "led",
+      "pos": {
+        "x": 744,
+        "y": 48
+      },
+      "label": "Q"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "din",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ff1",
+        "pin": "d"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "ff1",
+        "pin": "clk"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "ff2",
+        "pin": "clk"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 592,
+          "y": 88
+        },
+        {
+          "x": 592,
+          "y": 104
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 208
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "ff1",
+        "pin": "q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "g",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sel",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 472,
+          "y": 80
+        },
+        {
+          "x": 472,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "g",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ff2",
+        "pin": "d"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "ff2",
+        "pin": "q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lq",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 200,
+        "y": 104
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "datasheet",
+    "datasheet": "typ"
+  }
+}

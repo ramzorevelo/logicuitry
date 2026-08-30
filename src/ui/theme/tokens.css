@@ -1,0 +1,545 @@
+/* Design tokens: the single source of truth for every color, size, and stroke.
+   The canvas renderer mirrors these through src/render/theme.ts; nothing else
+   may hard-code a visual value. Dark values are provisional until verified on
+   the classroom TVs; adjust here only, never at call sites. */
+
+:root {
+  /* color */
+  --paper: #edeff6;
+  --surface: #ffffff;
+  --ink: #111528;
+  --muted: #8c92a8;
+  --line: #c9cfe0;
+  --accent: #26307d;
+  --accent-2: #5f6580;
+  --accent-3: #26307d;
+  --accent-fill: #d6dbf2;
+  --warn: #9a5a0b;
+  --ok: #2e6b4f;
+  /* signal state M: a width>1 net whose lanes disagree */
+  --signal-mixed: #26307d;
+
+  /* K-map group palette: 8 categorical strokes, Okabe-Ito-derived, validated
+     colorblind-safe against --surface per theme (dataviz six checks). */
+  --kmap-g1: #0072b2;
+  --kmap-g2: #d55e00;
+  --kmap-g3: #009e73;
+  --kmap-g4: #7d5fc7;
+  --kmap-g5: #8a7a00;
+  --kmap-g6: #b0568d;
+  --kmap-g7: #3f8fc5;
+  --kmap-g8: #a34a44;
+
+  /* typography */
+  --font-ui: 'D-DIN', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --display-font: var(--font-ui); /* headings only, never data or canvas text */
+  --text-body: 1rem;
+  --text-secondary: 0.875rem; /* floor for any readable text */
+  --text-data-large: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+  --canvas-text-min: 13px;
+
+  /* strokes and shape */
+  --stroke-min: 1.5px;
+  --wire-width: 2px;
+  --bus-width: 4px;
+  --wire-corner-radius: 3px;
+  --radius: var(--chrome-radius); /* legacy alias: one corner geometry app-wide */
+
+  /* chrome geometry (zone II), per theme */
+  --chrome-radius: 2px;
+  --chrome-corner-cut: 0px; /* 45 degree notch size; 0 disables the cut */
+  --chrome-border: 1px solid var(--line);
+
+  /* canvas glyph dials, read into Theme.glyph; defaults are the flat look */
+  --glyph-body-fill: surface;
+  --glyph-pattern: none;
+  --glyph-box-corner: sharp;
+  --glyph-relief: flat;
+  --glyph-rim-line: none;
+  --glyph-corners: none;
+  --glyph-emphasis: none;
+  --glyph-pin-cap: butt;
+  --glyph-junction: circle;
+
+  /* waveform chrome, read into Theme.wave */
+  --wave-surface: var(--surface); /* the instrument's own ground */
+  --wave-ink: var(--ink); /* text and marks ON that ground */
+  --wave-muted: var(--muted);
+  --wave-trace-high: var(--accent); /* logic-1 trace ink; wires are unaffected */
+  --wave-trace-weight: 1;
+  --wave-grid-density: 1;
+  --wave-fill-under: 1; /* filled highs read far better at TV distance */
+
+  /* zone III frame texture; 0 = none */
+  --texture-opacity: 0;
+
+  /* spacing */
+  --space-unit: 4px; /* chrome spacing grid */
+  --grid-schematic: 8px; /* logical schematic grid, snap target */
+
+  /* presentation mode scaling, read by the canvas Theme */
+  --stroke-scale: 1;
+  --glyph-text-scale: 1; /* component names and pin labels on canvas */
+}
+
+/* Light restates its palette rather than leaning on the :root defaults, so all
+   themes are declared the same way and none is the implicit fallback. */
+:root[data-theme='light'] {
+  color-scheme: light; /* native popups, scrollbars and form widgets */
+  --paper: #edeff6;
+  --surface: #ffffff;
+  --ink: #111528;
+  --muted: #8c92a8;
+  --line: #c9cfe0;
+  --accent: #26307d;
+  --accent-2: #5f6580;
+  --accent-3: #26307d;
+  --accent-fill: #d6dbf2;
+  --warn: #9a5a0b;
+  --ok: #2e6b4f;
+  --signal-mixed: #26307d;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark; /* native popups, scrollbars and form widgets */
+  --paper: #0c1120;
+  --surface: #141a2e;
+  --ink: #e9edf8;
+  --muted: #616a86;
+  --line: #242c44;
+  --accent: #8fb0ff;
+  --accent-2: #9aa3bd;
+  --accent-3: #8fb0ff;
+  --accent-fill: #1e2748;
+  --warn: #ffb02e;
+  --ok: #5cc98d;
+  --signal-mixed: #8fb0ff;
+
+  --kmap-g1: #4996d2;
+  --kmap-g2: #d67a3c;
+  --kmap-g3: #22a87a;
+  --kmap-g4: #9377d6;
+  --kmap-g5: #9c8f2f;
+  --kmap-g6: #d26787;
+  --kmap-g7: #3b9ec9;
+  --kmap-g8: #ba6a5f;
+}
+
+/* --- Character themes. Palettes are eyedropped from every reference frame in
+   screenshots/char/, then contrast- and grayscale-checked
+   (tokens.contrast.test.ts); they are not official brand values. Light and Dark
+   above stay the teaching defaults.
+
+   --accent-3 is each character's EMISSION colour: it lights a driven output and
+   nothing else. It never carries signal meaning, so a theme can glow in a hue
+   that is not logic 1. --- */
+
+/* Cyrene: pink is the character, lilac crystal is the material. Her wings,
+   her memory cards and her sigils are all elongated shards and diamonds, so
+   nothing here is blocky; a light ground needs no halo, which would only
+   muddy it. */
+:root[data-theme='cyrene'] {
+  color-scheme: light; /* native popups, scrollbars and form widgets */
+  --paper: #f7eff8;
+  --surface: #ffffff;
+  --ink: #3a2050;
+  --muted: #9a86ad;
+  --line: #e4d6ee;
+  --accent: #b8127e;
+  --accent-2: #6b3fc0;
+  --accent-3: #f27ac8;
+  --accent-fill: #fbdcf0;
+  --warn: #6e2a07;
+  --ok: #2c6b4a;
+  --signal-mixed: #b8127e;
+
+  --display-font: 'Syne', var(--font-ui);
+  --chrome-radius: 8px;
+  --glyph-body-fill: tint;
+  --glyph-box-corner: shard;
+  --glyph-emphasis: bloom;
+  --glyph-junction: diamond;
+  --kmap-g1: #0063a6;
+  --kmap-g2: #b74e00;
+  --kmap-g3: #007a59;
+  --kmap-g4: #6b4bb8;
+  --kmap-g5: #6f6200;
+  --kmap-g6: #9c3f77;
+  --kmap-g7: #2a6f9e;
+  --kmap-g8: #8f3a35;
+}
+
+/* Himeko Nova: ivory ground, crimson wiring and borders, champagne gold
+   instruments. Her holographic panels draw their charts in gold on a dark
+   field, which is why the waveform carries its own ground and its own trace
+   ink here -- on the ivory surface the same gold reads brown. */
+:root[data-theme='himeko'] {
+  color-scheme: light; /* native popups, scrollbars and form widgets */
+  --paper: #f7f0e4;
+  --surface: #fffbf4;
+  --ink: #2f1a17;
+  --muted: #948274;
+  --line: #dcc5a8;
+  --accent: #a3202a;
+  --accent-2: #8a6512;
+  --accent-3: #2f7fd6;
+  --accent-fill: #f7dcd6;
+  --warn: #7a3a08;
+  --ok: #2f6b45;
+  --signal-mixed: #a3202a;
+
+  --display-font: 'Cinzel', var(--font-ui);
+  --chrome-radius: 0px;
+  --chrome-border: 1px solid var(--accent);
+  --glyph-rim-line: inset;
+  --glyph-relief: bevel;
+  --glyph-emphasis: bloom;
+  --glyph-junction: star;
+  --wave-surface: #4a3418;
+  --wave-ink: #fdf0d4;
+  --wave-muted: #c1a87f;
+  --wave-trace-high: #ffb340;
+  --kmap-g1: #0063a6;
+  --kmap-g2: #a85200;
+  --kmap-g3: #00705a;
+  --kmap-g4: #6a4ab0;
+  --kmap-g5: #6b5c00;
+  --kmap-g6: #9a3a70;
+  --kmap-g7: #2a6f9e;
+  --kmap-g8: #8a3630;
+}
+
+/* Kinich: a voxel field in shades of jade on deep teal, with saffron tackle
+   and turquoise Nightsoul light. Green-as-energised also reads instantly in
+   an electronics context, so jade is logic 1. */
+:root[data-theme='kinich'] {
+  color-scheme: dark; /* native popups, scrollbars and form widgets */
+  --paper: #051417;
+  --surface: #0c2126;
+  --ink: #e6f2ec;
+  --muted: #6f8f81;
+  --line: #1c3c3a;
+  --accent: #86e850;
+  --accent-2: #f0a63a;
+  --accent-3: #2fd6c8;
+  --accent-fill: #14402a;
+  --warn: #f19765;
+  --ok: #58c39a;
+  --signal-mixed: #86e850;
+
+  --display-font: 'Chakra Petch', var(--font-ui);
+  --chrome-radius: 0px;
+  --glyph-pattern: pixel;
+  --glyph-emphasis: bloom;
+  --glyph-junction: square;
+}
+
+/* Silver Wolf: read off her equipment screen. The panel rules are periwinkle
+   BLUE, not cyan; the selected row is violet-pink, which is why violet-pink is
+   the accent (selection and logic 1 are the same token here) and blue is the
+   structural rule. Cyan survives as the glitch highlight. Arcs and rings step
+   along the 8px grid -- hers alone. */
+:root[data-theme='silverwolf'] {
+  color-scheme: dark; /* native popups, scrollbars and form widgets */
+  --paper: #0a0a1e;
+  --surface: #141434;
+  --ink: #ccd2f0;
+  --muted: #6a72a8;
+  --line: #3d47a0;
+  --accent: #d070d8;
+  --accent-2: #6478e8;
+  --accent-3: #7fe0ff;
+  --accent-fill: #2e2050;
+  --warn: #f5906d;
+  --ok: #6fd6a4;
+  --signal-mixed: #d070d8;
+
+  --display-font: 'Chakra Petch', var(--font-ui);
+  --chrome-radius: 0px;
+  --chrome-corner-cut: 6px;
+  --glyph-box-corner: stair;
+  --glyph-pattern: pixel;
+  --glyph-emphasis: bloom;
+  --glyph-junction: square;
+  --wave-grid-density: 1.4;
+}
+
+/* Firefly / SAM: pearl-white armour with gold trim. The only theme whose
+   palette is itself a state indicator, and the states are hers: unpowered is
+   the blazing orange of the combat form, powered is the luminous green of the
+   Ultimate. No pink anywhere -- that was never hers. */
+:root[data-theme='firefly'] {
+  color-scheme: light; /* native popups, scrollbars and form widgets */
+  --paper: #eef1f3;
+  --surface: #ffffff;
+  --ink: #1d2a33;
+  --muted: #8a96a0;
+  --line: #cfd8dd;
+  --accent: #cf4410;
+  --accent-2: #9a7526;
+  --accent-3: #ff7a18;
+  --accent-fill: #ffe2cc;
+  --warn: #93261a;
+  --ok: #3f6b3a;
+  --signal-mixed: #cf4410;
+
+  --display-font: 'Rajdhani', var(--font-ui);
+  --chrome-radius: 0px;
+  --chrome-corner-cut: 8px;
+  --glyph-box-corner: clip;
+  --glyph-emphasis: bloom;
+  --texture-opacity: 0.04;
+}
+
+:root[data-theme='firefly'].powered {
+  --accent: #0f7a3d;
+  --accent-3: #6dffab;
+  --accent-fill: #d6f2df;
+  --signal-mixed: #0f7a3d;
+}
+
+/* Presentation mode (P): bigger type, heavier strokes, chrome trimmed by the
+   shell. Class lives on <html>; components must never special-case it. */
+:root.presentation {
+  font-size: 135%;
+  --stroke-scale: 1.4;
+  /* Names and pin labels are the smallest thing on a 65" TV, and unlike
+     chrome text they do not follow the root font size. */
+  --glyph-text-scale: 1.5;
+}
+
+/* Motion floor: nothing in this app is decorative motion, but a viewer who
+   asks for none gets none. Transitions collapse to instant rather than being
+   removed, so state still lands where it should. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Shared chrome control shape -------------------------------------------
+   Every button-like control in the app, in one place, so a theme's corner
+   geometry can never reach some of them and miss others.
+
+   The construction: a chamfer has to be cut BEFORE the border exists, or the
+   clip simply slices the border off and leaves the corner open. So the
+   element's own background IS the border, clipped, and an inset pseudo-element
+   clipped the same way paints the surface over it. `isolation` plus a negative
+   z-index puts that surface between the background and ALL content, including
+   bare text nodes, which `position` alone cannot lift.
+
+   Selectors carry a `:root` prefix purely for specificity: these controls are
+   styled in three separate sheets whose injection order is not guaranteed, and
+   several of them re-declare `background`/`border` after this file loads.
+   At `--chrome-corner-cut: 0` the result is identical to a plain 1px border. */
+:root .tool-btn,
+:root .mode-btn,
+:root .workbench-tab,
+:root .theme-picker,
+:root .palette-item,
+:root .drawer-toggle,
+:root .reveal-btn,
+:root .segmented,
+:root .package-dialog button:not(.package-swatch),
+:root .analyze-drawer button {
+  position: relative;
+  isolation: isolate;
+  background: var(--line);
+  border: 0;
+  border-radius: var(--chrome-radius);
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+:root .tool-btn::before,
+:root .mode-btn::before,
+:root .workbench-tab::before,
+:root .theme-picker::before,
+:root .palette-item::before,
+:root .drawer-toggle::before,
+:root .reveal-btn::before,
+:root .segmented::before,
+:root .package-dialog button:not(.package-swatch)::before,
+:root .analyze-drawer button::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: var(--chrome-radius);
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+/* Pressed and active states recolour the ring and the surface separately. */
+:root .mode-btn[aria-pressed='true'],
+:root .workbench-tab[aria-pressed='true'],
+:root .palette-item--active {
+  background: var(--accent);
+  color: var(--accent);
+}
+
+:root .mode-btn[aria-pressed='true']::before,
+:root .workbench-tab[aria-pressed='true']::before,
+:root .palette-item--active::before {
+  background: var(--accent-fill);
+}
+
+/* A group control's children have to be transparent, or they paint over the
+   ring the group's own background provides -- the corner then reads as a
+   bare cut instead of a chamfered border. Dividers come from an inset shadow,
+   which lives inside the child and so survives the clip. */
+:root .segmented > * {
+  background: transparent;
+}
+
+:root .segmented > * + * {
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+/* A selected segment paints its own fill, and a rectangular child covers the
+   group's ring exactly where the chamfer cuts across it -- the corner then
+   reads as sliced off. Only the segments at the group's ENDS own an outer
+   corner, so only those are cut, and only on the side they own; cutting a
+   middle segment would nick its top and bottom for nothing. */
+:root .segmented > :first-child {
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    100% 0,
+    100% 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+:root .segmented > :last-child {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    0 100%
+  );
+}
+
+:root .segmented > :only-child {
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+/* A selected segment paints its own fill, and a rectangular child covers the
+   group's ring exactly where the chamfer cuts across it -- the corner then
+   reads as sliced off. Only the segments AT the group's ends carry an outer
+   corner, so only those are cut, and only on the side they actually own;
+   cutting a middle segment would nick its top and bottom for nothing. */
+:root .segmented > :first-child {
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    100% 0,
+    100% 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+:root .segmented > :last-child {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    0 100%
+  );
+}
+
+:root .segmented > :only-child {
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+/* A palette row is a list item, not a raised button: its ring stays invisible
+   until hover or selection, which is how it read before the shared shape. */
+:root .palette-item {
+  background: var(--surface);
+}
+
+:root .palette-item:hover,
+:root .mode-btn:hover,
+:root .workbench-tab:hover,
+:root .drawer-toggle:hover,
+:root .reveal-btn:hover {
+  background: var(--accent);
+}
+
+/* Scrollbars follow the theme. color-scheme already picks the right native
+   pair, but on a character palette the default still reads as a foreign
+   element, so the track and thumb are drawn from tokens. */
+* {
+  scrollbar-color: var(--muted) var(--paper);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border: 2px solid var(--paper);
+  border-radius: var(--chrome-radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--paper);
+}

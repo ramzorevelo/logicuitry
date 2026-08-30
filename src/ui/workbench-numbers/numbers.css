@@ -1,0 +1,530 @@
+/* Numbers workbench chrome. Instruments (bit rows) are canvas; everything here
+   is React chrome, all colors/sizes from tokens. */
+
+.numbers-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 4);
+  padding: calc(var(--space-unit) * 4);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* Centered content column on wide monitors (design-system layout skeleton). */
+.workbench-area > .numbers-workbench {
+  --workbench-max: 1100px;
+}
+
+.numbers-workbench__bar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 4);
+  flex-wrap: wrap;
+}
+
+.numbers-workbench__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Segmented toggle group. The chamfer itself comes from the shared chrome
+   rule in tokens.css; the 1px padding/gap is what makes the group's own
+   background show through as its border and dividers. */
+.segmented {
+  display: inline-flex;
+  padding: 1px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  border: none;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-fill);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  font-size: var(--text-secondary);
+  color: var(--muted);
+}
+
+.field__input,
+.select {
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-unit);
+}
+
+.field__input {
+  width: 10ch;
+}
+
+/* Operand entry */
+.value-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  margin-bottom: calc(var(--space-unit) * 3);
+}
+
+.value-entry__head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 3);
+}
+
+/* Presentation mode: value-entry chrome at 1.5x on top of the app-wide 135%
+   scale; the bit-grid canvas gets its own further +0.5x (2x total) via
+   BitGrid's own metrics scaling instead, to stay crisp at native resolution. */
+:root.presentation .value-entry__head {
+  zoom: 1.5;
+}
+
+.value-entry__label {
+  font-weight: 600;
+  font-size: var(--text-body);
+  min-width: 5ch; /* A / B / value labels align the entry column */
+}
+
+/* Min at the right, max at the left: matches MSB-leftmost bit ordering.
+   Width is set inline to span the bit row exactly. */
+.value-entry__slider {
+  max-width: 100%;
+  accent-color: var(--accent);
+  direction: rtl;
+}
+
+.bit-grid {
+  display: block;
+}
+
+.bit-grid--editable {
+  cursor: pointer;
+}
+
+/* Convert tab */
+.convert-tab,
+.compute-tab {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+}
+
+/* Value/binary-box/slider/solution/answer block: shrink-wraps to its own
+   content width (opting out of the column's stretch) and centers, so rows
+   like .step don't space-between across the full page width, and the block
+   grows outward from center as bit width increases. */
+.convert-tab__group,
+.compute-tab__group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  align-self: center;
+  max-width: 100%;
+}
+
+/* Secondary panel: separated by spacing + a subtle top rule, not a full box
+   (design-system: only the primary instrument gets the border/surface box). */
+.steps-panel {
+  list-style: none;
+  margin: 0;
+  padding: calc(var(--space-unit) * 2) 0 0;
+  border-top: var(--stroke-min) solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.steps-panel__empty {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+.step {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 4);
+  padding: var(--space-unit) 0;
+  border-bottom: var(--stroke-min) solid var(--line);
+}
+
+.step:last-child {
+  border-bottom: none;
+}
+
+.step--note .step__text {
+  color: var(--accent);
+}
+
+.step__partial {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step--masked .step__text {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Current step reads at a glance; completed steps recede. */
+.step--current {
+  border-left: calc(var(--stroke-min) * 2) solid var(--accent);
+  padding-left: calc(var(--space-unit) * 2);
+  font-size: var(--text-body);
+}
+
+.step--done .step__text,
+.step--done .step__partial {
+  color: var(--muted);
+}
+
+.step__hint {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  white-space: nowrap;
+  align-self: center;
+}
+
+/* Read-only narration grid: bits appear only as steps discover them. */
+.narration-grid {
+  margin-bottom: calc(var(--space-unit) * 3);
+}
+
+/* Method toggle: sits below the entry, clearly separate from the steps panel
+   below it; align-self keeps it grouped at the block's left edge as the
+   centered group's width tracks the bit grid. */
+.convert-tab__method {
+  align-self: flex-start;
+}
+
+/* Final reveal: prominent source -> target readout at TV scale. */
+.final-plate {
+  padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 4);
+  font-size: var(--text-data-large);
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--accent);
+  border-radius: var(--radius);
+  align-self: flex-start;
+}
+
+/* SUB as taught: the flipped-B row above the sum. */
+.notb-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 3);
+}
+
+.notb-row__label {
+  font-weight: 600;
+  min-width: 5ch;
+  color: var(--muted);
+}
+
+.result-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  padding-top: calc(var(--space-unit) * 2);
+  border-top: var(--stroke-min) solid var(--line);
+}
+
+.result-row__head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 3);
+}
+
+.result-row__readout {
+  color: var(--ink);
+  font-size: var(--text-data-large);
+}
+
+/* Masked-result placeholder; the head's single Show/Hide button does the work. */
+.reveal-plate {
+  padding: calc(var(--space-unit) * 4);
+  font-family: var(--font-mono);
+  color: var(--muted);
+  background: var(--surface);
+  border: var(--stroke-min) dashed var(--line);
+  border-radius: var(--radius);
+}
+
+/* Worked ADD/SUB solution under the result, own show/hide. */
+.solution {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding-top: calc(var(--space-unit) * 2);
+  border-top: var(--stroke-min) solid var(--line);
+}
+
+.solution__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.solution__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Duplicate final answer, deliberately quieter than the result readout. */
+.solution__answer {
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.drawer-toggle {
+  position: relative;
+  isolation: isolate;
+  background: var(--line);
+  border: 0;
+  border-radius: var(--chrome-radius);
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+.reveal-btn::before,
+.drawer-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: var(--chrome-radius);
+  clip-path: polygon(
+    var(--chrome-corner-cut) 0,
+    calc(100% - var(--chrome-corner-cut)) 0,
+    100% var(--chrome-corner-cut),
+    100% calc(100% - var(--chrome-corner-cut)),
+    calc(100% - var(--chrome-corner-cut)) 100%,
+    var(--chrome-corner-cut) 100%,
+    0 calc(100% - var(--chrome-corner-cut)),
+    0 var(--chrome-corner-cut)
+  );
+}
+
+.drawer-toggle {
+  align-self: flex-start;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font: inherit;
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  background: transparent;
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Emphasized (primary) entry field for the current conversion source base. */
+.value-entry__primary .field__input {
+  border-color: var(--accent);
+}
+
+.value-entry__primary {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.value-entry__bits.value-entry__primary {
+  outline: var(--stroke-min) solid var(--accent);
+  outline-offset: calc(var(--space-unit) * 0.5);
+  border-radius: var(--radius);
+}
+
+/* Inapplicable operand B dims in place (no layout jump) and goes inert. */
+.value-entry-wrap--dimmed {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+/* Copy-result affordance with checkmark feedback. */
+.reveal-btn {
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font: inherit;
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  background: transparent;
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.reveal-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.result-row__expr {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Overflow: recolor the whole result row with the warning token. */
+.result-row--overflow .result-row__readout,
+.result-row--overflow .value-entry__label {
+  color: var(--warn);
+}
+
+.result-row--overflow {
+  border-top-color: var(--warn);
+}
+
+/* Reference drawer copy (truth tables, rule cards). */
+.ref-truth {
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.ref-truth th,
+.ref-truth td {
+  padding: calc(var(--space-unit) * 0.5) calc(var(--space-unit) * 2);
+  text-align: center;
+}
+
+.ref-truth th {
+  color: var(--muted);
+  border-bottom: var(--stroke-min) solid var(--line);
+  font-weight: 600;
+}
+
+.ref-truth__out {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ref-prose {
+  margin: 0;
+  padding-left: calc(var(--space-unit) * 3);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  line-height: 1.4;
+}
+
+.ref-prose p {
+  margin: 0;
+}
+
+/* Typed binary entry. The field is a focus and keyboard sink laid over the row;
+   its own text is never shown, because the caret and the per-cell selection are
+   drawn on the canvas from column indices. */
+.bit-grid-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.bit-grid__entry {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  cursor: text;
+  font: inherit;
+}
+
+.bit-grid__entry::selection {
+  background: transparent;
+}
+
+/* --- Compact (phone) ------------------------------------------------------
+   Stack the top bar and let the instrument keep the full width. The row of
+   cells shrinks itself (render/bitGrid fitScale) down to a legibility floor
+   and scrolls below that, rather than shrinking past readable. */
+.app-shell--compact .numbers-workbench {
+  gap: calc(var(--space-unit) * 3);
+  padding: calc(var(--space-unit) * 2);
+}
+
+.app-shell--compact .numbers-workbench__bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.app-shell--compact .numbers-workbench__bar .field {
+  justify-content: space-between;
+}
+
+/* A segmented control has to divide its row evenly. Left to shrink-wrap it
+   gives "Convert" a third of the width and "Compute" the rest, which reads as
+   a bug rather than as two equal choices. */
+.app-shell--compact .segmented {
+  display: flex;
+  width: 100%;
+}
+
+.app-shell--compact .segmented button {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+
+.app-shell--compact .numbers-workbench__body {
+  overflow-x: auto;
+}
+
+.app-shell--compact .convert-tab__group,
+.app-shell--compact .compute-tab__group {
+  align-self: stretch;
+}
+
+/* Touch targets. */
+.app-shell--compact .segmented button,
+.app-shell--compact .select,
+.app-shell--compact .field__input,
+.app-shell--compact .reveal-btn,
+.app-shell--compact .drawer-toggle {
+  min-height: 44px;
+}
+
+/* Touch equivalents of the Space / Enter / R narration keys. */
+.steps-controls {
+  display: flex;
+  gap: var(--space-unit);
+  margin-bottom: calc(var(--space-unit) * 2);
+}
+
+.steps-controls .reveal-btn {
+  flex: 1;
+  min-height: 44px;
+}

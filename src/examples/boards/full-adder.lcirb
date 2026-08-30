@@ -1,0 +1,249 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "full-adder",
+  "name": "Full adder",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 56
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 120
+      },
+      "label": "B"
+    },
+    {
+      "id": "cin",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 192
+      },
+      "label": "CIN"
+    },
+    {
+      "id": "ha1",
+      "kind": "chip",
+      "defId": "example-half-adder",
+      "pos": {
+        "x": 184,
+        "y": 56
+      }
+    },
+    {
+      "id": "ha2",
+      "kind": "chip",
+      "defId": "example-half-adder",
+      "pos": {
+        "x": 368,
+        "y": 152
+      }
+    },
+    {
+      "id": "orc",
+      "kind": "or",
+      "pos": {
+        "x": 536,
+        "y": 264
+      }
+    },
+    {
+      "id": "lsum",
+      "kind": "led",
+      "pos": {
+        "x": 560,
+        "y": 168
+      },
+      "label": "SUM"
+    },
+    {
+      "id": "lcout",
+      "kind": "led",
+      "pos": {
+        "x": 664,
+        "y": 256
+      },
+      "label": "COUT"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ha1",
+        "pin": "A"
+      },
+      "points": [
+        {
+          "x": 96,
+          "y": 72
+        },
+        {
+          "x": 96,
+          "y": 96
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "ha1",
+        "pin": "B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 112
+        },
+        {
+          "x": 176,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "ha1",
+        "pin": "S"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ha2",
+        "pin": "A"
+      },
+      "points": [
+        {
+          "x": 336,
+          "y": 96
+        },
+        {
+          "x": 336,
+          "y": 192
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "cin",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ha2",
+        "pin": "B"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "ha2",
+        "pin": "S"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lsum",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "ha1",
+        "pin": "C"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "orc",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 352,
+          "y": 112
+        },
+        {
+          "x": 352,
+          "y": 272
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "ha2",
+        "pin": "C"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "orc",
+        "pin": "b"
+      },
+      "points": [
+        {
+          "x": 520,
+          "y": 208
+        },
+        {
+          "x": 520,
+          "y": 288
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "orc",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lcout",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lcir/board.schema.json",
+  "title": "Logicuitry board (*.board.json)",
+  "type": "object",
+  "properties": {
+    "format": { "const": "lcir.board" },
+    "formatVersion": { "const": 5 },
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/component" }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "parent": { "type": "string" }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/wire" }
+    },
+    "junctions": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/junction" }
+    },
+    "probes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "label": { "type": "string" }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    "view": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "zoom": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": ["x", "y", "zoom"],
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["ideal", "datasheet"] },
+        "datasheet": { "enum": ["typ", "max"] }
+      },
+      "required": ["mode", "datasheet"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["format", "formatVersion", "id", "name", "components", "wires", "junctions", "probes", "view", "timing"],
+  "additionalProperties": false
+}

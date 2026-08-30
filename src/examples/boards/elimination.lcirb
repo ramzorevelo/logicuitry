@@ -1,0 +1,303 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "elimination",
+  "name": "Elimination",
+  "components": [
+    {
+      "id": "a1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "group": "gl",
+      "label": "A"
+    },
+    {
+      "id": "b1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 144
+      },
+      "group": "gl",
+      "label": "B"
+    },
+    {
+      "id": "inv",
+      "kind": "not",
+      "pos": {
+        "x": 152,
+        "y": 48
+      },
+      "group": "gl"
+    },
+    {
+      "id": "sum",
+      "kind": "or",
+      "pos": {
+        "x": 288,
+        "y": 136
+      },
+      "group": "gl"
+    },
+    {
+      "id": "lgate",
+      "kind": "and",
+      "pos": {
+        "x": 392,
+        "y": 128
+      },
+      "group": "gl"
+    },
+    {
+      "id": "lhs",
+      "kind": "led",
+      "pos": {
+        "x": 496,
+        "y": 120
+      },
+      "group": "gl",
+      "label": "A(A' + B)"
+    },
+    {
+      "id": "a2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 224
+      },
+      "group": "gr",
+      "label": "A"
+    },
+    {
+      "id": "b2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 320
+      },
+      "group": "gr",
+      "label": "B"
+    },
+    {
+      "id": "rgate",
+      "kind": "and",
+      "pos": {
+        "x": 152,
+        "y": 312
+      },
+      "group": "gr"
+    },
+    {
+      "id": "rhs",
+      "kind": "led",
+      "pos": {
+        "x": 288,
+        "y": 304
+      },
+      "group": "gr",
+      "label": "AB"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lgate",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 144,
+          "y": 120
+        },
+        {
+          "x": 384,
+          "y": 120
+        },
+        {
+          "x": 384,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 64
+        },
+        {
+          "x": 280,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "b1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "sum",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lgate",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "lgate",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lhs",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "a2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rgate",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 144,
+          "y": 240
+        },
+        {
+          "x": 144,
+          "y": 320
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "b2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rgate",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "rgate",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rhs",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 144,
+        "y": 64
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "gl",
+      "name": "Unsimplified"
+    },
+    {
+      "id": "gr",
+      "name": "Simplified"
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

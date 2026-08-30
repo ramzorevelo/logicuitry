@@ -1,0 +1,14 @@
+{
+  "family": "74HC",
+  "condition": "5 V system; limits are the datasheet guarantees at VCC = 4.5 V, IOH = -4 mA / IOL = 4 mA, over temperature (CMOS input thresholds at 0.7/0.3 VCC)",
+  "levels": { "vcc": 5, "vohMin": 3.84, "volMax": 0.33, "vihMin": 3.15, "vilMax": 1.35 },
+  "source": "TI SN74HC00 (SCLS181H): Recommended Operating Conditions (VIH 3.15 V, VIL 1.35 V at VCC=4.5 V) and DC Electrical Characteristics (VOH 3.84 V at IOH=-4 mA, VOL 0.33 V at IOL=4 mA, over temperature)",
+  "parts": [
+    {
+      "part": "74HC00",
+      "primitive": "nand2",
+      "verified": true,
+      "source": "TI SN74HC00 SCLS181H"
+    }
+  ]
+}

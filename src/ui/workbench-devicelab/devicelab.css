@@ -1,0 +1,217 @@
+/* Device Lab chrome. Plots and level diagrams are canvas; controls are React,
+   all colors/sizes from tokens. */
+
+.devicelab {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 4);
+  padding: calc(var(--space-unit) * 4);
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.devicelab__cmos,
+.devicelab__ttl {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+}
+
+.param-panel {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 4);
+  flex-wrap: wrap;
+}
+
+.slider-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  font-size: var(--text-secondary);
+  color: var(--muted);
+}
+
+.slider-field input[type='range'] {
+  width: 180px;
+  accent-color: var(--accent);
+}
+
+.slider-field__label .mono {
+  color: var(--ink);
+}
+
+.devicelab__main {
+  display: flex;
+  gap: calc(var(--space-unit) * 4);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.vtc-plot,
+.nm-diagram {
+  display: block;
+  background: var(--surface);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Secondary panel: spacing + a subtle side rule, not a full box (design-system:
+   only the primary instrument gets the border/surface box). */
+.metrics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  padding-left: calc(var(--space-unit) * 3);
+  border-left: var(--stroke-min) solid var(--line);
+  min-width: 140px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 3);
+  font-size: var(--text-secondary);
+}
+
+.metric__name {
+  color: var(--muted);
+}
+
+.metric__value {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ok-flag {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.violation-flag {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.approx-flag {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: var(--text-secondary);
+}
+
+.region-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  font-size: var(--text-secondary);
+  color: var(--muted);
+}
+
+.region-legend__run {
+  color: var(--ink);
+}
+
+.netlist-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.netlist-drawer__note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.netlist-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 0.5);
+  font-size: var(--text-secondary);
+}
+
+.netlist-line code {
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.netlist-line--driven code {
+  color: var(--ink);
+}
+
+.netlist-line--driven {
+  border-left: var(--stroke-min) solid var(--accent);
+  padding-left: calc(var(--space-unit) * 2);
+}
+
+.netlist-line__note {
+  display: block;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: var(--text-secondary);
+}
+
+.netlist-model {
+  font-size: var(--text-secondary);
+}
+
+.netlist-model summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.netlist-model pre {
+  margin: calc(var(--space-unit) * 2) 0 0;
+  overflow-x: auto;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+/* Worked NM calculation: the board-work layout, columns aligned so the
+   substitution and the result read down the page. */
+.margin-work {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  align-items: flex-start;
+}
+
+.margin-work__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  font-size: var(--text-secondary);
+}
+
+.margin-work__row {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: calc(var(--space-unit) * 3);
+  color: var(--ink);
+}
+
+.margin-work__row--bad .margin-work__result {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* Verdict under the rows: the pass/fail reading belongs with the work that
+   produced it, not in a separate readout. */
+.margin-work__verdict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  margin-top: var(--space-unit);
+}
+
+.margin-work__formula {
+  color: var(--muted);
+}
+
+.margin-work__result {
+  font-weight: 600;
+}

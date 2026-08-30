@@ -1,0 +1,69 @@
+# Publishes the web build to GitHub Pages. The PWA is the route most students
+# take: no install rights, works on a phone, offline after the first visit.
+#
+# Written, never run from this repo: adding the remote and pushing are the
+# owner's, per CLAUDE.md. The owner also has to set Pages' source to "GitHub
+# Actions" once, in repository settings.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A superseded deploy is wasted work, and two deploys racing would publish
+# whichever finished last rather than whichever is newer.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The same gates release.yml runs. A broken build must not reach a class.
+      - name: Gates
+        run: |
+          npx tsc --noEmit
+          npm run lint
+          npx vitest run
+
+      - uses: actions/configure-pages@v5
+
+      # A project site is served from a subpath. Derived from the repo name so a
+      # rename does not silently publish a site whose every asset 404s.
+      - name: Build
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - run: npm run check:offline
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

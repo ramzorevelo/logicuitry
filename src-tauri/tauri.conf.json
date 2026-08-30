@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Logicuitry",
+  "version": "0.1.0",
+  "identifier": "app.logicuitry",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build:desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Logicuitry",
+        "width": 1440,
+        "height": 900,
+        "resizable": true,
+        "useHttpsScheme": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "msi",
+      "nsis",
+      "deb",
+      "appimage",
+      "app"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Education",
+    "shortDescription": "Teaching instruments for logic circuits and design.",
+    "longDescription": "Offline teaching instruments for logic circuits and design: a schematic workbench with a deterministic simulator, number-system drills, and a device lab.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "lcirb"
+        ],
+        "name": "Logicuitry board",
+        "description": "Logicuitry board",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "lcirc"
+        ],
+        "name": "Logicuitry chip",
+        "description": "Logicuitry chip",
+        "role": "Editor"
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ramzorevelo/logicuitry/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ3ODE3QUI0RDhBREFDNjkKUldScHJLM1l0SHFCMStVdDFCUm1wMVNNUmUvSEU3R0czRHJLS0pCekJSZjdraEI4ZFB5bHVzcE8K",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

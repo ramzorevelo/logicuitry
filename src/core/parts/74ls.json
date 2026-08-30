@@ -1,0 +1,218 @@
+{
+  "family": "74LS",
+  "levels": { "vcc": 5, "vohMin": 2.7, "volMax": 0.5, "vihMin": 2.0, "vilMax": 0.8 },
+  "parts": [
+    {
+      "part": "74LS00",
+      "primitive": "nand2",
+      "tplh": { "typ": 9, "max": 15 },
+      "tphl": { "typ": 10, "max": 15 },
+      "verified": true,
+      "source": "TI SN74LS00 SDLS025"
+    },
+
+    {
+      "part": "74LS02",
+      "primitive": "nor2",
+      "tplh": { "typ": 10, "max": 15 },
+      "tphl": { "typ": 10, "max": 15 },
+      "verified": true,
+      "source": "TI SN74LS02"
+    },
+
+    {
+      "part": "74LS04",
+      "primitive": "not",
+      "tplh": { "typ": 9, "max": 15 },
+      "tphl": { "typ": 10, "max": 15 },
+      "verified": true,
+      "source": "TI SN74LS04"
+    },
+
+    {
+      "part": "74LS08",
+      "primitive": "and2",
+      "tplh": { "typ": 8, "max": 15 },
+      "tphl": { "typ": 10, "max": 20 },
+      "verified": true,
+      "source": "TI SN74LS08"
+    },
+
+    {
+      "part": "74LS32",
+      "primitive": "or2",
+      "tplh": { "typ": 14, "max": 22 },
+      "tphl": { "typ": 14, "max": 22 },
+      "verified": true,
+      "source": "TI SN74LS32"
+    },
+
+    {
+      "part": "74LS86",
+      "primitive": "xor2",
+      "tplh": { "typ": 12, "max": 23 },
+      "tphl": { "typ": 10, "max": 17 },
+      "condition": "other input LOW",
+      "tplh_worst": { "typ": 20, "max": 30 },
+      "tphl_worst": { "typ": 13, "max": 22 },
+      "condition_worst": "other input HIGH",
+      "verified": true,
+      "source": "TI SN74LS86"
+    },
+
+    {
+      "part": "74LS283",
+      "primitive": "adder4",
+      "paths": {
+        "cin_to_cout": {
+          "tplh": { "typ": 11, "max": 17 },
+          "tphl": { "typ": 11, "max": 22 }
+        },
+        "ab_to_sum": {
+          "tplh": { "typ": 15, "max": 24 },
+          "tphl": { "typ": 15, "max": 24 }
+        },
+        "cin_to_sum": {
+          "tplh": { "typ": 16, "max": 24 },
+          "tphl": { "typ": 15, "max": 24 }
+        },
+        "ab_to_cout": {
+          "tplh": { "typ": 11, "max": 17 },
+          "tphl": { "typ": 12, "max": 17 }
+        }
+      },
+      "verified": true,
+      "source": "TI SN74LS283"
+    },
+
+    {
+      "part": "74LS74",
+      "primitive": "dff",
+      "tplh_clk_q": { "typ": 13, "max": 25 },
+      "tphl_clk_q": { "typ": 25, "max": 40 },
+      "setup_min": 20,
+      "hold_min": 5,
+      "fmax_min": 25,
+      "fmax_typ": 33,
+      "min_pulse_width_high": 25,
+      "verified": true,
+      "source": "TI SN74LS74"
+    },
+
+    {
+      "part": "74LS157",
+      "primitive": "mux2to1",
+      "paths": {
+        "data_to_y": { "tplh": { "typ": 9, "max": 14 }, "tphl": { "typ": 9, "max": 14 } },
+        "sel_to_y": { "tplh": { "typ": 15, "max": 23 }, "tphl": { "typ": 18, "max": 27 } },
+        "en_to_y": { "tplh": { "typ": 13, "max": 20 }, "tphl": { "typ": 14, "max": 21 } }
+      },
+      "verified": true,
+      "source": "TI SN74LS157 SDLS058 (data/select/strobe rows, direct per-arc)"
+    },
+
+    {
+      "part": "74LS153",
+      "primitive": "mux4to1",
+      "paths": {
+        "data_to_y": { "tplh": { "typ": 10, "max": 15 }, "tphl": { "typ": 17, "max": 26 } },
+        "sel_to_y": { "tplh": { "typ": 19, "max": 29 }, "tphl": { "typ": 25, "max": 38 } },
+        "en_to_y": { "tplh": { "typ": 16, "max": 24 }, "tphl": { "typ": 21, "max": 32 } }
+      },
+      "verified": true,
+      "source": "TI SN74LS153 SDLS055A (data/select/strobe rows, direct per-arc)"
+    },
+
+    {
+      "part": "74LS151",
+      "primitive": "mux8to1",
+      "paths": {
+        "data_to_y": { "tplh": { "typ": 20, "max": 32 }, "tphl": { "typ": 16, "max": 26 } },
+        "sel_to_y": { "tplh": { "typ": 27, "max": 43 }, "tphl": { "typ": 18, "max": 30 } },
+        "en_to_y": { "tplh": { "typ": 26, "max": 42 }, "tphl": { "typ": 20, "max": 32 } }
+      },
+      "verified": true,
+      "source": "TI SN74LS151 SDLS054 (Y-output rows only; the chip also has an inverted W output we don't model)"
+    },
+
+    {
+      "part": "74150",
+      "primitive": "mux16to1",
+      "paths": {
+        "data_to_y": { "tplh": { "typ": 8.5, "max": 14 }, "tphl": { "typ": 13, "max": 20 } },
+        "sel_to_y": { "tplh": { "typ": 23, "max": 35 }, "tphl": { "typ": 22, "max": 33 } },
+        "en_to_y": { "tplh": { "typ": 15.5, "max": 24 }, "tphl": { "typ": 21, "max": 30 } }
+      },
+      "verified": true,
+      "source": "TI SN74150 SDLS054 (non-LS TTL -- no LS-family 16:1 mux was ever made; owner-approved M6.5 exception, family mismatch with the rest of this DB. Output is the inverted W pin, mapped to our y arc.)"
+    },
+
+    {
+      "part": "74LS138",
+      "primitive": "decoder3to8",
+      "paths": {
+        "sel_to_y": {
+          "tplh": { "typ": 21, "max": 27 },
+          "tphl": { "typ": 20, "max": 41 }
+        },
+        "en_to_y": {
+          "tplh": { "typ": 14, "max": 26 },
+          "tphl": { "typ": 20, "max": 38 }
+        }
+      },
+      "verified": true,
+      "source": "TI SN74LS138 SDLS014 (sel_to_y worst of the 2-level/3-level select rows; en_to_y worst of the 2-level/3-level enable rows -- our decoder is one active-high path per select/enable, not a per-level breakdown)"
+    },
+
+    {
+      "part": "74LS148",
+      "primitive": "encoder8to3",
+      "paths": {
+        "i_to_y": {
+          "tplh": { "typ": 20, "max": 36 },
+          "tphl": { "typ": 16, "max": 29 }
+        },
+        "i_to_valid": {
+          "tplh": { "typ": 35, "max": 55 },
+          "tphl": { "typ": 9, "max": 21 }
+        }
+      },
+      "verified": true,
+      "source": "TI SN74LS148 SDLS053B (i_to_y worst of in-phase/out-of-phase A0-A2 rows; i_to_valid from the 0-7-to-GS in-phase row, no out-of-phase row given; GS stands in for our valid output)"
+    },
+
+    {
+      "part": "74LS139",
+      "primitive": "demux2to4",
+      "paths": {
+        "sel_to_y": {
+          "tplh": { "typ": 18, "max": 29 },
+          "tphl": { "typ": 25, "max": 38 }
+        },
+        "en_to_y": {
+          "tplh": { "typ": 16, "max": 24 },
+          "tphl": { "typ": 21, "max": 32 }
+        }
+      },
+      "verified": true,
+      "source": "TI SN54LS139A/SN74LS139A SDLS013A (sel_to_y worst of the 2-level/3-level binary-select rows, mirroring 74LS138's convention; en_to_y from the enable row, 2 levels only -- our demux's data pin maps to this part's active-low enable, which doubles as the data line in demultiplexing mode)"
+    },
+
+    {
+      "part": "74LS154",
+      "primitive": "demux4to16",
+      "paths": {
+        "sel_to_y": {
+          "tplh": { "typ": 30, "max": 35 },
+          "tphl": { "typ": 30, "max": 35 }
+        },
+        "en_to_y": {
+          "tplh": { "typ": 20, "max": 25 },
+          "tphl": { "typ": 25, "max": 35 }
+        }
+      },
+      "verified": true,
+      "source": "Fairchild/ON Semi DM74LS154 (real LS part exists -- supersedes the non-LS 74154 originally planned; datasheet's 'Data' row is this part's 4-line binary-select path -- A/B/C/D go through 2 levels of decode logic to one of 16 outputs, slower than the single-level active-low strobe path -- mapped to sel_to_y; 'Strobe' row mapped to en_to_y, which our demux's own data pin `d` also resolves to per codecPathKey, matching 74LS139/74LS138's real strobe-doubles-as-data-input electrical behavior)"
+    }
+  ]
+}

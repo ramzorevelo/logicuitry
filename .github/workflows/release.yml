@@ -1,0 +1,79 @@
+# Builds the desktop bundles and publishes them to a GitHub Release, plus the
+# latest.json manifest the in-app updater reads.
+#
+# Written, never run from this repo: adding the remote, pushing and cutting the
+# tag are the owner's, per CLAUDE.md. Nothing here signs with Authenticode --
+# the installers ship unsigned and SmartScreen shows its interstitial once (the
+# README says so plainly). TAURI_SIGNING_PRIVATE_KEY is a MINISIGN key, which
+# only signs the update manifest; it is unrelated to code signing.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows/WebView2 is Chromium and is the supported target. The other
+          # two are produced because it is free to do so, and shipped
+          # best-effort until someone runs docs/reference/visual-qa.md on them.
+          - platform: windows-latest
+            args: '--bundles msi,nsis'
+          - platform: ubuntu-latest
+            args: '--bundles deb,appimage'
+          # macOS ships a .zip, not a .dmg: a .dmg carries the quarantine
+          # attribute that produces the worst-case "damaged and can't be
+          # opened" message on an un-notarized app.
+          - platform: macos-latest
+            args: '--bundles app'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Linux build dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      - name: Gates
+        run: |
+          npx tsc --noEmit
+          npm run lint
+          npx vitest run
+
+      - name: Offline guarantee
+        run: |
+          npm run build
+          npm run check:offline
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Logicuitry ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

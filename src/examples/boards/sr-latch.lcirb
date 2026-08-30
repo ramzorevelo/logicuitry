@@ -1,0 +1,220 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "sr-latch",
+  "name": "SR latch",
+  "components": [
+    {
+      "id": "set",
+      "kind": "button",
+      "pos": {
+        "x": 48,
+        "y": 224
+      },
+      "label": "SET"
+    },
+    {
+      "id": "reset",
+      "kind": "button",
+      "pos": {
+        "x": 48,
+        "y": 128
+      },
+      "label": "RESET"
+    },
+    {
+      "id": "n1",
+      "kind": "nor",
+      "pos": {
+        "x": 160,
+        "y": 136
+      }
+    },
+    {
+      "id": "n2",
+      "kind": "nor",
+      "pos": {
+        "x": 160,
+        "y": 216
+      }
+    },
+    {
+      "id": "lq",
+      "kind": "led",
+      "pos": {
+        "x": 312,
+        "y": 128
+      },
+      "label": "Q"
+    },
+    {
+      "id": "lqn",
+      "kind": "led",
+      "pos": {
+        "x": 312,
+        "y": 208
+      },
+      "label": "Q NOT"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "reset",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "set",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n2",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "n1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lq",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n2",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 200
+        },
+        {
+          "x": 152,
+          "y": 200
+        },
+        {
+          "x": 152,
+          "y": 224
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "n1",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": [
+        {
+          "x": 152,
+          "y": 160
+        },
+        {
+          "x": 152,
+          "y": 184
+        },
+        {
+          "x": 264,
+          "y": 184
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "n2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lqn",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 248,
+        "y": 152
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 264,
+        "y": 232
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

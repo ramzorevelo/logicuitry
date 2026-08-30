@@ -1,0 +1,289 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "static-hazard",
+  "name": "Static hazard",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 80,
+        "y": 120
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 80,
+        "y": 48
+      },
+      "label": "B",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "c",
+      "kind": "toggle",
+      "pos": {
+        "x": 80,
+        "y": 208
+      },
+      "label": "C",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "inv",
+      "kind": "not",
+      "pos": {
+        "x": 152,
+        "y": 136
+      },
+      "rot": 90
+    },
+    {
+      "id": "ab",
+      "kind": "and",
+      "pos": {
+        "x": 224,
+        "y": 56
+      }
+    },
+    {
+      "id": "nc",
+      "kind": "and",
+      "pos": {
+        "x": 224,
+        "y": 200
+      }
+    },
+    {
+      "id": "y",
+      "kind": "or",
+      "pos": {
+        "x": 336,
+        "y": 128
+      }
+    },
+    {
+      "id": "l",
+      "kind": "led",
+      "pos": {
+        "x": 440,
+        "y": 120
+      },
+      "label": "Y"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 168,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 128
+        },
+        {
+          "x": 128,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "inv",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nc",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 168,
+          "y": 216
+        },
+        {
+          "x": 216,
+          "y": 216
+        },
+        {
+          "x": 216,
+          "y": 208
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "c",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nc",
+        "pin": "b"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 224
+        },
+        {
+          "x": 128,
+          "y": 232
+        },
+        {
+          "x": 216,
+          "y": 232
+        },
+        {
+          "x": 216,
+          "y": 224
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 328,
+          "y": 72
+        },
+        {
+          "x": 328,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nc",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 328,
+          "y": 152
+        },
+        {
+          "x": 328,
+          "y": 216
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 168,
+        "y": 128
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "datasheet",
+    "datasheet": "typ"
+  }
+}

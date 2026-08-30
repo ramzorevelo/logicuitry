@@ -1,0 +1,615 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "consensus",
+  "name": "Consensus",
+  "components": [
+    {
+      "id": "a1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "group": "gl",
+      "label": "A"
+    },
+    {
+      "id": "b1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 144
+      },
+      "group": "gl",
+      "label": "B"
+    },
+    {
+      "id": "c1",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 240
+      },
+      "group": "gl",
+      "label": "C"
+    },
+    {
+      "id": "inv1",
+      "kind": "not",
+      "pos": {
+        "x": 184,
+        "y": 48
+      },
+      "group": "gl"
+    },
+    {
+      "id": "ab1",
+      "kind": "and",
+      "pos": {
+        "x": 184,
+        "y": 136
+      },
+      "group": "gl"
+    },
+    {
+      "id": "nac1",
+      "kind": "and",
+      "pos": {
+        "x": 368,
+        "y": 232
+      },
+      "group": "gl"
+    },
+    {
+      "id": "bc1",
+      "kind": "and",
+      "pos": {
+        "x": 184,
+        "y": 232
+      },
+      "group": "gl"
+    },
+    {
+      "id": "sum3",
+      "kind": "or",
+      "pos": {
+        "x": 520,
+        "y": 224
+      },
+      "group": "gl",
+      "params": {
+        "inputs": 3
+      }
+    },
+    {
+      "id": "lhs",
+      "kind": "led",
+      "pos": {
+        "x": 648,
+        "y": 224
+      },
+      "group": "gl",
+      "label": "AB + A'C + BC"
+    },
+    {
+      "id": "a2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 320
+      },
+      "group": "gr",
+      "label": "A"
+    },
+    {
+      "id": "b2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 416
+      },
+      "group": "gr",
+      "label": "B"
+    },
+    {
+      "id": "c2",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 512
+      },
+      "group": "gr",
+      "label": "C"
+    },
+    {
+      "id": "inv2",
+      "kind": "not",
+      "pos": {
+        "x": 184,
+        "y": 320
+      },
+      "group": "gr"
+    },
+    {
+      "id": "ab2",
+      "kind": "and",
+      "pos": {
+        "x": 184,
+        "y": 408
+      },
+      "group": "gr"
+    },
+    {
+      "id": "nac2",
+      "kind": "and",
+      "pos": {
+        "x": 368,
+        "y": 504
+      },
+      "group": "gr"
+    },
+    {
+      "id": "sum2",
+      "kind": "or",
+      "pos": {
+        "x": 520,
+        "y": 496
+      },
+      "group": "gr"
+    },
+    {
+      "id": "rhs",
+      "kind": "led",
+      "pos": {
+        "x": 648,
+        "y": 488
+      },
+      "group": "gr",
+      "label": "AB + A'C"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "inv1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab1",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "pin",
+        "component": "b1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "points": []
+    },
+    {
+      "id": "w13",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab1",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w14",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "bc1",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 240
+        }
+      ]
+    },
+    {
+      "id": "w20",
+      "a": {
+        "kind": "pin",
+        "component": "inv1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nac1",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 360,
+          "y": 64
+        },
+        {
+          "x": 360,
+          "y": 240
+        }
+      ]
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "pin",
+        "component": "c1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "points": []
+    },
+    {
+      "id": "w17",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "bc1",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w18",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nac1",
+        "pin": "b"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 296
+        },
+        {
+          "x": 360,
+          "y": 296
+        },
+        {
+          "x": 360,
+          "y": 256
+        }
+      ]
+    },
+    {
+      "id": "w22",
+      "a": {
+        "kind": "pin",
+        "component": "ab1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum3",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 152
+        },
+        {
+          "x": 512,
+          "y": 232
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "nac1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum3",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w15",
+      "a": {
+        "kind": "pin",
+        "component": "bc1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum3",
+        "pin": "c"
+      },
+      "points": [
+        {
+          "x": 264,
+          "y": 248
+        },
+        {
+          "x": 264,
+          "y": 280
+        },
+        {
+          "x": 512,
+          "y": 280
+        },
+        {
+          "x": 512,
+          "y": 264
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "sum3",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lhs",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "a2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "inv2",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab2",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "b2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ab2",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w21",
+      "a": {
+        "kind": "pin",
+        "component": "inv2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nac2",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 360,
+          "y": 336
+        },
+        {
+          "x": 360,
+          "y": 512
+        }
+      ]
+    },
+    {
+      "id": "w19",
+      "a": {
+        "kind": "pin",
+        "component": "c2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nac2",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w23",
+      "a": {
+        "kind": "pin",
+        "component": "ab2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum2",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 424
+        },
+        {
+          "x": 512,
+          "y": 504
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "nac2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sum2",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "sum2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rhs",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 176,
+        "y": 64
+      }
+    },
+    {
+      "id": "j3",
+      "pos": {
+        "x": 176,
+        "y": 160
+      }
+    },
+    {
+      "id": "j4",
+      "pos": {
+        "x": 176,
+        "y": 256
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 176,
+        "y": 336
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "gl",
+      "name": "With the consensus term"
+    },
+    {
+      "id": "gr",
+      "name": "Without it"
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

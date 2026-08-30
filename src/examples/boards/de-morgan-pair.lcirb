@@ -1,0 +1,270 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 5,
+  "id": "de-morgan-pair",
+  "name": "De Morgan pair",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 192
+      },
+      "label": "B"
+    },
+    {
+      "id": "g_nand",
+      "kind": "nand",
+      "pos": {
+        "x": 264,
+        "y": 56
+      }
+    },
+    {
+      "id": "n_a",
+      "kind": "not",
+      "pos": {
+        "x": 160,
+        "y": 128
+      }
+    },
+    {
+      "id": "n_b",
+      "kind": "not",
+      "pos": {
+        "x": 160,
+        "y": 192
+      }
+    },
+    {
+      "id": "g_or",
+      "kind": "or",
+      "pos": {
+        "x": 264,
+        "y": 160
+      }
+    },
+    {
+      "id": "l1",
+      "kind": "led",
+      "pos": {
+        "x": 376,
+        "y": 48
+      },
+      "label": "NAND"
+    },
+    {
+      "id": "l2",
+      "kind": "led",
+      "pos": {
+        "x": 376,
+        "y": 152
+      },
+      "label": "OR of inverses",
+      "params": {
+        "width": 1,
+        "pinView": ""
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n_a",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 152,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": [
+        {
+          "x": 136,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n_b",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "n_a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 256,
+          "y": 144
+        },
+        {
+          "x": 256,
+          "y": 168
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n_b",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 256,
+          "y": 184
+        },
+        {
+          "x": 256,
+          "y": 208
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "g_nand",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "g_or",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "l2",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 152,
+        "y": 64
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 136,
+        "y": 208
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}
