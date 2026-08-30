@@ -612,7 +612,7 @@ h3 {
    Turn this one value to retune every bar, tab, drawer and floating button at
    once; nothing below hard-codes a height any more. */
 .app-shell--compact {
-  --touch-h: 38px;
+  --touch-h: 32px;
 }
 
 /* Padding is what made a 44px floor into a 60px control. The height is the

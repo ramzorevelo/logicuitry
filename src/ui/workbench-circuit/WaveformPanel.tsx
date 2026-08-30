@@ -323,8 +323,18 @@ export function WaveformPanel() {
     const cssW = Math.max(320, wrap.clientWidth - 2);
     // A user-dragged panel height stretches the rows to fill it (min stays the
     // default row height; the body scrolls if it still doesn't fit).
+    // The label column was a flat 120px whatever the names were, so a board of
+    // short names left a band of empty gutter between them and 0 ps. It is
+    // sized to the longest name instead. The labels are drawn in the mono face
+    // at max(canvasTextMin, 12), where every glyph is 0.6em wide, so counting
+    // characters measures them without a second context to measure in.
+    const labelPx = Math.max(theme.canvasTextMin, 12);
+    const longest = visibleTracks.reduce((n, t) => Math.max(n, t.label.length), 0);
     const base = {
       ...defaultWaveformMetrics,
+      labelW: Math.round(
+        Math.min(defaultWaveformMetrics.labelW, Math.max(56, longest * labelPx * 0.6 + 26)),
+      ),
       tickSpacing: defaultWaveformMetrics.tickSpacing / theme.wave.gridDensity,
     };
     let metrics = base;

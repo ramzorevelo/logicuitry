@@ -3055,6 +3055,15 @@ export function CircuitWorkbench() {
     s.setSelection(new Set());
   };
 
+  // Powering on abandons anything half-drawn. The tool reset in powerOn stops
+  // a NEW wire starting; this clears one that was already in flight, whose
+  // ghost otherwise hung over a board that could no longer accept it.
+  useEffect(() => {
+    // Deliberately keyed on `powered` alone: cancelPending is rebuilt every
+    // render, and depending on it would abandon a wire on any render at all.
+    if (powered) cancelPending();
+  }, [powered]);
+
   const onPointerDown = (e: React.PointerEvent) => {
     store.getState().clearTransientError();
     if (e.pointerType === 'touch') {
@@ -5129,7 +5138,12 @@ export function CircuitWorkbench() {
           {/* A pending suggestion has its own controls, and the selection that
               raised it is still set, so both bars showed at once with the
               suggestion sitting on top of the one that started it. */}
-          <SelectionActionBar visible={coarse && selection.size > 0 && connectPairs === 0} />
+          {/* Nothing that edits the board is offered while it is powered. Tapping
+              a switch to drive it selected it too, so Delete and the rest
+              appeared over a board that cannot be edited at all. */}
+          <SelectionActionBar
+            visible={coarse && selection.size > 0 && connectPairs === 0 && !powered}
+          />
           {staReport &&
             activeTab.kind === 'board' &&
             (() => {
