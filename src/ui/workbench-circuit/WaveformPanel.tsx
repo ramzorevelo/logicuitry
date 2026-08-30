@@ -97,11 +97,19 @@ export function WaveformPanel() {
   const [chevronHoverGroup, setChevronHoverGroup] = useState<string | null>(null);
   const layoutRef = useRef<WaveformLayout | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Dragging the plot sideways on a touchscreen. Time panning lives on the
-  // scrollbar below the plot, which is a 14px target no finger can take, so a
-  // finger drives that same scroll directly. A mouse keeps the measure
-  // gesture the drag already had.
-  const wavePanRef = useRef<{ x: number; left: number } | null>(null);
+  // Touch gestures on the plot. One finger is the time cursor, which is what
+  // a tap on a waveform should mean; two fingers pan and pinch, because time
+  // panning otherwise lives on a 14px scrollbar no finger can take, and the
+  // wheel that zooms does not exist here either.
+  const touchRef = useRef(new Map<number, { x: number; y: number }>());
+  const gestureRef = useRef<{ dist: number; midX: number } | null>(null);
+
+  const twoFinger = () => [...touchRef.current.values()];
+  const gesture = () => {
+    const [a, b] = twoFinger();
+    if (!a || !b) return null;
+    return { dist: Math.max(1, Math.abs(a.x - b.x)), midX: (a.x + b.x) / 2 };
+  };
   // The last scrollLeft this component wrote. A one-shot boolean cannot do
   // this job: the browser coalesces and re-fires scroll events, so the flag
   // gets consumed by the wrong one and a programmatic write is then read back
@@ -159,7 +167,14 @@ export function WaveformPanel() {
     const recs = trace?.records ?? [];
     const first = recs.length ? recs[0]!.time : 0;
     const last = recs.length ? recs[recs.length - 1]!.time : 0;
-    return { t0: first, t1: Math.max(st.simNow(), last, first + 1) };
+    const end = Math.max(st.simNow(), last, first + 1);
+    // A level that begins exactly at the right edge has zero width, so the
+    // newest state was invisible and the one before it read as current: flip a
+    // switch on a settled board and the trace still showed it low. That is the
+    // normal case, not an edge one, because the last record IS the settle the
+    // clock stopped at. Give it a slice of the window to be seen in.
+    const tail = end === last ? Math.max(1, Math.round((end - first) * 0.02)) : 0;
+    return { t0: first, t1: end + tail };
     // viewLen and powered are the same inputs `view` uses.
   }, [viewLen, powered, store]);
 
@@ -869,27 +884,49 @@ export function WaveformPanel() {
                 className="wave-panel__canvas"
                 tabIndex={0}
                 onPointerDown={(e) => {
-                  if (e.pointerType === 'touch' && scrollRef.current) {
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                    wavePanRef.current = { x: e.clientX, left: scrollRef.current.scrollLeft };
-                    return;
+                  if (e.pointerType === 'touch') {
+                    touchRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    if (touchRef.current.size === 2) {
+                      // The second finger turns a cursor drag into a pan.
+                      dragRef.current = null;
+                      gestureRef.current = gesture();
+                      return;
+                    }
                   }
                   onPointerDown(e);
                 }}
                 onPointerMove={(e) => {
-                  const pan = wavePanRef.current;
-                  if (pan && scrollRef.current) {
-                    scrollRef.current.scrollLeft = pan.left - (e.clientX - pan.x);
-                    return;
+                  if (e.pointerType === 'touch' && touchRef.current.has(e.pointerId)) {
+                    touchRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    if (touchRef.current.size >= 2) {
+                      const now = gesture();
+                      const was = gestureRef.current;
+                      const layout = layoutRef.current;
+                      const canvas = canvasRef.current;
+                      if (now && was && layout && canvas) {
+                        const rect = canvas.getBoundingClientRect();
+                        if (Math.abs(now.dist - was.dist) > 1) {
+                          zoomAt(layout.xToTime(now.midX - rect.left), was.dist / now.dist);
+                        }
+                        const el = scrollRef.current;
+                        if (el) el.scrollLeft -= now.midX - was.midX;
+                        gestureRef.current = now;
+                      }
+                      return;
+                    }
                   }
                   onPointerMove(e);
                 }}
-                onPointerUp={() => {
-                  if (wavePanRef.current) {
-                    wavePanRef.current = null;
-                    return;
+                onPointerUp={(e) => {
+                  if (e.pointerType === 'touch') {
+                    touchRef.current.delete(e.pointerId);
+                    if (touchRef.current.size < 2) gestureRef.current = null;
                   }
                   onPointerUp();
+                }}
+                onPointerCancel={(e) => {
+                  touchRef.current.delete(e.pointerId);
+                  gestureRef.current = null;
                 }}
                 onPointerLeave={() => store.getState().setHoverTrack(null)}
                 onWheel={onWheel}

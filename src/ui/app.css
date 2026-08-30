@@ -603,12 +603,37 @@ h3 {
   order: 2;
 }
 
-/* Touch targets: 44px is the smallest reliably tappable chrome. */
+/* One number for every tappable control on a phone. 44px is the accessibility
+   figure and was used literally, with each control's own padding stacking on
+   top: the result was chrome three times its own text height, and on a short
+   screen the board got what was left. 38px with the padding trimmed to match
+   keeps the target honest and gives the drawing its room back.
+
+   Turn this one value to retune every bar, tab, drawer and floating button at
+   once; nothing below hard-codes a height any more. */
+.app-shell--compact {
+  --touch-h: 38px;
+}
+
+/* Padding is what made a 44px floor into a 60px control. The height is the
+   height now; the label centres inside it. */
+.app-shell--compact .tool-btn,
+.app-shell--compact .menubar__title,
+.app-shell--compact .workbench-tab,
+.app-shell--compact .mode-btn,
+.app-shell--compact .palette-item {
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Touch targets. */
 .app-shell--compact .menubar__title,
 .app-shell--compact .menubar__item,
 .app-shell--compact .workbench-tab,
 .app-shell--compact .mode-btn {
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 /* The theme picker is a whole bar's worth of width for something changed once
@@ -696,7 +721,7 @@ h3 {
   flex-direction: row;
   justify-content: center;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--touch-h);
   border-right: none;
 }
 
@@ -715,7 +740,7 @@ h3 {
 .app-shell--compact .ref-drawer--open .ref-drawer__tab {
   flex-direction: row;
   width: auto;
-  min-height: 44px;
+  min-height: var(--touch-h);
   padding: 0 calc(var(--space-unit) * 2);
   border-right: none;
   border-bottom: var(--stroke-min) solid var(--line);
@@ -772,7 +797,7 @@ h3 {
 }
 
 .app-shell--landscape .workbench-tab {
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 /* A right gutter, not a bottom one: nothing must end up underneath the rail. */

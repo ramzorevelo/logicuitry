@@ -918,7 +918,7 @@
 }
 
 .app-shell--compact .tool-btn {
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 /* Examples list. Also the first thing reached on a phone, so the rows are
@@ -941,7 +941,7 @@
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--touch-h);
   padding: var(--space-unit) calc(var(--space-unit) * 2);
   text-align: left;
   font: inherit;
@@ -1010,7 +1010,7 @@
 
 .selection-actions .tool-btn {
   flex: 0 0 auto;
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 /* Parts palette on a phone. The desktop rail has no room here, so it becomes
@@ -1089,12 +1089,12 @@
 
 .app-shell--compact .palette-item {
   flex: 0 0 auto;
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 .app-shell--compact .palette-tab {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: var(--touch-h);
   padding: 0 calc(var(--space-unit) * 2);
   font: inherit;
   font-size: var(--text-secondary);
@@ -1146,8 +1146,8 @@
    for padding to grow past. Four buttons at 52 crowd a phone's only band of
    canvas for nothing. */
 .circuit-quick .tool-btn {
-  width: 44px;
-  height: 44px;
+  width: var(--touch-h);
+  height: var(--touch-h);
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -1173,9 +1173,12 @@
   max-width: none;
   /* nowrap, or the four buttons wrap into a second column the moment the
      board is shorter than they are, which is most of a rotated phone: two
-     columns of icons cover the corner this panel exists to stay out of. */
+     columns of icons cover the corner this panel exists to stay out of.
+     The column still has to end somewhere, so it scrolls rather than running
+     down over whatever sits below it. */
   flex-wrap: nowrap;
-  max-height: none;
+  max-height: calc(100% - var(--space-unit) * 2);
+  overflow-y: auto;
 }
 
 /* Power, Run, Undo and Redo live in the floating quick panel on a phone.
@@ -1204,7 +1207,7 @@
    children are conditional (board tabs, dialogs), and auto-placement of an
    unassigned child into an explicit template is how that breaks silently. */
 .app-shell--landscape .circuit-editor {
-  --rail-w: 72px;
+  --rail-w: calc(var(--touch-h) + var(--space-unit) * 4);
   padding-left: var(--rail-w);
 }
 
@@ -1269,7 +1272,7 @@
 }
 
 .connect-cycle .tool-btn {
-  min-height: 44px;
+  min-height: var(--touch-h);
   justify-content: center;
 }
 
@@ -1298,4 +1301,24 @@
 /* Landscape has even less height to give away. */
 .app-shell--landscape .wave-panel {
   max-height: 45dvh;
+}
+
+/* The drawer and the toolbar were padded as though they had a desktop's room.
+   Their own gaps and padding come down with the control height, or the bars
+   stay tall however short the buttons inside them get. */
+.app-shell--compact .circuit-toolbar,
+.app-shell--compact .palette-group,
+.app-shell--compact .wave-panel__header {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  gap: var(--space-unit);
+}
+
+/* The waveform's own controls are the densest row in the app and were the
+   worst offender: three times their text height each. */
+.app-shell--compact .wave-panel__header .tool-btn,
+.app-shell--compact .wave-panel__header .wave-panel__toggle {
+  min-height: var(--touch-h);
+  padding-top: 0;
+  padding-bottom: 0;
 }

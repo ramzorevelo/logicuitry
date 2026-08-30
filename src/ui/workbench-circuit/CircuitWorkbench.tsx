@@ -3235,6 +3235,8 @@ export function CircuitWorkbench() {
     const grid = theme.gridSchematic;
 
     if (tool.kind === 'place') {
+      // Placing into a running sim would edit the board out from under it.
+      if (powered) return;
       // Insert-on-wire: dropping a 1-in/1-out primitive onto a wire splices it
       // in (Alt suppresses). Multi-pin/chip placements never auto-splice.
       // `rot: 'auto'` picks the nearest cardinal direction along the wire's

@@ -539,7 +539,7 @@
 .app-shell--compact .field__input,
 .app-shell--compact .reveal-btn,
 .app-shell--compact .drawer-toggle {
-  min-height: 44px;
+  min-height: var(--touch-h);
 }
 
 /* Touch equivalents of the Space / Enter / R narration keys. */
@@ -551,5 +551,5 @@
 
 .steps-controls .reveal-btn {
   flex: 1;
-  min-height: 44px;
+  min-height: var(--touch-h);
 }

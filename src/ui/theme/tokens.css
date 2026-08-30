@@ -4,6 +4,11 @@
    the classroom TVs; adjust here only, never at call sites. */
 
 :root {
+  /* Height of a tappable control. The desktop never reads it (its chrome is
+     sized by its own padding); the compact shell overrides it, and every bar,
+     tab, drawer and floating button follows from that one value. */
+  --touch-h: 44px;
+
   /* color */
   --paper: #edeff6;
   --surface: #ffffff;
