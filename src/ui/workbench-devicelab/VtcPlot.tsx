@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { drawPlot, type PlotSpec } from '../../render/plotXY';
 import { readTheme } from '../../render/theme';
 import { usePlotSize } from './usePlotSize';
-import { useDomainZoom } from './useDomainZoom';
+import { useCanvasZoom } from './useCanvasZoom';
 import type { SweepResult } from '../../core/spice/types';
 import type { VtcMetrics } from '../../core/spice/vtcAnalysis';
 
@@ -18,8 +18,8 @@ const DESIGN_H = 380;
 
 export function VtcPlot({ sweep, ghost, metrics, vdd }: VtcPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { ref: boxRef, size } = usePlotSize(DESIGN_W, DESIGN_H);
-  const { domain, zoomed, fit, handlers } = useDomainZoom({ x0: 0, x1: vdd, y0: 0, y1: vdd });
+  const { ref: boxRef, box, scale } = usePlotSize(DESIGN_W, DESIGN_H);
+  const { view, zoomed, fit, handlers } = useCanvasZoom(box.w, box.h);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,19 +28,26 @@ export function VtcPlot({ sweep, ghost, metrics, vdd }: VtcPlotProps) {
     const draw = () => {
       const theme = readTheme();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = size.w * dpr;
-      canvas.height = size.h * dpr;
-      canvas.style.width = `${size.w}px`;
-      canvas.style.height = `${size.h}px`;
+      canvas.width = box.w * dpr;
+      canvas.height = box.h * dpr;
+      canvas.style.width = `${box.w}px`;
+      canvas.style.height = `${box.h}px`;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Two scales in one transform. `scale` fits the design-size figure to
+      // the box, and is why the plot is laid out at its design size below: a
+      // plot composed at 340px instead would put its own labels on top of each
+      // other, as the noise diagram did. `zoom` magnifies on top of that.
+      // Both go through the transform rather than onto the bitmap, so the
+      // figure is redrawn at the final size and stays sharp.
+      const k = scale * view.zoom;
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, -view.panX * dpr, -view.panY * dpr);
 
       const { vil, vih, vol, voh, vm } = metrics;
       const spec: PlotSpec = {
-        size,
-        x: { min: domain.x0, max: domain.x1, label: 'Vin (V)' },
-        y: { min: domain.y0, max: domain.y1, label: 'Vout (V)' },
+        size: { w: DESIGN_W, h: DESIGN_H },
+        x: { min: 0, max: vdd, label: 'Vin (V)' },
+        y: { min: 0, max: vdd, label: 'Vout (V)' },
         bands: [{ x0: vil, x1: vih, color: theme.colors.warn }], // forbidden zone
         rects: [
           { x0: 0, x1: vil, y0: vol, y1: 0, color: theme.colors.ok }, // NML
@@ -68,7 +75,7 @@ export function VtcPlot({ sweep, ghost, metrics, vdd }: VtcPlotProps) {
       attributeFilter: ['data-theme', 'class'],
     });
     return () => observer.disconnect();
-  }, [sweep, ghost, metrics, vdd, size, domain]);
+  }, [sweep, ghost, metrics, vdd, box, scale, view]);
 
   // touch-action none so a drag zooms the plot instead of scrolling the page
   // out from under it: the surrounding controls stay where they are.

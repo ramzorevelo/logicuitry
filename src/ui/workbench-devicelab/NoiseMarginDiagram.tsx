@@ -16,7 +16,7 @@ const DESIGN_H = 340;
 // receiver input thresholds on the right, the two margins shaded between them.
 export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { ref: boxRef, size } = usePlotSize(DESIGN_W, DESIGN_H);
+  const { ref: boxRef, box, scale } = usePlotSize(DESIGN_W, DESIGN_H);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -25,15 +25,17 @@ export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps)
     const draw = () => {
       const theme = readTheme();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = size.w * dpr;
-      canvas.height = size.h * dpr;
-      canvas.style.width = `${size.w}px`;
-      canvas.style.height = `${size.h}px`;
+      canvas.width = box.w * dpr;
+      canvas.height = box.h * dpr;
+      canvas.style.width = `${box.w}px`;
+      canvas.style.height = `${box.h}px`;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, size.w, size.h);
-      render(ctx, theme, driver, receiver, maxV, size);
+      // Draw at the design size and scale the whole figure, so the spacing the
+      // diagram was composed with survives on a narrow screen.
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
+      render(ctx, theme, driver, receiver, maxV, { w: DESIGN_W, h: DESIGN_H });
     };
 
     draw();
@@ -43,7 +45,7 @@ export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps)
       attributeFilter: ['data-theme', 'class'],
     });
     return () => observer.disconnect();
-  }, [driver, receiver, maxV, size]);
+  }, [driver, receiver, maxV, box, scale]);
 
   return (
     <div className="plot-box" ref={boxRef}>
