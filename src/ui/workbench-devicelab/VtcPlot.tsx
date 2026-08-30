@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { drawPlot, type PlotSpec } from '../../render/plotXY';
 import { readTheme } from '../../render/theme';
+import { usePlotSize } from './usePlotSize';
+import { useDomainZoom } from './useDomainZoom';
 import type { SweepResult } from '../../core/spice/types';
 import type { VtcMetrics } from '../../core/spice/vtcAnalysis';
 
@@ -9,11 +11,15 @@ interface VtcPlotProps {
   ghost: SweepResult | null;
   metrics: VtcMetrics;
   vdd: number;
-  size?: { w: number; h: number };
 }
 
-export function VtcPlot({ sweep, ghost, metrics, vdd, size = { w: 560, h: 380 } }: VtcPlotProps) {
+const DESIGN_W = 560;
+const DESIGN_H = 380;
+
+export function VtcPlot({ sweep, ghost, metrics, vdd }: VtcPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { ref: boxRef, size } = usePlotSize(DESIGN_W, DESIGN_H);
+  const { domain, zoomed, fit, handlers } = useDomainZoom({ x0: 0, x1: vdd, y0: 0, y1: vdd });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,8 +39,8 @@ export function VtcPlot({ sweep, ghost, metrics, vdd, size = { w: 560, h: 380 } 
       const { vil, vih, vol, voh, vm } = metrics;
       const spec: PlotSpec = {
         size,
-        x: { min: 0, max: vdd, label: 'Vin (V)' },
-        y: { min: 0, max: vdd, label: 'Vout (V)' },
+        x: { min: domain.x0, max: domain.x1, label: 'Vin (V)' },
+        y: { min: domain.y0, max: domain.y1, label: 'Vout (V)' },
         bands: [{ x0: vil, x1: vih, color: theme.colors.warn }], // forbidden zone
         rects: [
           { x0: 0, x1: vil, y0: vol, y1: 0, color: theme.colors.ok }, // NML
@@ -62,7 +68,18 @@ export function VtcPlot({ sweep, ghost, metrics, vdd, size = { w: 560, h: 380 } 
       attributeFilter: ['data-theme', 'class'],
     });
     return () => observer.disconnect();
-  }, [sweep, ghost, metrics, vdd, size]);
+  }, [sweep, ghost, metrics, vdd, size, domain]);
 
-  return <canvas ref={canvasRef} className="vtc-plot" />;
+  // touch-action none so a drag zooms the plot instead of scrolling the page
+  // out from under it: the surrounding controls stay where they are.
+  return (
+    <div className="plot-box" ref={boxRef}>
+      <canvas ref={canvasRef} className="vtc-plot" {...handlers} />
+      {zoomed && (
+        <button type="button" className="plot-box__fit tool-btn" onClick={fit}>
+          Fit
+        </button>
+      )}
+    </div>
+  );
 }

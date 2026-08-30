@@ -1,23 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { readTheme, type Theme } from '../../render/theme';
+import { usePlotSize } from './usePlotSize';
 import type { LevelSet } from '../../core/spice/noiseMargins';
 
 interface DiagramProps {
   driver: LevelSet;
   receiver: LevelSet;
   maxV?: number;
-  size?: { w: number; h: number };
 }
+
+const DESIGN_W = 460;
+const DESIGN_H = 340;
 
 // The classic noise-margin level diagram: driver output guarantees on the left,
 // receiver input thresholds on the right, the two margins shaded between them.
-export function NoiseMarginDiagram({
-  driver,
-  receiver,
-  maxV = 5,
-  size = { w: 460, h: 340 },
-}: DiagramProps) {
+export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { ref: boxRef, size } = usePlotSize(DESIGN_W, DESIGN_H);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,7 +45,11 @@ export function NoiseMarginDiagram({
     return () => observer.disconnect();
   }, [driver, receiver, maxV, size]);
 
-  return <canvas ref={canvasRef} className="nm-diagram" />;
+  return (
+    <div className="plot-box" ref={boxRef}>
+      <canvas ref={canvasRef} className="nm-diagram" />
+    </div>
+  );
 }
 
 function render(

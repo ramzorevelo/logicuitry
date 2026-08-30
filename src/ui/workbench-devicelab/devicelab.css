@@ -215,3 +215,53 @@
 .margin-work__result {
   font-weight: 600;
 }
+
+/* A plot sizes itself to this box; the box is what usePlotSize measures. The
+   Fit button only appears once the view has been zoomed away from the whole
+   domain, so it is never chrome for a plot that is already showing everything. */
+.plot-box {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+/* A drag on the canvas zooms and pans the plot rather than scrolling the page,
+   which is what keeps the controls around it still. */
+.plot-box canvas {
+  touch-action: none;
+}
+
+.plot-box__fit {
+  position: absolute;
+  top: var(--space-unit);
+  right: var(--space-unit);
+}
+
+/* Compact: the Device Lab had no rules of its own here at all, so both plots
+   drew at their desktop width and had to be panned to be read. */
+.app-shell--compact .devicelab__main {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* Tool, driver and receiver as one row. The sliders keep a row each: a range
+   input squeezed into a third of a phone is not adjustable. */
+.app-shell--compact .devicelab .param-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-unit);
+}
+
+.app-shell--compact .devicelab .param-panel > .field {
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.app-shell--compact .devicelab .param-panel > .slider-field {
+  flex: 1 1 100%;
+}

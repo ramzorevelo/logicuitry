@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EecircuitSpiceService } from './spice/EecircuitSpiceService';
 import { inverterNetlist } from '../../core/spice/netlists/inverter';
 import {
@@ -13,6 +13,7 @@ import type { InverterParams, Region, SweepResult } from '../../core/spice/types
 import { useReferenceDrawer } from '../components/ReferenceDrawer';
 import { VtcPlot } from './VtcPlot';
 import { NoiseMarginDiagram } from './NoiseMarginDiagram';
+import { useCompact } from '../compact';
 import './devicelab.css';
 
 type SubTool = 'cmos' | 'ttl';
@@ -78,7 +79,7 @@ function regionRuns(
   return runs;
 }
 
-function CmosLab() {
+function CmosLab({ toolField }: { toolField: ReactNode }) {
   const [vdd, setVdd] = useState(5);
   const [wpwn, setWpwn] = useState(2);
   const [temperature, setTemperature] = useState(25);
@@ -120,6 +121,7 @@ function CmosLab() {
   return (
     <div className="devicelab__cmos">
       <div className="param-panel">
+        {toolField}
         <Slider label="VDD" min={2} max={6} step={0.1} value={vdd} onChange={setVdd} unit="V" />
         <Slider
           label="Wp/Wn"
@@ -185,7 +187,7 @@ function CmosLab() {
   );
 }
 
-function TtlLab() {
+function TtlLab({ toolField }: { toolField: ReactNode }) {
   const families = useMemo(() => familyLevels(), []);
   const keys = Object.keys(families);
   const [driver, setDriver] = useState('74LS');
@@ -197,6 +199,7 @@ function TtlLab() {
   return (
     <div className="devicelab__ttl">
       <div className="param-panel">
+        {toolField}
         <label className="field">
           driver
           <select className="select" value={driver} onChange={(e) => setDriver(e.target.value)}>
@@ -278,21 +281,53 @@ function MarginWork({
   );
 }
 
+const TOOLS: { id: SubTool; label: string }[] = [
+  { id: 'cmos', label: 'CMOS VTC' },
+  { id: 'ttl', label: 'TTL noise margins' },
+];
+
+/** The sub-tool picker. On a phone it joins the lab's own controls as one more
+ *  field, so TTL reads as a single row of tool, driver and receiver rather
+ *  than a bar above two more rows; a segmented control could not fit both
+ *  labels there anyway. */
+function ToolField({ tool, setTool }: { tool: SubTool; setTool: (t: SubTool) => void }) {
+  return (
+    <label className="field">
+      tool
+      <select className="select" value={tool} onChange={(e) => setTool(e.target.value as SubTool)}>
+        {TOOLS.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function DeviceLabWorkbench() {
   const [tool, setTool] = useState<SubTool>('cmos');
+  const compact = useCompact();
+  const toolField = compact ? <ToolField tool={tool} setTool={setTool} /> : null;
   return (
     <div className="devicelab">
-      <div className="devicelab__bar">
-        <div className="segmented">
-          <button type="button" aria-pressed={tool === 'cmos'} onClick={() => setTool('cmos')}>
-            CMOS VTC
-          </button>
-          <button type="button" aria-pressed={tool === 'ttl'} onClick={() => setTool('ttl')}>
-            TTL noise margins
-          </button>
+      {compact ? null : (
+        <div className="devicelab__bar">
+          <div className="segmented">
+            {TOOLS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={tool === t.id}
+                onClick={() => setTool(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      {tool === 'cmos' ? <CmosLab /> : <TtlLab />}
+      )}
+      {tool === 'cmos' ? <CmosLab toolField={toolField} /> : <TtlLab toolField={toolField} />}
     </div>
   );
 }
