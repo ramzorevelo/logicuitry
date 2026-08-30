@@ -15,6 +15,12 @@
   --workbench-max: 1100px;
 }
 
+/* The grouping exists for compact only; on the desktop the three controls
+   stay direct children of the bar's flex row. */
+.numbers-workbench__modes {
+  display: contents;
+}
+
 .numbers-workbench__bar {
   display: flex;
   align-items: center;
@@ -483,6 +489,25 @@
 
 .app-shell--compact .numbers-workbench__bar .field {
   justify-content: space-between;
+}
+
+/* View, width and sign as one row of three rather than three stacked rows.
+   The bar is a column here, and five full-width rows of controls took half a
+   phone screen before the workbench itself got any. */
+.app-shell--compact .numbers-workbench__modes {
+  display: flex;
+  gap: var(--space-unit);
+}
+
+/* Equal thirds: min-width 0 because a select's intrinsic width otherwise
+   refuses to shrink and pushes the row wider than the screen. */
+.app-shell--compact .numbers-workbench__modes > .field {
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 2px;
 }
 
 /* A segmented control has to divide its row evenly. Left to shrink-wrap it

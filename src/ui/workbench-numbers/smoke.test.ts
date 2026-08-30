@@ -15,7 +15,6 @@ describe('Numbers workbench render smoke', () => {
     const html = renderToString(createElement(NumbersWorkbench));
     expect(html).toContain('Convert');
     expect(html).toContain('Compute');
-    expect(html).toContain('Hide answers');
   });
 
   it('renders the Convert tab step panel', () => {

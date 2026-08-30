@@ -2,7 +2,13 @@ import type { ConvertDir, Interpretation, Operator } from '../../core/numkit/typ
 import './numbers.css';
 import { ConvertTab, FAMILIES } from './ConvertTab';
 import { ComputeTab, OPS } from './ComputeTab';
-import { useNumbersStore, WIDTHS, type BitWidth, type NumbersTab } from './numbersStore';
+import {
+  offersHideAnswers,
+  useNumbersStore,
+  WIDTHS,
+  type BitWidth,
+  type NumbersTab,
+} from './numbersStore';
 import { useCompact } from '../compact';
 
 const TABS: { id: NumbersTab; label: string }[] = [
@@ -11,7 +17,8 @@ const TABS: { id: NumbersTab; label: string }[] = [
 ];
 
 export function NumbersWorkbench() {
-  const { tab, width, interp, convertDir, operator, hideAnswers } = useNumbersStore();
+  const { tab, width, interp, convertDir, operator, hideAnswers, stepIndex, answersShown } =
+    useNumbersStore();
   const setTab = useNumbersStore((s) => s.setTab);
   const setWidth = useNumbersStore((s) => s.setWidth);
   const setInterp = useNumbersStore((s) => s.setInterp);
@@ -23,40 +30,84 @@ export function NumbersWorkbench() {
   return (
     <div className="numbers-workbench">
       <div className="numbers-workbench__bar">
-        <div className="segmented">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              aria-pressed={tab === t.id}
-              onClick={() => setTab(t.id)}
+        {/* Three controls that belong together. `display: contents` on the
+            desktop leaves the bar's own flex layout untouched; compact lays
+            them out as one row of three, instead of three full-width rows of a
+            column that ate half the screen. A segmented control needs room to
+            show every option at once, which a phone does not have, so there it
+            becomes a select like the other two. */}
+        <div className="numbers-workbench__modes">
+          {compact ? (
+            <label className="field">
+              view
+              <select
+                className="select"
+                value={tab}
+                onChange={(e) => setTab(e.target.value as NumbersTab)}
+              >
+                {TABS.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="segmented">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <label className="field">
+            width
+            <select
+              className="select"
+              value={width}
+              onChange={(e) => setWidth(Number(e.target.value) as BitWidth)}
             >
-              {t.label}
-            </button>
-          ))}
-        </div>
+              {WIDTHS.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="field">
-          width
-          <select
-            className="select"
-            value={width}
-            onChange={(e) => setWidth(Number(e.target.value) as BitWidth)}
-          >
-            {WIDTHS.map((w) => (
-              <option key={w} value={w}>
-                {w}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="segmented">
-          {(['unsigned', 'twos'] as Interpretation[]).map((i) => (
-            <button key={i} type="button" aria-pressed={interp === i} onClick={() => setInterp(i)}>
-              {i === 'twos' ? "two's" : 'unsigned'}
-            </button>
-          ))}
+          {compact ? (
+            <label className="field">
+              sign
+              <select
+                className="select"
+                value={interp}
+                onChange={(e) => setInterp(e.target.value as Interpretation)}
+              >
+                <option value="unsigned">unsigned</option>
+                <option value="twos">two&apos;s</option>
+              </select>
+            </label>
+          ) : (
+            <div className="segmented">
+              {(['unsigned', 'twos'] as Interpretation[]).map((i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-pressed={interp === i}
+                  onClick={() => setInterp(i)}
+                >
+                  {i === 'twos' ? "two's" : 'unsigned'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === 'convert' ? (
@@ -79,9 +130,11 @@ export function NumbersWorkbench() {
                 ))}
               </select>
             </label>
-            <button type="button" aria-pressed={hideAnswers} onClick={toggleHideAnswers}>
-              Hide answers
-            </button>
+            {offersHideAnswers({ hideAnswers, stepIndex, answersShown }) ? (
+              <button type="button" aria-pressed={hideAnswers} onClick={toggleHideAnswers}>
+                Hide answers
+              </button>
+            ) : null}
             {/* Keys, so only where there is a keyboard: on a phone this named
                 three shortcuts that do not exist, and the Convert tab shows
                 Step / Reveal / Reset buttons there instead. */}

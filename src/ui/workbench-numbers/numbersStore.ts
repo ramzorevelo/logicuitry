@@ -108,3 +108,16 @@ export const useNumbersStore = create<NumbersState>((set) => ({
   toggleHideAnswers: () => set((s) => ({ hideAnswers: !s.hideAnswers, ...RESET_STEPS })),
   answersShown: false,
 }));
+
+/** Whether the Hide answers toggle earns its place in the bar. With masking on
+ *  and nothing revealed there is nothing for it to hide, and it was pure
+ *  chrome in a bar that a phone could not spare the height for. Revealing
+ *  brings it back, and it is always there while nothing is being hidden, since
+ *  that is the state it exists to leave. */
+export function offersHideAnswers(s: {
+  hideAnswers: boolean;
+  stepIndex: number;
+  answersShown: boolean;
+}): boolean {
+  return !s.hideAnswers || s.stepIndex >= 0 || s.answersShown;
+}
