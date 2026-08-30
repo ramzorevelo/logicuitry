@@ -1,8 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#edeff6"/>
-  <g transform="translate(6.4 6.4) scale(2.1333333333333333)" fill="none" stroke="#111528"
-     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M7 4 H12 A8 8 0 0 1 12 20 H7 Z" fill="#26307d" fill-opacity="0.18"/>
-    <path d="M2 8 H7 M2 16 H7 M20 12 H22"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e493ec"/>
+      <stop offset="1" stop-color="#c561cd"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" fill="url(#tile)"/>
+  <g transform="translate(7.68 7.68) scale(2.026666666666667)">
+    <g fill="#111528">
+      <path fill-rule="evenodd" d="M5 4.5 H10.2 A1.8 1.8 0 0 0 13.8 4.5 H19 V19.5 H5 Z
+         M8.4 7.6 V16.4 H15.6 V13.7 H11 V7.6 Z"/>
+      <rect x="2.2" y="6.9" width="2.9" height="2.2" rx="1.1"/>
+      <rect x="2.2" y="10.9" width="2.9" height="2.2" rx="1.1"/>
+      <rect x="2.2" y="14.9" width="2.9" height="2.2" rx="1.1"/>
+      <rect x="18.9" y="6.9" width="2.9" height="2.2" rx="1.1"/>
+      <rect x="18.9" y="10.9" width="2.9" height="2.2" rx="1.1"/>
+      <rect x="18.9" y="14.9" width="2.9" height="2.2" rx="1.1"/>
+    </g>
   </g>
 </svg>

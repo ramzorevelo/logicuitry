@@ -52,7 +52,13 @@ export default defineConfig({
           VitePWA({
             // Never reload mid-lecture: the app asks, the teacher decides.
             registerType: 'prompt',
-            includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
+            includeAssets: [
+              'favicon.svg',
+              'icon-192.png',
+              'icon-512.png',
+              'icon-maskable-192.png',
+              'icon-maskable-512.png',
+            ],
             workbox: {
               // Everything ships in the install, ngspice included. Precaching runs in
               // the service worker's install event, NOT on the page's critical path,
@@ -93,6 +99,14 @@ export default defineConfig({
               icons: [
                 { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
                 { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+                // Both maskable sizes: a launcher that picks the 192 must not
+                // fall back to an uncropped icon and lose the pins to the crop.
+                {
+                  src: 'icon-maskable-192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                  purpose: 'maskable',
+                },
                 {
                   src: 'icon-maskable-512.png',
                   sizes: '512x512',
@@ -123,7 +137,18 @@ export default defineConfig({
   // sourcemap is stated rather than inherited: shipping no readable original
   // source is a decision, and check-offline.mjs fails the build if a .map
   // reaches dist/.
-  build: { assetsInlineLimit: 0, sourcemap: false },
+  // chunkSizeWarningLimit is stated rather than inherited, like sourcemap above.
+  // Vite's 500kB default assumes a site where every visitor pays the download on
+  // every cold visit. This one is precached and installed once a term, so the
+  // app bundle (~805kB, ~250kB gzipped: React, ajv, the renderer, the kernel and
+  // all three workbenches) costs a student nothing after the first load, and the
+  // default fires on every build for a size that is not a problem.
+  //
+  // 1000 still guards what can actually regress. Worker chunks are built
+  // separately and never counted, so the 20MB inlined-wasm ngspice worker is
+  // exempt by construction rather than by raising the limit past it: a warning
+  // here means the APP bundle grew by ~200kB, which is worth looking at.
+  build: { assetsInlineLimit: 0, sourcemap: false, chunkSizeWarningLimit: 1000 },
   // eecircuit-engine ships a ~20MB wasm-inlined bundle; let Vite serve it as-is
   // rather than esbuild pre-bundling it (the worker code-splits it off the main chunk).
   //
