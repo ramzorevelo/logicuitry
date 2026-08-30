@@ -70,8 +70,11 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
   const canSend = reportingConfigured() && navigator.onLine && description.trim().length > 0;
 
   const send = () => {
-    // no-cors returns an opaque response, so delivery cannot be confirmed --
-    // the wording below never claims it was.
+    // Google Forms sends no Access-Control-Allow-Origin, so this has to be
+    // no-cors and the response is opaque: a resolved promise means Google
+    // received the request and answered, not that it accepted it. With the
+    // form published, open to anyone and carrying no required question, the
+    // difference is not one a reporter can act on, so the dialog says sent.
     void fetch(FORM_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -109,6 +112,25 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
       .catch(() => setStatus('failed'));
   };
 
+  if (status === 'sent') {
+    return (
+      <div
+        className="package-overlay"
+        onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div className="package-dialog bug-report-dialog">
+          <h3>Report sent</h3>
+          <p className="bug-report__sent">Thank you. Nothing else to do.</p>
+          <div className="label-conflict-buttons">
+            <button type="button" className="tool-btn" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="package-overlay"
@@ -123,7 +145,7 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
         </label>
         <textarea
           className="bug-report__description"
-          rows={4}
+          rows={8}
           autoFocus
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -161,53 +183,46 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
             </span>
           </span>
         </label>
-        {screenshotFormConfigured() && (
-          <p className="settings-row__hint">
-            Adding a screenshot needs a Google sign-in, so it opens a second form in your browser
-            with all of this already filled in.
-          </p>
-        )}
         <p className="settings-row__hint">This is everything that would be sent:</p>
         <pre className="bug-report__preview">{preview}</pre>
         <div className="label-conflict-buttons">
           <button type="button" className="tool-btn" disabled={!canSend} onClick={send}>
             Send report
           </button>
-          <button type="button" className="tool-btn" onClick={copy}>
-            Copy report
-          </button>
+          {/* A screenshot cannot be posted from here, so this hands the whole
+              report to the form that can take one. */}
           {screenshotFormConfigured() && (
-            <>
-              <button type="button" className="tool-btn" onClick={openScreenshotForm}>
-                Attach a screenshot
-              </button>
-              <button type="button" className="tool-btn" onClick={copyScreenshotLink}>
-                Copy screenshot link
-              </button>
-            </>
+            <button type="button" className="tool-btn" onClick={openScreenshotForm}>
+              Add a screenshot
+            </button>
+          )}
+          {/* Copying is the fallback for when sending is not available, not a
+              second way to do the same thing. */}
+          {!canSend && (
+            <button type="button" className="tool-btn" onClick={copy}>
+              Copy report
+            </button>
           )}
           <button type="button" className="tool-btn" onClick={onClose}>
             Close
           </button>
         </div>
-        {status === 'sent' && (
-          <p className="label-conflict-hint">
-            Report sent. Delivery cannot be confirmed from here, so keep a copy if it matters.
-          </p>
-        )}
         {status === 'copied' && (
           <p className="label-conflict-hint">Copied. Paste it wherever you report problems.</p>
         )}
         {status === 'opened' && (
           <p className="label-conflict-hint">
             Opened in a new tab with this report filled in. Attach the screenshot and submit there,
-            and do not also use Send report or it arrives twice.
+            not here, or it arrives twice.
           </p>
         )}
         {status === 'openFailed' && (
           <p className="label-conflict-hint">
-            A tab could not be opened from here. Use Copy screenshot link and paste it into your
-            browser.
+            A tab could not be opened from here.{' '}
+            <button type="button" className="tool-btn" onClick={copyScreenshotLink}>
+              Copy the link
+            </button>{' '}
+            and paste it into your browser.
           </p>
         )}
         {status === 'linkCopied' && (
@@ -218,7 +233,7 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
         {(status === 'opened' || status === 'linkCopied') && !screenshot.boardIncluded && (
           <p className="label-conflict-hint">
             Your circuit is too big to travel in a link, so it is not in that form. Use Send report
-            for the circuit, or Copy report and paste it in.
+            for the circuit instead.
           </p>
         )}
         {status === 'failed' && <p className="circuit-error">That did not go through.</p>}

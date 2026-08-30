@@ -492,18 +492,31 @@ h3 {
   overflow-y: auto;
 }
 
+/* Describing a bug takes more than a couple of lines, and a box that looks
+   like it wants one word gets one word. Resizable, with a floor rather than a
+   fixed height. */
 .bug-report__description {
   width: 100%;
+  min-height: 9rem;
+  resize: vertical;
   font: inherit;
   color: var(--ink);
   background: var(--paper);
   border: var(--stroke-min) solid var(--line);
 }
 
+/* The one thing the reporter must not have to hunt for. */
+.bug-report__sent {
+  padding: calc(var(--space-unit) * 2) 0;
+  font-size: var(--text-primary);
+  color: var(--ink);
+}
+
 /* The preview is the promise that nothing leaves unseen, so it must be
    readable, not a one-line teaser. */
 .bug-report__preview {
-  max-height: 220px;
+  max-height: 340px;
+  min-height: 8rem;
   overflow: auto;
   padding: var(--space-unit);
   color: var(--muted);
