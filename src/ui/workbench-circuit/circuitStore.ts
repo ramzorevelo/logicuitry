@@ -2989,6 +2989,11 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           error: null,
           changedPrims: new Set(),
           replayTimePs: null,
+          // Powering on drops any edit tool. The board cannot be edited while
+          // the sim owns it, so a live wire tool could only start a wire that
+          // would never commit, and on touch there is no Esc to abandon the
+          // ghost it leaves behind.
+          tool: { kind: 'select' } as Tool,
           rev: st.rev + 1,
         }));
       } catch (e) {

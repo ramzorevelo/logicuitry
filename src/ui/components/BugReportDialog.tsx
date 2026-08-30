@@ -12,6 +12,7 @@ import {
   reportingConfigured,
   screenshotFormConfigured,
 } from '../report/reportConfig';
+import { useCompact } from '../compact';
 import { openExternal } from '../desktop/openExternal';
 import { serializeDocument } from '../../io/library';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
@@ -50,6 +51,7 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
   const [includeBoard, setIncludeBoard] = useState(hasCircuit);
   const [where, setWhere] = useState<string>(workbench);
   const [status, setStatus] = useState<Status>('idle');
+  const compact = useCompact();
 
   const payload = useMemo(
     () =>
@@ -146,7 +148,9 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
         <textarea
           className="bug-report__description"
           rows={8}
-          autoFocus
+          // Focusing on a phone throws the keyboard over the dialog before the
+          // reporter has read it. They can tap the box when they are ready.
+          autoFocus={!compact}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Tell us what you saw."

@@ -1271,44 +1271,7 @@ export function CircuitWorkbench() {
         s.commitDuplicate(dup.base, dup.offset);
         drawRef.current();
       } else if (e.key === 'Escape') {
-        // P1.6: Esc is the only way to end a wire as a free end -- an
-        // empty-grid click during drawing now adds a bend and continues
-        // instead. If any bends were placed, commit up to the last one as a
-        // free-ended wire; with none yet, there's nothing to commit (matches
-        // the old cancel-only behavior).
-        const from = wiringRef.current;
-        const bends = wireBendsRef.current;
-        if (from && bends.length > 0) {
-          const last = bends[bends.length - 1]!;
-          if (isOnWireStart(from)) {
-            // B4: the start may still need its own junction resolution, so
-            // this goes through wireFromStart too, with the far end forced
-            // free (matching the non-onWire branch's Esc behavior exactly --
-            // no hit-test on `last`, always a plain free end).
-            s.wireFromStart(
-              from.worldPos,
-              { kind: 'free', pos: last },
-              themeRef.current?.gridSchematic ?? 1,
-              resolveWireEnd,
-              bends.slice(0, -1),
-            );
-          } else {
-            const a: WireEnd = isFreeStart(from)
-              ? { kind: 'free', pos: from.worldPos }
-              : { kind: 'pin', component: from.componentId, pin: from.pinName };
-            s.addWire(a, { kind: 'free', pos: last }, bends.slice(0, -1));
-          }
-        }
-        wiringRef.current = null;
-        wireBendsRef.current = [];
-        lassoRef.current = null;
-        cutRef.current = null;
-        setSmartConnect(null);
-        duplicateRef.current = null;
-        ghostRef.current.cancel();
-        setHoverPin(undefined);
-        s.setTool({ kind: 'select' });
-        s.setSelection(new Set());
+        cancelPending();
       } else if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
         // Plain `=`/`-` adjust pin count; `+`/`_` adjust width. On a US
         // keyboard `+` is Shift+`=` and `_` is Shift+`-`, so e.shiftKey can't
@@ -3046,6 +3009,52 @@ export function CircuitWorkbench() {
     drawRef.current();
   };
 
+  /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
+   *  a cut, a suggestion, a duplicate ghost. Shared by Esc and by a press
+   *  outside the canvas, which is the only way to reach it on a touchscreen. */
+  const cancelPending = () => {
+    const s = store.getState();
+
+    // P1.6: Esc is the only way to end a wire as a free end -- an
+    // empty-grid click during drawing now adds a bend and continues
+    // instead. If any bends were placed, commit up to the last one as a
+    // free-ended wire; with none yet, there's nothing to commit (matches
+    // the old cancel-only behavior).
+    const from = wiringRef.current;
+    const bends = wireBendsRef.current;
+    if (from && bends.length > 0) {
+      const last = bends[bends.length - 1]!;
+      if (isOnWireStart(from)) {
+        // B4: the start may still need its own junction resolution, so
+        // this goes through wireFromStart too, with the far end forced
+        // free (matching the non-onWire branch's Esc behavior exactly --
+        // no hit-test on `last`, always a plain free end).
+        s.wireFromStart(
+          from.worldPos,
+          { kind: 'free', pos: last },
+          themeRef.current?.gridSchematic ?? 1,
+          resolveWireEnd,
+          bends.slice(0, -1),
+        );
+      } else {
+        const a: WireEnd = isFreeStart(from)
+          ? { kind: 'free', pos: from.worldPos }
+          : { kind: 'pin', component: from.componentId, pin: from.pinName };
+        s.addWire(a, { kind: 'free', pos: last }, bends.slice(0, -1));
+      }
+    }
+    wiringRef.current = null;
+    wireBendsRef.current = [];
+    lassoRef.current = null;
+    cutRef.current = null;
+    setSmartConnect(null);
+    duplicateRef.current = null;
+    ghostRef.current.cancel();
+    setHoverPin(undefined);
+    s.setTool({ kind: 'select' });
+    s.setSelection(new Set());
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     store.getState().clearTransientError();
     if (e.pointerType === 'touch') {
@@ -3258,10 +3267,12 @@ export function CircuitWorkbench() {
       return;
     }
     if (tool.kind === 'junction') {
+      if (powered) return;
       st.addJunction(world, grid, resolveWireEnd);
       return;
     }
     if (tool.kind === 'cut') {
+      if (powered) return;
       cutRef.current = { start: world, current: world, flagged: new Set() };
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
@@ -3414,6 +3425,10 @@ export function CircuitWorkbench() {
       return;
     }
     if (tool.kind === 'wire') {
+      // Belt and braces with the tool reset in powerOn: a wire started while
+      // the sim owns the board could never commit, and would strand a ghost
+      // that only Esc clears, which a phone has not got.
+      if (powered) return;
       const pin = nearestFree(targets, world, hitScale(theme));
       if (pin) {
         wiringRef.current = pin;
@@ -4961,7 +4976,18 @@ export function CircuitWorkbench() {
         </div>
       )}
 
-      <div className="circuit-body">
+      {/* A press anywhere outside the canvas abandons a half-drawn wire. Esc
+          did this and nothing else did, which left a touchscreen with a ghost
+          it could not put down. Capture, so the press still does whatever it
+          was for. */}
+      <div
+        className="circuit-body"
+        onPointerDownCapture={(e) => {
+          if (!wiringRef.current) return;
+          if (e.target instanceof Element && e.target.closest('canvas')) return;
+          cancelPending();
+        }}
+      >
         <PaletteRail paletteRef={paletteRef} width={paletteW} />
         <div
           className="circuit-palette__resize"
@@ -5098,7 +5124,10 @@ export function CircuitWorkbench() {
               </ToolBtn>
             </div>
           )}
-          <SelectionActionBar visible={coarse && selection.size > 0} />
+          {/* A pending suggestion has its own controls, and the selection that
+              raised it is still set, so both bars showed at once with the
+              suggestion sitting on top of the one that started it. */}
+          <SelectionActionBar visible={coarse && selection.size > 0 && connectPairs === 0} />
           {staReport &&
             activeTab.kind === 'board' &&
             (() => {

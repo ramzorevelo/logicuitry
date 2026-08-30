@@ -79,10 +79,14 @@ export default defineConfig({
               start_url: base,
               scope: base,
               display: 'standalone',
-              // An installed instance can take the whole screen where the
-              // platform allows it, and falls back down this list where it
-              // does not. `display` alone stops at standalone.
-              display_override: ['fullscreen', 'standalone', 'minimal-ui'],
+              // Deliberately NOT fullscreen. Android honours that by hiding the
+              // system navigation bar for the whole session, which leaves the
+              // soft keyboard with no Back button to dismiss it: the reporter
+              // has to edge-swipe the bar back before they can close the
+              // keyboard at all. Fullscreen is available on demand instead,
+              // from the toolbar or the presentation key, which is when a
+              // lecture actually wants it.
+              display_override: ['standalone', 'minimal-ui'],
               // A schematic is landscape work, but locking a phone's rotation
               // is hostile: let the device decide.
               orientation: 'any',

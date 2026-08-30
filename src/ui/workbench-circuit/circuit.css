@@ -668,6 +668,9 @@
 .wave-panel__canvas {
   display: block;
   outline: none;
+  /* Horizontal drags are ours, for panning time; vertical ones still scroll
+     the panel body. */
+  touch-action: pan-y;
 }
 
 .wave-panel__canvas:focus-visible {
@@ -1139,9 +1142,15 @@
   box-shadow: 0 2px 10px rgb(0 0 0 / 16%);
 }
 
+/* 44px is the smallest reliable touch target, so it is the size, not a floor
+   for padding to grow past. Four buttons at 52 crowd a phone's only band of
+   canvas for nothing. */
 .circuit-quick .tool-btn {
-  min-width: 44px;
-  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
   justify-content: center;
 }
 
@@ -1162,7 +1171,11 @@
 .app-shell--landscape .circuit-quick {
   flex-direction: column;
   max-width: none;
-  max-height: calc(100% - var(--space-unit) * 2);
+  /* nowrap, or the four buttons wrap into a second column the moment the
+     board is shorter than they are, which is most of a rotated phone: two
+     columns of icons cover the corner this panel exists to stay out of. */
+  flex-wrap: nowrap;
+  max-height: none;
 }
 
 /* Power, Run, Undo and Redo live in the floating quick panel on a phone.
@@ -1264,4 +1277,25 @@
   font: var(--text-secondary) / 1 var(--font-mono);
   color: var(--muted);
   padding: 0 var(--space-unit);
+}
+
+/* The waveform panel is a companion to the board, not a replacement for it.
+   Its body caps at 40vh, but the header, the time scrollbar and the resize
+   handle sit outside that cap and pushed the whole panel over the canvas on a
+   short screen. Capping the panel itself leaves the board visible. */
+.app-shell--compact .wave-panel {
+  max-height: 55dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell--compact .wave-panel__body {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Landscape has even less height to give away. */
+.app-shell--landscape .wave-panel {
+  max-height: 45dvh;
 }

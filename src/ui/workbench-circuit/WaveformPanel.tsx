@@ -27,6 +27,7 @@ import { readTheme } from '../../render/theme';
 import { getPart } from '../../core/parts/partsDb';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { getPrefs } from '../prefs';
+import { useCompact } from '../compact';
 import { effectiveWindow, type Win } from './waveWindow';
 
 /** Pending Δt measure: first clicked edge, waiting for the second. */
@@ -70,6 +71,7 @@ export function WaveformPanel() {
   // Session-only panel height (drag the top edge); null = CSS default (40vh cap).
   const [panelH, setPanelH] = useState<number | null>(null);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
+  const compact = useCompact();
   // Paths already given their default visibility, so a user's re-check sticks.
   const defaultedRef = useRef(new Set<string>());
   // Net -> path that already claimed the visible default for that net. Nets
@@ -95,6 +97,11 @@ export function WaveformPanel() {
   const [chevronHoverGroup, setChevronHoverGroup] = useState<string | null>(null);
   const layoutRef = useRef<WaveformLayout | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Dragging the plot sideways on a touchscreen. Time panning lives on the
+  // scrollbar below the plot, which is a 14px target no finger can take, so a
+  // finger drives that same scroll directly. A mouse keeps the measure
+  // gesture the drag already had.
+  const wavePanRef = useRef<{ x: number; left: number } | null>(null);
   // The last scrollLeft this component wrote. A one-shot boolean cannot do
   // this job: the browser coalesces and re-fires scroll events, so the flag
   // gets consumed by the wrong one and a programmatic write is then read back
@@ -839,7 +846,9 @@ export function WaveformPanel() {
             )}
             {measure && <span className="wave-panel__hint">Δt: Alt+click the second edge…</span>}
             {replayTime !== null && (
-              <span className="wave-panel__hint">replay · Esc or Space/step returns to live</span>
+              <span className="wave-panel__hint">
+                {compact ? 'replay' : 'replay · Esc or Space/step returns to live'}
+              </span>
             )}
             {hasBands && (
               <span className="wave-panel__footnote">t_cd estimated (0.35 × t_pd typ)</span>
@@ -859,9 +868,29 @@ export function WaveformPanel() {
                 ref={canvasRef}
                 className="wave-panel__canvas"
                 tabIndex={0}
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
+                onPointerDown={(e) => {
+                  if (e.pointerType === 'touch' && scrollRef.current) {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    wavePanRef.current = { x: e.clientX, left: scrollRef.current.scrollLeft };
+                    return;
+                  }
+                  onPointerDown(e);
+                }}
+                onPointerMove={(e) => {
+                  const pan = wavePanRef.current;
+                  if (pan && scrollRef.current) {
+                    scrollRef.current.scrollLeft = pan.left - (e.clientX - pan.x);
+                    return;
+                  }
+                  onPointerMove(e);
+                }}
+                onPointerUp={() => {
+                  if (wavePanRef.current) {
+                    wavePanRef.current = null;
+                    return;
+                  }
+                  onPointerUp();
+                }}
                 onPointerLeave={() => store.getState().setHoverTrack(null)}
                 onWheel={onWheel}
                 onKeyDown={onKeyDown}
