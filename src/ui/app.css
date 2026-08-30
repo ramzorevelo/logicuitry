@@ -865,15 +865,39 @@ h3 {
 /* --- Menus at phone width ---------------------------------------------------
    A 220px popup opened from a title near the right edge runs off a 360px
    screen, and the overflow scrolled the whole app sideways rather than the
-   menu. The popup is capped to the viewport, and the menus in the right half
-   of the bar open leftwards from their own right edge. */
-.app-shell--compact .menubar__popup {
-  max-width: calc(100vw - var(--space-unit) * 2);
+   menu.
+
+   The popup is anchored to the BAR rather than to the title that opened it:
+   full width, directly under the whole bar, which is what a phone menu does
+   anyway. The previous rule opened the last three menus leftwards from their
+   own right edge, which was right only while the bar was a single row. Once
+   it wrapped, Help sat at the LEFT of row two and still opened leftwards,
+   off the side of the screen.
+
+   Anchoring to the bar also means nothing here depends on where a title sits,
+   so wrapping to a second row costs only height. */
+.app-shell--compact .menubar {
+  position: relative;
 }
 
-.app-shell--compact .menubar__menu:nth-last-child(-n + 3) .menubar__popup {
-  left: auto;
+.app-shell--compact .menubar__menu {
+  position: static;
+}
+
+.app-shell--compact .menubar__popup {
+  left: 0;
   right: 0;
+  top: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+/* Six titles on one row is the difference between a phone showing the bar and
+   the bar taking two rows of a short screen, so the padding goes as tight as a
+   44px touch target allows. */
+.app-shell--compact .menubar__title {
+  padding-left: var(--space-unit);
+  padding-right: var(--space-unit);
 }
 
 /* A submenu flying out sideways has nowhere to go here, so it expands in

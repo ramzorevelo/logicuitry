@@ -67,6 +67,15 @@
   overflow: hidden;
 }
 
+/* A sheet that names no scrolling region scrolls itself, as it does on the
+   desktop. Without this, `overflow: hidden` above left Preferences, Help,
+   About and the bug report with no way to reach anything past 70dvh: the
+   pinned-chrome behaviour was written for the two dialogs that do name one. */
+.app-shell--compact .package-dialog:not(:has(.package-scroll, .examples-list)) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* The one scrolling region inside a sheet. */
 .app-shell--compact .package-dialog .examples-list,
 .app-shell--compact .package-dialog .package-scroll {
