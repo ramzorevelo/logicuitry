@@ -440,7 +440,7 @@ export function App() {
         {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
         {reportOpen ? <BugReportDialog onClose={() => setReportOpen(false)} /> : null}
         <HoldTip />
-        <UpdateBanner />
+        <UpdateBanner presentation={presentation} />
         <DesktopUpdateBanner presentation={presentation} />
 
         {/* Waveform/steps footer returns with M6 when a workbench supplies it. */}
