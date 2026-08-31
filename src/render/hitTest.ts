@@ -7,6 +7,10 @@ import type { Node, Scene, Vec2, Viewport } from './scene';
 
 export const MIN_HIT_RADIUS = 12; // px at 100% zoom, per design-system
 
+/** The loose pin target: twice the click target, the radius within which a
+ *  press is taken as meaning a pin rather than the space beside it. */
+export const LOOSE_HIT_RADIUS = MIN_HIT_RADIUS * 2;
+
 // Wire-body proximity, not a point fat-target: half the schematic grid unit
 // (8px), the established snap-to-nearest-wire tolerance -- any click stays
 // within its own grid cell, so a wire one unit over is never swallowed.

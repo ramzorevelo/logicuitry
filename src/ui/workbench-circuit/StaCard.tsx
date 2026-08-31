@@ -68,6 +68,7 @@ export function StaCard(props: {
         )}
         <strong>{formatTimePs(path.totalTcdPs)}</strong>
         {path.estimated && ' · t_cd estimated (0.35 × t_pd typ)'}
+        {path.typUnpublished && ' · typ not published: max used'}
       </div>
       {sequential && (
         <div className="sta-card__seq">

@@ -1,0 +1,911 @@
+{
+  "format": "lcir.chip",
+  "formatVersion": 3,
+  "id": "74LS48",
+  "name": "74LS48",
+  "version": 1,
+  "pins": [
+    {
+      "id": "pin-1",
+      "name": "A1",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 0,
+      "boundComponent": "p1"
+    },
+    {
+      "id": "pin-2",
+      "name": "A2",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 1,
+      "boundComponent": "p2"
+    },
+    {
+      "id": "pin-3",
+      "name": "/LT",
+      "dir": "in",
+      "width": 1,
+      "role": "enable",
+      "order": 2,
+      "boundComponent": "p3"
+    },
+    {
+      "id": "pin-4",
+      "name": "/BI_RBO",
+      "dir": "in",
+      "width": 1,
+      "role": "enable",
+      "order": 3,
+      "boundComponent": "p4"
+    },
+    {
+      "id": "pin-5",
+      "name": "/RBI",
+      "dir": "in",
+      "width": 1,
+      "role": "enable",
+      "order": 4,
+      "boundComponent": "p5"
+    },
+    {
+      "id": "pin-6",
+      "name": "A3",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 5,
+      "boundComponent": "p6"
+    },
+    {
+      "id": "pin-7",
+      "name": "A0",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 6,
+      "boundComponent": "p7"
+    },
+    {
+      "id": "pin-8",
+      "name": "GND",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 7,
+      "boundComponent": "p8"
+    },
+    {
+      "id": "pin-9",
+      "name": "e",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 8,
+      "boundComponent": "p9"
+    },
+    {
+      "id": "pin-10",
+      "name": "d",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 9,
+      "boundComponent": "p10"
+    },
+    {
+      "id": "pin-11",
+      "name": "c",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 10,
+      "boundComponent": "p11"
+    },
+    {
+      "id": "pin-12",
+      "name": "b",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 11,
+      "boundComponent": "p12"
+    },
+    {
+      "id": "pin-13",
+      "name": "a",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 12,
+      "boundComponent": "p13"
+    },
+    {
+      "id": "pin-14",
+      "name": "g",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 13,
+      "boundComponent": "p14"
+    },
+    {
+      "id": "pin-15",
+      "name": "f",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 14,
+      "boundComponent": "p15"
+    },
+    {
+      "id": "pin-16",
+      "name": "VCC",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 15,
+      "boundComponent": "p16"
+    }
+  ],
+  "components": [
+    {
+      "id": "p1",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 0
+      },
+      "label": "A1",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p2",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 48
+      },
+      "label": "A2",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p3",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 96
+      },
+      "label": "/LT",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p4",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 144
+      },
+      "label": "/BI_RBO",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p5",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 192
+      },
+      "label": "/RBI",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p6",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 240
+      },
+      "label": "A3",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p7",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 288
+      },
+      "label": "A0",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p8",
+      "kind": "inport",
+      "pos": {
+        "x": 0,
+        "y": 336
+      },
+      "label": "GND",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p9",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 336
+      },
+      "label": "e",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p10",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 288
+      },
+      "label": "d",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p11",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 240
+      },
+      "label": "c",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p12",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 192
+      },
+      "label": "b",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p13",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 144
+      },
+      "label": "a",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p14",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 96
+      },
+      "label": "g",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p15",
+      "kind": "outport",
+      "pos": {
+        "x": 640,
+        "y": 48
+      },
+      "label": "f",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "p16",
+      "kind": "inport",
+      "pos": {
+        "x": 640,
+        "y": 0
+      },
+      "label": "VCC",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "pwr_dn",
+      "kind": "pulldown",
+      "pos": {
+        "x": 0,
+        "y": -96
+      }
+    },
+    {
+      "id": "pwr_up",
+      "kind": "pullup",
+      "pos": {
+        "x": 0,
+        "y": -144
+      }
+    },
+    {
+      "id": "pwr_inv",
+      "kind": "not",
+      "pos": {
+        "x": 128,
+        "y": -96
+      }
+    },
+    {
+      "id": "pwr_ok",
+      "kind": "and",
+      "pos": {
+        "x": 256,
+        "y": -96
+      }
+    },
+    {
+      "id": "u1",
+      "kind": "bcd7seg",
+      "pos": {
+        "x": 256,
+        "y": 0
+      }
+    },
+    {
+      "id": "t9",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t10",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t11",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t12",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t13",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t14",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    },
+    {
+      "id": "t15",
+      "kind": "tristate",
+      "pos": {
+        "x": 384,
+        "y": 0
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "p16",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pwr_dn",
+        "pin": "p"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "p8",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pwr_up",
+        "pin": "p"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "p8",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pwr_inv",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_inv",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "p16",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "p1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "a1"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "p2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "a2"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "p3",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "lt"
+      },
+      "points": []
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "p4",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "bi"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "pin",
+        "component": "p5",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "rbi"
+      },
+      "points": []
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "pin",
+        "component": "p6",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "a3"
+      },
+      "points": []
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "pin",
+        "component": "p7",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "a0"
+      },
+      "points": []
+    },
+    {
+      "id": "w13",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_e"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t9",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w14",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t9",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w15",
+      "a": {
+        "kind": "pin",
+        "component": "t9",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p9",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_d"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t10",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w17",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t10",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w18",
+      "a": {
+        "kind": "pin",
+        "component": "t10",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p10",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w19",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_c"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t11",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w20",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t11",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w21",
+      "a": {
+        "kind": "pin",
+        "component": "t11",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p11",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w22",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t12",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w23",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t12",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w24",
+      "a": {
+        "kind": "pin",
+        "component": "t12",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p12",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w25",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t13",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w26",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t13",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w27",
+      "a": {
+        "kind": "pin",
+        "component": "t13",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p13",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w28",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_g"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t14",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w29",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t14",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w30",
+      "a": {
+        "kind": "pin",
+        "component": "t14",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p14",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w31",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "seg_f"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t15",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w32",
+      "a": {
+        "kind": "pin",
+        "component": "pwr_ok",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "t15",
+        "pin": "en"
+      },
+      "points": []
+    },
+    {
+      "id": "w33",
+      "a": {
+        "kind": "pin",
+        "component": "t15",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "p15",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [],
+  "appearance": {
+    "package": "DIP16"
+  }
+}

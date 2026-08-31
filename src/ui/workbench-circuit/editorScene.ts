@@ -20,6 +20,9 @@ import {
 } from '../../core/gates/bubbleModel';
 import { netPins, type PinRef } from '../../core/gates/netGraph';
 import { drawBox, drawConstant } from '../../render/glyphs/chip';
+import { drawRail } from '../../render/glyphs/power';
+import { segmentLit, sevenSegCommon } from '../../core/sim/primitives/display';
+import { drawDip, isDipPackage } from '../../render/glyphs/dip';
 import {
   drawBusDisplay,
   drawButton,
@@ -561,6 +564,7 @@ function geometryInput(comp: Component, chipLib: ChipLibrary): GeometryInput {
     pins: resolveComponentPins(comp, def),
     name: glyphBodyName(comp.kind, comp.label, def?.name),
     nameOffset: comp.nameOffset,
+    package: def?.appearance?.package,
   };
 }
 
@@ -789,7 +793,10 @@ export function drawComponent(
   } else if (comp.kind === 'clock') {
     drawClock(ctx, theme, input, placement, comp.label);
   } else if (comp.kind === 'sevenseg') {
-    const lit = new Set(SEGMENTS.filter((s) => p.pinSignal(comp.id, s) === '1'));
+    // A common-anode display lights on a driven 0 and stays dark on Z, which
+    // is exactly what an open-collector 74LS47 gives it.
+    const common = sevenSegCommon(comp.params ?? {});
+    const lit = new Set(SEGMENTS.filter((s) => segmentLit(p.pinSignal(comp.id, s), common)));
     drawSevenSeg(ctx, theme, input, placement, lit);
   } else if (comp.kind === 'sevenseghex') {
     drawSevenSegHex(ctx, theme, input, placement, 0);
@@ -818,11 +825,21 @@ export function drawComponent(
     drawPort(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (comp.kind === 'netlabel') {
     drawNetLabel(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
+  } else if (comp.kind === 'vcc' || comp.kind === 'gnd') {
+    drawRail(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (comp.kind === 'constant') {
     drawConstant(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (BOX_SET.has(comp.kind)) {
     const missingDef = comp.kind === 'chip' && !!comp.defId && !p.chipLib.get(comp.defId);
     const appearance = comp.defId ? p.chipLib.get(comp.defId)?.appearance : undefined;
+    const tint = {
+      body: chipTintColor(theme, appearance?.color),
+      border: chipTintColor(theme, appearance?.borderColor),
+    };
+    if (!missingDef && isDipPackage(appearance?.package)) {
+      drawDip(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin), tint);
+      return;
+    }
     drawBox(
       ctx,
       theme,
@@ -831,10 +848,7 @@ export function drawComponent(
       (pin) => p.pinSignal(comp.id, pin),
       missingDef,
       comp.label,
-      {
-        body: chipTintColor(theme, appearance?.color),
-        border: chipTintColor(theme, appearance?.borderColor),
-      },
+      tint,
     );
   }
 }

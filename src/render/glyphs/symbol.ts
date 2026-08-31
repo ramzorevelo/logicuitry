@@ -216,6 +216,10 @@ export interface GeometryInput {
    *  (namePlacement); geometry itself (symbolBounds) never reads it -- the
    *  name rect is display-only, not a hit-test/routing obstacle (Task 2b). */
   nameOffset?: Vec2 | undefined;
+  /** ChipDef.appearance.package for a chip instance standing for a real part.
+   *  Carried here so hit-testing and drawing measure the same silhouette: a
+   *  DIP is a different shape from the generic box, not a paint-time skin. */
+  package?: string | undefined;
 }
 export type GeometryBuilder = (input: GeometryInput, theme: Theme) => SymbolGeometry;
 
@@ -246,6 +250,7 @@ export function symbolBounds(
       pins,
       name: glyphBodyName(component.kind, component.label, chipDef?.name),
       id: component.id,
+      package: chipDef?.appearance?.package,
     },
     theme,
   );
@@ -394,13 +399,19 @@ export function drawUprightText(
 ): void {
   const rot = placement.rot ?? 0;
   const mirror = placement.mirror ?? false;
-  const d = rotatePoint(mirror ? -inward.x : inward.x, inward.y, rot);
+  // Only a half-turn is worth undoing. At a quarter-turn the pin rows run
+  // across the screen while each label still ran along it, so neighbouring
+  // labels overlapped each other; letting the text turn with the body puts it
+  // perpendicular to the row again, which is the only way they fit.
+  const upright = rot === 0 || rot === 180;
+  const mirrored = mirror ? -inward.x : inward.x;
+  const d = upright ? rotatePoint(mirrored, inward.y, rot) : { x: mirrored, y: inward.y };
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
   // Undo the placement's rotate-then-mirror around the anchor (S then R(-t)
   // composes with the outer R*S to identity).
   if (mirror) ctx.scale(-1, 1);
-  ctx.rotate((-rot * Math.PI) / 180);
+  if (upright) ctx.rotate((-rot * Math.PI) / 180);
   ctx.textAlign = d.x > 0.5 ? 'left' : d.x < -0.5 ? 'right' : 'center';
   ctx.textBaseline = d.y > 0.5 ? 'top' : d.y < -0.5 ? 'bottom' : 'middle';
   // A caption may carry newlines (an LED naming the expression it displays).

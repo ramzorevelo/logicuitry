@@ -44,7 +44,8 @@
         "color": { "type": "string" },
         "borderColor": { "type": "string" },
         "widthUnits": { "type": "integer", "minimum": 1 },
-        "heightUnits": { "type": "integer", "minimum": 1 }
+        "heightUnits": { "type": "integer", "minimum": 1 },
+        "package": { "type": "string" }
       },
       "additionalProperties": false
     }

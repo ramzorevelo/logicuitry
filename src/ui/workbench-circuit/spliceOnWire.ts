@@ -8,7 +8,7 @@
 import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
 import type { Params } from '../../core/sim/primitives/types';
 import type { Rect, Vec2 } from '../../render/scene';
-import type { Wire } from '../../core/model/types';
+import type { Circuit, Wire } from '../../core/model/types';
 import { projectOntoSegment, segmentIntersectsRect } from './wireGeom';
 
 export interface SplicePins {
@@ -24,6 +24,28 @@ export function splicePins(kind: string, params: Params): SplicePins | undefined
   if (ins.length === 1 && outs.length === 1)
     return { inName: ins[0]!.name, outName: outs[0]!.name };
   return undefined;
+}
+
+/**
+ * Whether "delete and reconnect" would do anything a plain delete would not:
+ * a component the wire can be re-joined through (one input, one output, so in
+ * practice NOT and BUF) or a degree-2 pass-through junction. Anywhere else the
+ * heal pass finds nothing and the command is a plain Delete under a second
+ * name, so it is not offered.
+ */
+export function canHealSelection(circuit: Circuit, selection: ReadonlySet<string>): boolean {
+  for (const id of selection) {
+    const comp = circuit.components.find((c) => c.id === id);
+    if (comp && splicePins(comp.kind, (comp.params ?? {}) as Params)) return true;
+    if (!circuit.junctions.some((j) => j.id === id)) continue;
+    let legs = 0;
+    for (const w of circuit.wires) {
+      if (w.a.kind === 'junction' && w.a.junction === id) legs++;
+      if (w.b.kind === 'junction' && w.b.junction === id) legs++;
+    }
+    if (legs === 2) return true;
+  }
+  return false;
 }
 
 export interface SpliceHit {

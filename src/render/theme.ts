@@ -197,6 +197,24 @@ export function readTheme(root: HTMLElement = document.documentElement): Theme {
 }
 
 /**
+ * Theme for the schematic, where glyph geometry is measured rather than just
+ * painted. Presentation mode scales `glyphText`, and every box, pin row and
+ * DIP body sizes itself from it, so going fullscreen moved every pin and
+ * reshaped every computed wire route: on a dense board the whole wiring
+ * visibly shifts. The schematic therefore keeps the unscaled text, so a
+ * component occupies the same space in both modes. Strokes still thicken,
+ * which is what actually carries to the back of a room, and the larger
+ * presentation hit radius is unaffected.
+ */
+export function withoutPresentationScale(t: Theme): Theme {
+  return t.presentation ? { ...t, glyphText: t.canvasTextMin } : t;
+}
+
+export function schematicTheme(): Theme {
+  return withoutPresentationScale(readTheme());
+}
+
+/**
  * Colours a packaged chip may be tinted with, stored on the def as a token
  * NAME rather than a hex: a chip built in one theme has to stay legible in the
  * other six and in both appearances, which a frozen hex cannot promise.

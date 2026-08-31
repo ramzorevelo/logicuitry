@@ -608,7 +608,10 @@ function drawAnnotation(
     const label = a.label ?? `Δt = ${formatTimePs(Math.abs((a.t1 ?? a.t0) - a.t0))}`;
     ctx.fillText(label, (x0 + x1) / 2, y - 3);
   } else {
-    // marker: point flag
+    // marker: a single instant, drawn at wire weight rather than the hairline
+    // the spans use. Its whole job is to be found again -- it marks the edge a
+    // pending measure is anchored to, with nothing yet to pair it against.
+    ctx.lineWidth = theme.strokes.wire;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x0, y1);

@@ -20,6 +20,7 @@ import {
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
 import { Simulator } from '../../core/sim/kernel';
+import { builtinChipLibrary, isBuiltinChipId } from '../../core/parts/packages';
 import { idealDelay, datasheetDelay } from '../../core/sim/delay';
 import * as bv from '../../core/value/busValue';
 import { busSignalState, type SignalState } from '../../render/theme';
@@ -689,6 +690,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const st = get();
     const def = st.chipLib.get(defId);
     if (!def) return;
+    // A built-in part is generated from its datasheet pinout: opening one to
+    // see why the rails matter is the point, editing it is not.
+    if (isBuiltinChipId(defId)) {
+      set({ error: `${defId} is a built-in part and cannot be edited` });
+      return;
+    }
     const { pins, removed, renamed } = derivePins(def.pins, draft.components);
     // A rename derivePins couldn't apply (collision with another surviving
     // boundary pin) shows up as a kept pin whose bound component's own label
@@ -1872,7 +1879,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
 
   return {
     board: initialBoard,
-    chipLib: new Map(),
+    chipLib: new Map(builtinChipLibrary()),
     tabs: [{ id: 'board', kind: 'board' }],
     activeTabId: 'board',
     staleInstances: new Set(),

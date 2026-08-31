@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './circuit.css';
-import { readTheme, type Theme } from '../../render/theme';
+import { schematicTheme, type Theme } from '../../render/theme';
 import { screenToWorld, worldToScreen, type Vec2, type Viewport } from '../../render/scene';
 import { useCircuitStore, VARIABLE_ARITY_GATES, type Tab } from './circuitStore';
 
@@ -81,13 +81,24 @@ import {
   smartConnectSingleSource,
   type ChainComp,
 } from './smartConnect';
-import { MIN_HIT_RADIUS, TOUCH_HIT_RADIUS, WIRE_BODY_HIT_RADIUS } from '../../render/hitTest';
+import {
+  LOOSE_HIT_RADIUS,
+  MIN_HIT_RADIUS,
+  TOUCH_HIT_RADIUS,
+  WIRE_BODY_HIT_RADIUS,
+} from '../../render/hitTest';
 import { PreviewController } from '../../render/ghostPreview';
 import { PackageDialog } from './PackageDialog';
 import { LabelConflictDialog } from './LabelConflictDialog';
 import { CloseTabDialog } from './CloseTabDialog';
 import { SmartConnectPicker } from './SmartConnectPicker';
-import { alignSplicePos, findSpliceWire, splicePins, type SplicePins } from './spliceOnWire';
+import {
+  alignSplicePos,
+  canHealSelection,
+  findSpliceWire,
+  splicePins,
+  type SplicePins,
+} from './spliceOnWire';
 import { extractInternalSelection } from './duplicate';
 import { usePrefsStore } from '../prefs';
 import { busLabelHitPoints, wireBusWidth } from './busBadge';
@@ -332,6 +343,18 @@ export function CircuitWorkbench() {
   const themeRef = useRef<Theme | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const wiringRef = useRef<WiringStart | null>(null);
+  // The ref is what every handler reads synchronously mid-gesture; this mirror
+  // exists only so the toolbar can re-render, since a wire in flight turns the
+  // wire button into its own cancel. Always set through setWiringStart.
+  const [wiring, setWiring] = useState(false);
+  // Which tool was armed when the wire began, so switching tools can abandon
+  // it without also abandoning the wire that pressing W just started.
+  const wiringToolRef = useRef<string | null>(null);
+  const setWiringStart = (next: WiringStart | null) => {
+    wiringRef.current = next;
+    wiringToolRef.current = next ? store.getState().tool.kind : null;
+    setWiring(next !== null);
+  };
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEW);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -459,6 +482,11 @@ export function CircuitWorkbench() {
   const coarse = useCoarsePointer();
   const coarseRef = useRef(coarse);
   coarseRef.current = coarse;
+  // Naming a key to someone holding a phone is noise, and naming a tap to
+  // someone holding a mouse is wrong. Every tooltip that mentions either goes
+  // through these two.
+  const key = (k: string) => (coarse ? '' : ` (${k})`);
+  const press = coarse ? 'tap' : 'click';
   // The File menu is a poor first reach on a phone, and an empty canvas is a
   // dead end there; the same command the menu runs gets a toolbar button.
   const examplesCmd = useMenuCommand('file', 'examples');
@@ -918,7 +946,7 @@ export function CircuitWorkbench() {
   // Entering/leaving bubble mode cancels any in-flight editing gesture; the
   // rest of the lockout is the top-of-handler delegation in the handlers.
   useEffect(() => {
-    wiringRef.current = null;
+    setWiringStart(null);
     wireBendsRef.current = [];
     lassoRef.current = null;
     cutRef.current = null;
@@ -1033,9 +1061,9 @@ export function CircuitWorkbench() {
   };
 
   useEffect(() => {
-    themeRef.current = readTheme();
+    themeRef.current = schematicTheme();
     const sync = () => {
-      themeRef.current = readTheme();
+      themeRef.current = schematicTheme();
       drawRef.current();
     };
     const obs = new MutationObserver(sync);
@@ -1191,14 +1219,15 @@ export function CircuitWorkbench() {
         // click needed -- same shape a Select-mode pin press already produces.
         const theme = themeRef.current;
         const circuit = s.activeCircuit();
-        const pinHit = theme
-          ? nearestFree(
-              collectPinTargets(circuit.components, circuit.wires, theme, s.chipLib),
-              lastMouseWorldRef.current,
-              hitScale(theme),
-              MIN_HIT_RADIUS,
-            )
-          : undefined;
+        const pinHit =
+          theme && !s.powered
+            ? nearestFree(
+                collectPinTargets(circuit.components, circuit.wires, theme, s.chipLib),
+                lastMouseWorldRef.current,
+                hitScale(theme),
+                MIN_HIT_RADIUS,
+              )
+            : undefined;
         // Always arm the wire tool, even when a hovered pin also starts the
         // wire immediately below -- onPointerDown checks tool.kind === 'place'
         // before it ever looks at a pending wiringRef, so pressing W while
@@ -1207,7 +1236,7 @@ export function CircuitWorkbench() {
         // click and placed another copy instead.
         s.setTool({ kind: 'wire' });
         if (pinHit) {
-          wiringRef.current = pinHit;
+          setWiringStart(pinHit);
           wireBendsRef.current = [];
           setHoverPin(pinHit.worldPos);
         }
@@ -2921,8 +2950,17 @@ export function CircuitWorkbench() {
   /** How much bigger a hit target is than its drawn glyph. Presentation
    *  enlarges everything for a TV; a finger needs a 44px target whatever the
    *  glyph measures. The two multiply. */
-  const hitScale = (t: { presentation: boolean }): number =>
-    (t.presentation ? 1.4 : 1) * (coarseRef.current ? TOUCH_HIT_RADIUS / MIN_HIT_RADIUS : 1);
+  /** Multiplier the nearest-pin helpers apply to LOOSE_HIT_RADIUS. A hit
+   *  budget belongs to the input device and the screen, never to the drawing,
+   *  so it is a fixed number of SCREEN pixels converted to world units here.
+   *  Without the zoom term the touch budget was 44 world units -- five and a
+   *  half grid squares -- at every zoom, so a press well beside a pin still
+   *  wired to it, and zooming in only made the swallowed area larger. */
+  const hitScale = (t: { presentation: boolean }): number => {
+    const px =
+      (coarseRef.current ? TOUCH_HIT_RADIUS : LOOSE_HIT_RADIUS) * (t.presentation ? 1.4 : 1);
+    return px / LOOSE_HIT_RADIUS / Math.max(viewportRef.current.zoom, 0.01);
+  };
 
   // One click, one part. Placement used to stay armed after every drop, so a
   // single click was really "place, and now you are holding another one",
@@ -3009,6 +3047,24 @@ export function CircuitWorkbench() {
     drawRef.current();
   };
 
+  // Picking any other tool abandons a half-drawn wire. It used to survive the
+  // switch, leaving a ghost and a pin marker that only Esc cleared, and a
+  // phone has no Esc.
+  useEffect(() => {
+    if (wiringRef.current && wiringToolRef.current !== tool.kind) discardWire();
+  }, [tool.kind]);
+
+  /** Throw away the wire being drawn, bends and all. Distinct from Esc, which
+   *  finishes it as a free end: a control labelled Cancel must not leave a
+   *  wire behind. The tool stays armed, since cancelling one wire is usually
+   *  the prelude to drawing a better one. */
+  const discardWire = () => {
+    setWiringStart(null);
+    wireBendsRef.current = [];
+    setHoverPin(undefined);
+    drawRef.current();
+  };
+
   /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
    *  a cut, a suggestion, a duplicate ghost. Shared by Esc and by a press
    *  outside the canvas, which is the only way to reach it on a touchscreen. */
@@ -3043,7 +3099,7 @@ export function CircuitWorkbench() {
         s.addWire(a, { kind: 'free', pos: last }, bends.slice(0, -1));
       }
     }
-    wiringRef.current = null;
+    setWiringStart(null);
     wireBendsRef.current = [];
     lassoRef.current = null;
     cutRef.current = null;
@@ -3297,7 +3353,7 @@ export function CircuitWorkbench() {
       // the click into wire-completion logic. Discard it silently (like Esc
       // with no bends placed) and fall through to the normal hit-test/toggle
       // path instead of returning.
-      wiringRef.current = null;
+      setWiringStart(null);
       wireBendsRef.current = [];
       setHoverPin(undefined);
     } else if (from) {
@@ -3342,7 +3398,7 @@ export function CircuitWorkbench() {
           wireBendsRef.current,
         );
         if (result === 'connected') {
-          wiringRef.current = null;
+          setWiringStart(null);
           wireBendsRef.current = [];
           setHoverPin(undefined);
           return;
@@ -3372,7 +3428,7 @@ export function CircuitWorkbench() {
         // pending wire armed, exactly as if this click never landed, instead
         // of dropping a wire that only *looks* uncommitted.
         if (!added) return;
-        wiringRef.current = null;
+        setWiringStart(null);
         wireBendsRef.current = [];
         setHoverPin(undefined);
         return;
@@ -3393,7 +3449,7 @@ export function CircuitWorkbench() {
           wireBendsRef.current,
         );
         if (tapResult === 'connected') {
-          wiringRef.current = null;
+          setWiringStart(null);
           wireBendsRef.current = [];
           setHoverPin(undefined);
           return;
@@ -3412,7 +3468,7 @@ export function CircuitWorkbench() {
         wireBendsRef.current,
       );
       if (junctionResult === 'connected') {
-        wiringRef.current = null;
+        setWiringStart(null);
         wireBendsRef.current = [];
         setHoverPin(undefined);
         return;
@@ -3442,7 +3498,7 @@ export function CircuitWorkbench() {
       if (powered) return;
       const pin = nearestFree(targets, world, hitScale(theme));
       if (pin) {
-        wiringRef.current = pin;
+        setWiringStart(pin);
       } else {
         // B4: starting a wire on top of an existing wire/junction must
         // connect, same as ending on one already does -- record the
@@ -3452,19 +3508,19 @@ export function CircuitWorkbench() {
         const j = junctionAt(world);
         const wh = j ? undefined : wireAt(world);
         if (j) {
-          wiringRef.current = { kind: 'onWire', worldPos: j.pos };
+          setWiringStart({ kind: 'onWire', worldPos: j.pos });
         } else if (wh) {
           const pts = computeRoutes().get(wh.wire.id);
           const snapped = pts ? projectOntoSegment(world, pts[wh.seg]!, pts[wh.seg + 1]!) : world;
-          wiringRef.current = { kind: 'onWire', worldPos: snapped };
+          setWiringStart({ kind: 'onWire', worldPos: snapped });
         } else {
-          wiringRef.current = {
+          setWiringStart({
             kind: 'freeStart',
             worldPos: {
               x: Math.round(world.x / grid) * grid,
               y: Math.round(world.y / grid) * grid,
             },
-          };
+          });
         }
       }
       wireBendsRef.current = [];
@@ -3478,9 +3534,13 @@ export function CircuitWorkbench() {
     // (P1.1: this pin check ran unconditionally before the ctrl-toggle branch
     // below, so Ctrl+click near a pin -- most of a compact gate's body --
     // never reached it).
-    let pinHit = e.ctrlKey
-      ? undefined
-      : nearestFree(targets, world, hitScale(theme), MIN_HIT_RADIUS);
+    // A pin's touch target is larger than a switch's whole body, so while the
+    // sim owns the board this path turned "tap the switch to drive it" into
+    // "start a wire from its output" -- a wire that could never commit.
+    let pinHit =
+      e.ctrlKey || powered
+        ? undefined
+        : nearestFree(targets, world, hitScale(theme), MIN_HIT_RADIUS);
     // A bare marker's whole 2G body sits inside its pins' loose radius, so a
     // pin press here would make the marker impossible to grab -- fall through
     // to the body drag instead, UNLESS the click lands within a tight radius
@@ -3509,7 +3569,7 @@ export function CircuitWorkbench() {
       }
     }
     if (pinHit) {
-      wiringRef.current = pinHit;
+      setWiringStart(pinHit);
       wireBendsRef.current = [];
       setHoverPin(pinHit.worldPos);
       return;
@@ -3816,6 +3876,11 @@ export function CircuitWorkbench() {
       // One finger lifted: end the pinch rather than reinterpreting the
       // remaining finger's position as a drag from where the pinch started.
       if (gestureRef.current.points.length < 2) pinchRef.current = null;
+      // A hover cue has no way to expire on touch: the finger lifts and no
+      // further move ever arrives to move or clear it, so the pin ghost sat
+      // there for good. With a wire still in flight it is not hover at all --
+      // it shows where that wire will land -- so it stays.
+      if (!wiringRef.current) setHoverPin(undefined);
     }
     panRef.current = null;
     if (heldButtonsRef.current.size > 0) {
@@ -4464,7 +4529,10 @@ export function CircuitWorkbench() {
             id: 'deleteHeal',
             label: 'Delete and reconnect',
             shortcut: SHORTCUTS.deleteHeal,
-            disabled: selection.size === 0,
+            // Offered only where healing is possible: everywhere else it was
+            // a plain Delete wearing a second name, which on the touch action
+            // bar meant two identical-looking buttons.
+            disabled: !canHealSelection(st().activeCircuit(), selection),
             run: () => st().deleteWithHeal(undefined, resolveWireEnd),
           },
           { separator: true },
@@ -4631,7 +4699,20 @@ export function CircuitWorkbench() {
         ],
       },
     ];
-  }, [selection, analyzeOpen, waveformOpen, powered, running, canStep, timing, mode, viewOnly]);
+    // `rev` so the heal test re-runs when the wires around a selected junction
+    // change without the selection itself changing.
+  }, [
+    selection,
+    rev,
+    analyzeOpen,
+    waveformOpen,
+    powered,
+    running,
+    canStep,
+    timing,
+    mode,
+    viewOnly,
+  ]);
   useContributeMenus('circuit', circuitMenus);
 
   const selectedComponent =
@@ -4650,7 +4731,7 @@ export function CircuitWorkbench() {
             <ToolBtn
               icon="power"
               active={powered}
-              title="Compile and settle; all nets start at X (Space)"
+              title={`Compile and settle; all nets start at X${key('Space')}`}
               onClick={() => store.getState().power()}
             >
               {powered ? 'Power off' : 'Power on'}
@@ -4672,7 +4753,7 @@ export function CircuitWorkbench() {
             >
               Analyze
             </ToolBtn>
-            <ToolBtn icon="fit" title="Fit the board to the view (Home)" onClick={fitView}>
+            <ToolBtn icon="fit" title={`Fit the board to the view${key('Home')}`} onClick={fitView}>
               Fit
             </ToolBtn>
             {compact && examplesCmd && !examplesCmd.disabled ? (
@@ -4705,7 +4786,7 @@ export function CircuitWorkbench() {
           <div className="circuit-inspector">
             <b>{selectedComponent.label ?? selectedComponent.id}</b>
             <span className="hint">{selectedComponent.kind}</span>
-            {powered && <span className="hint">tap a switch to drive it</span>}
+            {powered && <span className="hint">{press} a switch to drive it</span>}
           </div>
         )}
       </div>
@@ -4731,7 +4812,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="doubleNot"
                 active={bubblePairMode}
-                title="Insert a ¬¬ pair on a wire (click one, or Tab to it and press Enter)"
+                title={`Insert a ¬¬ pair on a wire (${press} one${coarse ? '' : ', or Tab to it and press Enter'})`}
                 onClick={() => store.getState().setBubblePairMode(!bubblePairMode)}
               >
                 Insert ¬¬
@@ -4739,7 +4820,7 @@ export function CircuitWorkbench() {
               <button
                 type="button"
                 className="tool-btn"
-                title="Undo (Ctrl+Z)"
+                title={`Undo${key('Ctrl+Z')}`}
                 onClick={() => store.getState().undo()}
               >
                 <ToolIcon name="undo" />
@@ -4748,7 +4829,7 @@ export function CircuitWorkbench() {
               <button
                 type="button"
                 className="tool-btn"
-                title="Redo (Ctrl+Shift+Z)"
+                title={`Redo${key('Ctrl+Shift+Z')}`}
                 onClick={() => store.getState().redo()}
               >
                 <ToolIcon name="redo" />
@@ -4786,7 +4867,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="undo"
                 quick
-                title="Undo (Ctrl+Z)"
+                title={`Undo${key('Ctrl+Z')}`}
                 onClick={() => store.getState().undo()}
               >
                 Undo
@@ -4794,7 +4875,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="redo"
                 quick
-                title="Redo (Ctrl+Shift+Z)"
+                title={`Redo${key('Ctrl+Shift+Z')}`}
                 onClick={() => store.getState().redo()}
               >
                 Redo
@@ -4809,7 +4890,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="select"
                 active={tool.kind === 'select'}
-                title="Select and move (Esc)"
+                title={`Select and move${key('Esc')}`}
                 onClick={() => store.getState().setTool({ kind: 'select' })}
               >
                 Select
@@ -4818,23 +4899,29 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="lasso"
                 active={tool.kind === 'lasso'}
-                title="Lasso: drag a marquee to select (L)"
+                title={`Lasso: drag a marquee to select${key('L')}`}
                 onClick={() => store.getState().setTool({ kind: 'lasso' })}
               >
                 Lasso
               </ToolBtn>
+              {/* A wire in flight leaves a ghost that only Esc or a press
+                  outside the canvas clears, and a phone has neither to hand.
+                  The wire button becomes that wire's own cancel while it is
+                  being drawn. */}
               <ToolBtn
-                icon="wire"
+                icon={wiring ? 'cancel' : 'wire'}
                 active={tool.kind === 'wire'}
-                title="Draw wires (W)"
-                onClick={() => store.getState().setTool({ kind: 'wire' })}
+                title={wiring ? 'Discard this wire' : `Draw wires${key('W')}`}
+                onClick={() =>
+                  wiring ? discardWire() : store.getState().setTool({ kind: 'wire' })
+                }
               >
-                Wire
+                {wiring ? 'Cancel' : 'Wire'}
               </ToolBtn>
               <ToolBtn
                 icon="junction"
                 active={tool.kind === 'junction'}
-                title="Place a junction (J)"
+                title={`Place a junction${key('J')}`}
                 onClick={() => store.getState().setTool({ kind: 'junction' })}
               >
                 Junction
@@ -4850,7 +4937,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="connect"
                 disabled={selection.size < 2}
-                title="Connect the selected parts (F). Suggests wires; tap the board or press Enter to accept."
+                title={`Connect the selected parts${key('F')}. Suggests wires; ${press} the board${coarse ? '' : ' or press Enter'} to accept.`}
                 onClick={proposeSmartConnect}
               >
                 Connect
@@ -4887,7 +4974,7 @@ export function CircuitWorkbench() {
                 icon="power"
                 quick
                 active={powered}
-                title="Compile and settle; all nets start at X (Space)"
+                title={`Compile and settle; all nets start at X${key('Space')}`}
                 onClick={() => store.getState().power()}
               >
                 {powered ? 'Power off' : 'Power on'}
@@ -4906,7 +4993,7 @@ export function CircuitWorkbench() {
                 type="button"
                 className="tool-btn"
                 disabled={!canStep}
-                title="Advance to the next scheduled event (.)"
+                title={`Advance to the next scheduled event${key('.')}`}
                 onClick={() => store.getState().step()}
               >
                 <ToolIcon name="step" />
@@ -5002,7 +5089,7 @@ export function CircuitWorkbench() {
         <PaletteRail paletteRef={paletteRef} width={paletteW} />
         <div
           className="circuit-palette__resize"
-          title="Drag to resize the palette; double-click to fit the longest name"
+          title={`Drag to resize the palette; double-${press} to fit the longest name`}
           onPointerDown={(e) => {
             paletteResizeRef.current = {
               startX: e.clientX,
@@ -5086,7 +5173,7 @@ export function CircuitWorkbench() {
               <button
                 type="button"
                 className="tool-btn"
-                title="Accept the suggested wires (Enter)"
+                title={`Accept the suggested wires${key('Enter')}`}
                 onClick={commitSmartConnect}
               >
                 <span className="tool-btn__label">Accept</span>
@@ -5094,7 +5181,7 @@ export function CircuitWorkbench() {
               <button
                 type="button"
                 className="tool-btn"
-                title="Discard the suggestion (Esc)"
+                title={`Discard the suggestion${key('Esc')}`}
                 onClick={() => {
                   setSmartConnect(null);
                   drawRef.current();
@@ -5113,7 +5200,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="power"
                 active={powered}
-                title={powered ? 'Power off (Space)' : 'Power on (Space)'}
+                title={`${powered ? 'Power off' : 'Power on'}${key('Space')}`}
                 onClick={() => store.getState().power()}
               >
                 {powered ? 'Power off' : 'Power on'}
@@ -5562,7 +5649,7 @@ function nearestFree(
   targets: PinTarget[],
   cursor: Vec2,
   scale: number,
-  baseRadius = 24,
+  baseRadius = LOOSE_HIT_RADIUS,
 ): PinTarget | null {
   const radius = baseRadius * scale;
   let best: PinTarget | null = null;
@@ -5584,7 +5671,7 @@ function nearestFree(
 // add-a-bend fallback), which `nearestCompatiblePin`'s own filtering can't
 // tell apart on its own since an incompatible pin just doesn't show up there.
 function nearestAnyPin(targets: PinTarget[], cursor: Vec2, scale: number): PinTarget | undefined {
-  const radius = MIN_HIT_RADIUS * scale * 2;
+  const radius = LOOSE_HIT_RADIUS * scale;
   let best: PinTarget | undefined;
   let bestDist = Infinity;
   for (const t of targets) {

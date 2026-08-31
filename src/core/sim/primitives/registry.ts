@@ -14,6 +14,7 @@ import {
   busTapDrive,
   busTapRead,
   constant,
+  gndRail,
   inputPin,
   merge,
   netLabel,
@@ -22,6 +23,7 @@ import {
   pullUp,
   split,
   tunnel,
+  vccRail,
 } from './structural';
 import { dff, dlatch, register } from './sequential';
 import { clock, led, probe, pushButton, toggleSwitch } from './stimulus';
@@ -29,6 +31,7 @@ import { mux } from './mux';
 import { demux } from './demux';
 import { busdisplay, sevenseg, sevenseghex } from './display';
 import { decoder, encoder } from './coder';
+import { bcd7seg } from './bcd7seg';
 
 const specs = new Map<string, PrimitiveSpec>();
 
@@ -71,6 +74,8 @@ for (const spec of [
   tunnel,
   pullUp,
   pullDown,
+  vccRail,
+  gndRail,
   dff,
   dlatch,
   register,
@@ -86,6 +91,7 @@ for (const spec of [
   busdisplay,
   decoder,
   encoder,
+  bcd7seg,
 ]) {
   registerPrimitive(spec);
 }

@@ -20,6 +20,7 @@ import {
 } from '../../core/numkit/solution';
 import type { Interpretation, Operator, SubMethod } from '../../core/numkit/types';
 import { useReferenceDrawer } from '../components/ReferenceDrawer';
+import { useCoarsePointer } from '../pointerKind';
 import { BitGrid } from './BitGrid';
 import { ValueEntry } from './ValueEntry';
 import { operatorReference } from './referenceContent';
@@ -179,6 +180,9 @@ function SolutionSection({
 }
 
 export function ComputeTab() {
+  // The reveal is teacher-paced either way; only the shortcut half of the
+  // label is keyboard-specific.
+  const coarse = useCoarsePointer();
   const { a, b, width, interp, operator, hideAnswers, stepIndex, subMethod } = useNumbersStore();
   const setA = useNumbersStore((s) => s.setA);
   const setB = useNumbersStore((s) => s.setB);
@@ -291,7 +295,7 @@ export function ComputeTab() {
                 else toggleHideAnswers();
               }}
             >
-              {revealed ? 'Hide (Enter)' : 'Show (Enter)'}
+              {`${revealed ? 'Hide' : 'Show'}${coarse ? '' : ' (Enter)'}`}
             </button>
           </div>
           {revealed ? (

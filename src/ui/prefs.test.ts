@@ -51,3 +51,22 @@ describe('fitOnOpen', () => {
     expect(mergePrefs({ fitOnOpen: false }).fitOnOpen).toBe(false);
   });
 });
+
+describe('thickenStrokesInPresentation', () => {
+  it('defaults on, so presentation mode looks as it always did', () => {
+    expect(DEFAULT_PREFS.thickenStrokesInPresentation).toBe(true);
+    expect(mergePrefs({}).thickenStrokesInPresentation).toBe(true);
+  });
+
+  it('round-trips off', () => {
+    expect(mergePrefs({ thickenStrokesInPresentation: false }).thickenStrokesInPresentation).toBe(
+      false,
+    );
+  });
+
+  it('falls back on a wrong-typed entry rather than poisoning the blob', () => {
+    expect(mergePrefs({ thickenStrokesInPresentation: 'yes' }).thickenStrokesInPresentation).toBe(
+      true,
+    );
+  });
+});

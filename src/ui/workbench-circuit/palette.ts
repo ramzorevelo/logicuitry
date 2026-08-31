@@ -11,6 +11,10 @@ export type PaletteGroup =
   | 'Outputs'
   | 'Wiring';
 
+/** Built-in chip group. Not a PaletteGroup: its items are ChipDefs from the
+ *  parts library, not primitives, so the rail renders it beside "My chips". */
+export const PARTS_GROUP = '74 series';
+
 /** Section order in the palette rail: the two panel-device groups sit together
  *  at the top, since a board is normally stimulus-first. */
 export const PALETTE_GROUPS: PaletteGroup[] = [
@@ -52,5 +56,14 @@ export const PALETTE: PaletteItem[] = [
   { kind: 'led', label: 'LED', group: 'Outputs' },
   { kind: 'probe', label: 'Probe', group: 'Outputs' },
   { kind: 'outport', label: 'Out port', group: 'Outputs' },
+  {
+    kind: 'sevenseg',
+    label: '7-seg (cathode)',
+    group: 'Outputs',
+    params: { common: 'cathode' },
+  },
+  { kind: 'sevenseg', label: '7-seg (anode)', group: 'Outputs', params: { common: 'anode' } },
   { kind: 'netlabel', label: 'Net label', group: 'Wiring' },
+  { kind: 'vcc', label: 'VCC', group: 'Wiring' },
+  { kind: 'gnd', label: 'GND', group: 'Wiring' },
 ];

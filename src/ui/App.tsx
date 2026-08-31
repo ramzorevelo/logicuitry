@@ -199,6 +199,13 @@ export function App() {
     void (next ? requestAppFullscreen() : exitAppFullscreen());
   };
 
+  // The class, not a Theme field: readTheme reads a token, and every canvas
+  // already re-reads on a documentElement class change.
+  const thickStrokes = usePrefsStore((s) => s.prefs.thickenStrokesInPresentation);
+  useEffect(() => {
+    document.documentElement.classList.toggle('thin-strokes', !thickStrokes);
+  }, [thickStrokes]);
+
   // Esc and F11 leave fullscreen without passing through the button, so the
   // scaled chrome has to follow the real state rather than our memory of it.
   const leftFullscreenRef = useRef(false);

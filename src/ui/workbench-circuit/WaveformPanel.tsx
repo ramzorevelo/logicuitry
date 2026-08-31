@@ -57,6 +57,17 @@ export function WaveformPanel() {
   const [autoScroll, setAutoScroll] = useState(true);
   const [thresholdNs, setThresholdNs] = useState(() => getPrefs().glitchThresholdNs);
   const [measure, setMeasure] = useState<MeasureState | null>(null);
+  // Δt used to be Alt+click only, which is unreachable by finger. The toggle
+  // is the primary control on both; Alt+click stays as the shortcut for one
+  // measure without leaving scrub mode.
+  const [measuring, setMeasuring] = useState(false);
+  // Scrubbing parks the schematic at one recorded instant; this walks that
+  // instant forward through the trace already captured. It re-reads history,
+  // it never advances the simulation, which is why it is separate from Run.
+  const [playing, setPlaying] = useState(false);
+  // Where the current run began, so pressing Replay after it ends repeats the
+  // same stretch instead of starting again from a cursor parked on the end.
+  const playStartRef = useRef<number | null>(null);
   const [annotations, setAnnotations] = useState<WaveAnnotation[]>([]);
   // Session-only view-state (owner decision): row order + hidden signals live
   // in the panel, not the board doc; unknown paths keep board order, appended.
@@ -403,9 +414,14 @@ export function WaveformPanel() {
       hoverPath: hoverTrackPath,
       highlightPaths: chevronHighlightPaths,
       // A hidden track's scoped annotation would fall back to full-height.
-      annotations: [...setupHoldAnnotations, ...annotations].filter(
-        (a) => !a.trackPath || !hiddenTracks.has(a.trackPath),
-      ),
+      // The armed edge of a half-finished measure: without it the first pick
+      // leaves no trace, so there is nothing on screen saying what the second
+      // one will be measured against.
+      annotations: [
+        ...setupHoldAnnotations,
+        ...annotations,
+        ...(measure ? [{ kind: 'marker' as const, t0: measure.t0, label: 'Δt' }] : []),
+      ].filter((a) => !a.trackPath || !hiddenTracks.has(a.trackPath)),
       expandedTracks,
     });
   }, [
@@ -418,6 +434,7 @@ export function WaveformPanel() {
     chevronHighlightPaths,
     annotations,
     setupHoldAnnotations,
+    measure,
     hiddenTracks,
     showArrows,
     panelH,
@@ -578,8 +595,8 @@ export function WaveformPanel() {
     }
     const t = cursorFromEvent(e);
     if (t === null) return;
-    if (e.altKey) {
-      // Alt+click: Δt measure -- first edge arms, second commits an interval.
+    if (e.altKey || measuring) {
+      // First edge arms, second commits an interval.
       if (!measure) setMeasure({ t0: t });
       else {
         setAnnotations((a) => [...a, { kind: 'interval', t0: measure.t0, t1: t }]);
@@ -745,6 +762,45 @@ export function WaveformPanel() {
     }
   };
 
+  // Crossing the visible window takes the same wall time whatever it spans, so
+  // the speed reads off the axis rather than off the circuit.
+  const PLAY_ACROSS_MS = 4000;
+  useEffect(() => {
+    if (!playing) return;
+    if (!view || view.t1 <= view.t0) {
+      setPlaying(false);
+      return;
+    }
+    const perMs = (view.t1 - view.t0) / PLAY_ACROSS_MS;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const st = store.getState();
+      const next = (st.replayTimePs ?? view.t0) + (now - last) * perMs;
+      last = now;
+      if (next >= view.t1) {
+        st.setReplayTime(view.t1);
+        setPlaying(false);
+        return;
+      }
+      st.setReplayTime(next);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, view, store]);
+
+  // Anything that moves the simulation drops the cursor back to live, and a
+  // playback still running against a cursor that no longer exists is a loop
+  // with nothing to advance.
+  useEffect(() => {
+    if (replayTime !== null) return;
+    setPlaying(false);
+    // Back on the live sim: the next run is a fresh one, not a repeat of a
+    // stretch the cursor has left.
+    playStartRef.current = null;
+  }, [replayTime]);
+
   const hasBands = !!view?.tracks.some((t) => t.bands.length);
 
   return (
@@ -811,6 +867,53 @@ export function WaveformPanel() {
             <button
               type="button"
               className="tool-btn"
+              aria-pressed={playing}
+              disabled={!powered || !view}
+              title="Walk the cursor forward through the recorded trace"
+              onClick={() => {
+                if (playing) {
+                  setPlaying(false);
+                  return;
+                }
+                if (!view) return;
+                // From where the cursor already is, so clicking the timeline
+                // and pressing Replay plays from exactly that instant. A
+                // cursor already at the end has nothing left to play, so it
+                // rewinds to where the last run started -- or to the start of
+                // the window, when this is the first run.
+                const at = replayTime ?? view.t0;
+                const from = at >= view.t1 ? (playStartRef.current ?? view.t0) : at;
+                playStartRef.current = from;
+                store.getState().setReplayTime(from);
+                setPlaying(true);
+              }}
+            >
+              {playing ? 'Pause ⏸' : 'Replay ▸'}
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              disabled={replayTime === null}
+              title="Drop the cursor and follow the live simulation again"
+              onClick={() => store.getState().setReplayTime(null)}
+            >
+              Live
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              aria-pressed={measuring}
+              title="Measure Δt: pick two edges"
+              onClick={() => {
+                setMeasuring((v) => !v);
+                setMeasure(null);
+              }}
+            >
+              Δt
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
               disabled={annotations.length === 0}
               title="Clear Δt measures"
               onClick={() => setAnnotations([])}
@@ -869,10 +972,17 @@ export function WaveformPanel() {
                 ns
               </label>
             )}
-            {measure && <span className="wave-panel__hint">Δt: Alt+click the second edge…</span>}
+            {(measure || measuring) && (
+              <span className="wave-panel__hint">
+                {measure ? 'Δt: pick the second edge…' : 'Δt: pick the first edge…'}
+              </span>
+            )}
             {replayTime !== null && (
               <span className="wave-panel__hint">
-                {compact ? 'replay' : 'replay · Esc or Space/step returns to live'}
+                {/* Space is power on/off in this workbench, and Step parks the
+                    cursor on the moment it stepped to rather than returning to
+                    live: naming either here sent people to the wrong control. */}
+                {compact ? 'cursor' : 'cursor · Live or Esc returns to the live sim'}
               </span>
             )}
             {hasBands && (

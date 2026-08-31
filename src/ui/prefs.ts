@@ -13,6 +13,10 @@ export interface Prefs {
   hideAnswersDefault: boolean;
   timingModel: 'ideal' | 'datasheet';
   presentationAtLaunch: boolean;
+  /** Heavier strokes in presentation mode. Only strokes: component geometry is
+   *  deliberately never scaled there, because growing a glyph moves its pins
+   *  and reshapes every wire routed around it. */
+  thickenStrokesInPresentation: boolean;
   defaultTheme: ThemeName;
   restoreLastBoard: boolean;
   /** Frame a board to the viewport when it opens, as Home does. A bundled
@@ -37,6 +41,7 @@ export const DEFAULT_PREFS: Prefs = {
   hideAnswersDefault: true,
   timingModel: 'ideal',
   presentationAtLaunch: false,
+  thickenStrokesInPresentation: true,
   defaultTheme: 'light',
   restoreLastBoard: true,
   fitOnOpen: true,
@@ -76,6 +81,10 @@ export function mergePrefs(raw: unknown): Prefs {
     hideAnswersDefault: bool(r['hideAnswersDefault'], d.hideAnswersDefault),
     timingModel: r['timingModel'] === 'datasheet' ? 'datasheet' : 'ideal',
     presentationAtLaunch: bool(r['presentationAtLaunch'], d.presentationAtLaunch),
+    thickenStrokesInPresentation: bool(
+      r['thickenStrokesInPresentation'],
+      d.thickenStrokesInPresentation,
+    ),
     defaultTheme: theme(r['defaultTheme']),
     restoreLastBoard: bool(r['restoreLastBoard'], d.restoreLastBoard),
     fitOnOpen: bool(r['fitOnOpen'], d.fitOnOpen),

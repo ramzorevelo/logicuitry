@@ -7,7 +7,14 @@ import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
 import { getPrimitive } from '../sim/primitives/registry';
 import { intParam } from '../sim/primitives/types';
 import { FALLBACK_NS } from '../sim/delay';
-import { contaminationNs, getPart, propagationNs, type DatasheetColumn } from '../parts/partsDb';
+import {
+  column,
+  contaminationNs,
+  getPart,
+  propagationNs,
+  typPublished,
+  type DatasheetColumn,
+} from '../parts/partsDb';
 
 export class TimingError extends Error {
   constructor(
@@ -27,6 +34,8 @@ export interface TimingHop {
   tcdPs: number;
   /** t_cd is a documented estimate (0.35 x typ t_pd), never a datasheet minimum. */
   estimated: boolean;
+  /** The part publishes no typ column, so its "typ" figures are really its max. */
+  typUnpublished?: boolean;
 }
 
 export interface PathTiming {
@@ -41,6 +50,7 @@ export interface PathTiming {
   critical: TimingHop[];
   short: TimingHop[];
   estimated: boolean;
+  typUnpublished: boolean;
 }
 
 export interface SeqPathTiming {
@@ -117,6 +127,7 @@ export interface HopDelay {
   tpdPs: number;
   tcdPs: number;
   estimated: boolean;
+  typUnpublished?: boolean;
 }
 
 /** Slowest-arc t_pd / fastest t_cd for a part, mirroring datasheetDelay's conventions. */
@@ -126,7 +137,12 @@ export function partDelayPs(part: string | undefined, col: DatasheetColumn): Hop
   const hl = propagationNs(part, 'hl', col) ?? FALLBACK_NS;
   const clh = contaminationNs(part, 'lh') ?? Math.round(0.35 * FALLBACK_NS);
   const chl = contaminationNs(part, 'hl') ?? Math.round(0.35 * FALLBACK_NS);
-  return { tpdPs: toPs(Math.max(lh, hl)), tcdPs: toPs(Math.min(clh, chl)), estimated: true };
+  return {
+    tpdPs: toPs(Math.max(lh, hl)),
+    tcdPs: toPs(Math.min(clh, chl)),
+    estimated: true,
+    ...(typPublished(part) ? {} : { typUnpublished: true }),
+  };
 }
 
 function hopDelay(
@@ -139,9 +155,17 @@ function hopDelay(
     const key = PART_PATHS[part]?.[`${inPin}->${outPin}`] ?? codecPathKey(inPin, outPin);
     const fig = key ? getPart(part)?.paths?.[key] : undefined;
     if (fig) {
-      const tpd = Math.max(fig.tplh[col], fig.tphl[col]);
-      const tcd = Math.min(Math.round(0.35 * fig.tplh.typ), Math.round(0.35 * fig.tphl.typ));
-      return { tpdPs: toPs(tpd), tcdPs: toPs(tcd), estimated: true };
+      const tpd = Math.max(column(fig.tplh, col), column(fig.tphl, col));
+      const tcd = Math.min(
+        Math.round(0.35 * column(fig.tplh, 'typ')),
+        Math.round(0.35 * column(fig.tphl, 'typ')),
+      );
+      return {
+        tpdPs: toPs(tpd),
+        tcdPs: toPs(tcd),
+        estimated: true,
+        ...(typPublished(part) ? {} : { typUnpublished: true }),
+      };
     }
   }
   return partDelayPs(part, col);
@@ -287,6 +311,7 @@ function propagate(
           tpdPs: d.tpdPs,
           tcdPs: d.tcdPs,
           estimated: d.estimated,
+          ...(d.typUnpublished ? { typUnpublished: true } : {}),
         };
         const maxPs = from.maxPs + d.tpdPs;
         const minPs = from.minPs + d.tcdPs;
@@ -343,6 +368,7 @@ function pathTiming(arr: Map<number, NetArrival>, net: number, endpoint: string)
     critical,
     short,
     estimated: critical.some((h) => h.estimated) || short.some((h) => h.estimated),
+    typUnpublished: critical.some((h) => h.typUnpublished) || short.some((h) => h.typUnpublished),
   };
 }
 

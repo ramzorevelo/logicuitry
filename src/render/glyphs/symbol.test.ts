@@ -146,7 +146,7 @@ describe('drawStubBusBadge (M6.6 Phase 6: collapsed multi-bit pin marker)', () =
     expect(ctx.fillText).toHaveBeenCalledWith('5', 0, 0);
   });
 
-  it('undoes rotation for the badge number at rot 90 (stays upright)', () => {
+  it('turns the badge number with the body at rot 90, like every other label', () => {
     const ctx = fakeCtx();
     drawStubBusBadge(
       ctx,
@@ -156,8 +156,24 @@ describe('drawStubBusBadge (M6.6 Phase 6: collapsed multi-bit pin marker)', () =
       { x: 2 * G, y: 0 },
       5,
     );
-    expect(ctx.rotate).toHaveBeenCalledWith((-90 * Math.PI) / 180);
+    // A quarter-turn no longer counter-rotates: the badge sits beside a pin
+    // label that now reads sideways, and one upright digit next to it reads
+    // as a mistake rather than a courtesy.
+    expect(ctx.rotate).not.toHaveBeenCalled();
     expect(ctx.fillText).toHaveBeenCalledWith('5', 0, 0);
+  });
+
+  it('still undoes a half-turn, which would otherwise print upside down', () => {
+    const ctx = fakeCtx();
+    drawStubBusBadge(
+      ctx,
+      theme,
+      { pos: { x: 0, y: 0 }, rot: 180 },
+      { x: 0, y: 0 },
+      { x: 2 * G, y: 0 },
+      5,
+    );
+    expect(ctx.rotate).toHaveBeenCalledWith((-180 * Math.PI) / 180);
   });
 });
 

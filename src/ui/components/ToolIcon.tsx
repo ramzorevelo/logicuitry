@@ -24,9 +24,11 @@ export type IconName =
   | 'timing'
   | 'sta'
   | 'open'
-  | 'doubleNot';
+  | 'doubleNot'
+  | 'cancel';
 
 const PATHS: Record<IconName, JSX.Element> = {
+  cancel: <path d="M6 6 L18 18 M18 6 L6 18" />,
   select: <path d="M6 3 L6 19 L10 15 L13 21 L16 20 L13 14 L18 14 Z" />,
   wire: (
     <>

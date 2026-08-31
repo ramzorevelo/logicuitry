@@ -26,6 +26,7 @@ import {
   type SymbolGeometry,
 } from './symbol';
 import { bodyRectPath, paintBody } from './relief';
+import { dipGeometry, isDipPackage } from './dip';
 
 const BOX_KINDS = [
   'chip',
@@ -194,7 +195,11 @@ function toGeometry(layout: BoxLayout): SymbolGeometry {
 }
 
 for (const kind of BOX_KINDS) {
-  registerGlyphGeometry(kind, (input, theme) => toGeometry(boxLayout(input, theme)));
+  registerGlyphGeometry(kind, (input, theme) =>
+    // A chip whose def names a physical package is that package's silhouette,
+    // not a generic box; every other chip is unchanged.
+    isDipPackage(input.package) ? dipGeometry(input, theme) : toGeometry(boxLayout(input, theme)),
+  );
 }
 
 /** Constant's "name" is its value rendered 0x2F-style (glyph doc §4). */

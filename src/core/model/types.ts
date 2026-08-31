@@ -52,6 +52,7 @@ export type ComponentKind =
   | 'demux'
   | 'decoder'
   | 'encoder'
+  | 'bcd7seg'
   | 'dff'
   | 'dlatch'
   | 'register'
@@ -63,6 +64,8 @@ export type ComponentKind =
   | 'tapread'
   | 'pullup'
   | 'pulldown'
+  | 'vcc'
+  | 'gnd'
   | 'chip';
 
 export interface Component {
@@ -160,6 +163,10 @@ export interface ChipAppearance {
   borderColor?: string;
   widthUnits?: number;
   heightUnits?: number;
+  /** Physical package ('DIP14', 'DIP16') when the def stands for a real part:
+   *  it is drawn as that package with datasheet pin numbers instead of the
+   *  generic in-left/out-right box. Absent on every user-packaged chip. */
+  package?: string;
 }
 
 export interface ChipDef extends Circuit {

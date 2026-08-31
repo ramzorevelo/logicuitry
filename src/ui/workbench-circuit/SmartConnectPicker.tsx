@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { oneLine } from '../../render/glyphs/symbol';
-import { readTheme } from '../../render/theme';
+import { schematicTheme } from '../../render/theme';
 import { useCircuitStore } from './circuitStore';
 import { collectPinTargets, type PinTarget } from './pinTargets';
 
@@ -20,7 +20,7 @@ export function SmartConnectPicker({ targetId, onClose }: Props) {
   const [pendingSource, setPendingSource] = useState<PinTarget | null>(null);
 
   const st = useCircuitStore.getState();
-  const theme = readTheme();
+  const theme = schematicTheme();
   const circuit = st.activeCircuit();
   const targets = collectPinTargets(circuit.components, circuit.wires, theme, st.chipLib);
   const pairedSourceKeys = new Set(pairs.map((p) => `${p.source.componentId} ${p.source.pinName}`));

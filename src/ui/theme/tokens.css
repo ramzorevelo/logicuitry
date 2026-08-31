@@ -310,8 +310,17 @@
   font-size: 135%;
   --stroke-scale: 1.4;
   /* Names and pin labels are the smallest thing on a 65" TV, and unlike
-     chrome text they do not follow the root font size. */
+     chrome text they do not follow the root font size. The schematic opts out
+     of this one (render/theme.ts schematicTheme): glyph geometry measures
+     against it, so scaling it there would move every pin. */
   --glyph-text-scale: 1.5;
+}
+
+/* Heavier presentation strokes turned off in Settings. Strokes are the only
+   presentation scaling the schematic still takes, so this is the switch that
+   makes a board render identically fullscreen and not. */
+:root.presentation.thin-strokes {
+  --stroke-scale: 1;
 }
 
 /* Motion floor: nothing in this app is decorative motion, but a viewer who

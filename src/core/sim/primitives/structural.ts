@@ -68,6 +68,22 @@ export const constant: PrimitiveSpec = {
   }),
 };
 
+/**
+ * Power rail sources. A chip's VCC/GND pins are real inputs that must be wired
+ * for it to drive anything, so the rails need a placeable symbol; each is a
+ * fixed-value driver, which is `constant` with the value spelled out by the
+ * glyph instead of a parameter.
+ */
+function rail(kind: string, level: 0 | 1): PrimitiveSpec {
+  return {
+    kind,
+    pins: () => [{ name: 'p', dir: 'out', width: 1, role: 'data', order: 0 }],
+    evaluate: () => ({ outputs: [bv.known(level, 1)] }),
+  };
+}
+export const vccRail = rail('vcc', 1);
+export const gndRail = rail('gnd', 0);
+
 export const split: PrimitiveSpec = {
   kind: 'split',
   pins: (params) => {

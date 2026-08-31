@@ -9,7 +9,7 @@ import type { ChipDef, ChipLibrary, Circuit, PinDef, PinDir } from '../../core/m
 import { useCircuitStore } from './circuitStore';
 import { useShellStore } from '../store';
 import { exportDoc, pickDirectory, writeDoc } from '../../io/fsAccess';
-import { CHIP_TINTS, colorName, readTheme, type ChipTint } from '../../render/theme';
+import { CHIP_TINTS, colorName, schematicTheme, type ChipTint } from '../../render/theme';
 import {
   cloneCircuit,
   derivePins,
@@ -152,7 +152,7 @@ export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
   // Named from the colour the ACTIVE theme resolved each token to -- the user
   // should never read "warn" or "accent2" for a colour they are looking at.
   const swatches = useMemo(() => {
-    const theme = readTheme();
+    const theme = schematicTheme();
     return CHIP_TINTS.map((tint) => ({
       tint,
       css: theme.colors[tint],

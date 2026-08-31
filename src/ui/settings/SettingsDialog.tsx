@@ -74,6 +74,11 @@ export function SettingsDialog({ onClose }: Props) {
         <h4>Teaching</h4>
         {check('hideAnswersDefault', 'Hide answers by default', 'Enter reveals, as it does today.')}
         {check('presentationAtLaunch', 'Start in presentation scaling')}
+        {check(
+          'thickenStrokesInPresentation',
+          'Thicker lines in presentation mode',
+          'Off: a board draws identically fullscreen and windowed.',
+        )}
         <label className="settings-row">
           <select
             value={prefs.timingModel}

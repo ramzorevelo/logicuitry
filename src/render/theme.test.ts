@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { busSignalState, cycleTheme, signalStyle, SELECTABLE_THEMES, THEMES } from './theme';
+import {
+  busSignalState,
+  cycleTheme,
+  signalStyle,
+  withoutPresentationScale,
+  SELECTABLE_THEMES,
+  THEMES,
+} from './theme';
 import { makeTestTheme } from './theme.fixture';
 
 const v = (value: number, x = 0, z = 0) => ({ v: value, x, z });
@@ -67,5 +74,28 @@ describe('cycleTheme', () => {
     for (const t of THEMES)
       for (const dir of [1, -1] as const)
         expect(SELECTABLE_THEMES.map((x) => x.name)).toContain(cycleTheme(t.name, dir));
+  });
+});
+
+describe('withoutPresentationScale', () => {
+  const base = makeTestTheme();
+
+  it('passes a non-presentation theme through untouched', () => {
+    expect(withoutPresentationScale(base)).toBe(base);
+  });
+
+  it('drops the presentation text scale, so glyph geometry cannot move', () => {
+    const scaled = { ...base, presentation: true, glyphText: base.canvasTextMin * 1.5 };
+    const schematic = withoutPresentationScale(scaled);
+    expect(schematic.glyphText).toBe(base.canvasTextMin);
+    expect(schematic.glyphText).toBeLessThan(scaled.glyphText);
+  });
+
+  it('keeps the heavier presentation strokes and grid, which move nothing', () => {
+    const scaled = { ...base, presentation: true, glyphText: base.canvasTextMin * 1.5 };
+    const schematic = withoutPresentationScale(scaled);
+    expect(schematic.strokes).toEqual(scaled.strokes);
+    expect(schematic.gridSchematic).toBe(scaled.gridSchematic);
+    expect(schematic.presentation).toBe(true);
   });
 });

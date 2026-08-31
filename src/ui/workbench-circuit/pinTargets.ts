@@ -4,7 +4,7 @@
 
 import type { ChipLibrary, Component, PinDir, PinRole, Wire } from '../../core/model/types';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
-import { MIN_HIT_RADIUS } from '../../render/hitTest';
+import { LOOSE_HIT_RADIUS } from '../../render/hitTest';
 import type { Vec2 } from '../../render/scene';
 import type { Theme } from '../../render/theme';
 
@@ -166,7 +166,7 @@ export function nearestCompatiblePin(
   scale: number,
   allowOccupied?: (t: PinTarget) => boolean,
 ): PinTarget | undefined {
-  const radius = MIN_HIT_RADIUS * scale * 2; // loose = 2x click target
+  const radius = LOOSE_HIT_RADIUS * scale;
   let best: PinTarget | undefined;
   let bestDist = Infinity;
   for (const t of targets) {

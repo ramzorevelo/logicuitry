@@ -86,6 +86,40 @@
     },
 
     {
+      "part": "74LS47",
+      "primitive": "bcd7seg",
+      "paths": {
+        "a_to_seg": {
+          "tplh": { "max": 100 },
+          "tphl": { "max": 100 }
+        },
+        "rbi_to_seg": {
+          "tplh": { "max": 100 },
+          "tphl": { "max": 100 }
+        }
+      },
+      "verified": true,
+      "source": "ON Semi SN74LS47/D rev 6 (Dec 1999) switching characteristics: address input to segment output and RBI input to segment output, both tPLH/tPHL 100 ns. The datasheet publishes a max column only -- no typ figure exists for this part, so `typ` is absent rather than invented"
+    },
+
+    {
+      "part": "74LS48",
+      "primitive": "bcd7seg",
+      "paths": {
+        "a_to_seg": {
+          "tplh": { "max": 100 },
+          "tphl": { "max": 100 }
+        },
+        "rbi_to_seg": {
+          "tplh": { "max": 100 },
+          "tphl": { "max": 100 }
+        }
+      },
+      "verified": true,
+      "source": "National DM74LS48 TL/F/10172 (Jan 1992) switching characteristics: An to a-g and RBI to a-f, both tPLH/tPHL 100 ns, max column only. Same figures as the '47 and, like it, no published typ"
+    },
+
+    {
       "part": "74LS74",
       "primitive": "dff",
       "tplh_clk_q": { "typ": 13, "max": 25 },

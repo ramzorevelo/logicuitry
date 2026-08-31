@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../../render/scene';
-import type { Wire } from '../../core/model/types';
-import { alignSplicePos, findSpliceWire, splicePins } from './spliceOnWire';
+import type { Circuit, Component, ComponentKind, Wire } from '../../core/model/types';
+import { alignSplicePos, canHealSelection, findSpliceWire, splicePins } from './spliceOnWire';
 
 const p = (x: number, y: number): Vec2 => ({ x, y });
 // findSpliceWire is given each wire's display polyline through a callback,
@@ -134,5 +134,59 @@ describe('alignSplicePos (Item 2, Bug A)', () => {
     // 90 relative to the wire) -- no single wire-line coordinate to lock to.
     const pos = alignSplicePos(p(101, 99), p(50, 100), p(150, 100), p(4, 0), p(4, 16), 8);
     expect(pos).toEqual({ x: 104, y: 96 });
+  });
+});
+
+describe('canHealSelection', () => {
+  const circuit = (over: Partial<Circuit>): Circuit => ({
+    components: [],
+    wires: [],
+    junctions: [],
+    ...over,
+  });
+  const at = (id: string, kind: ComponentKind): Component => ({
+    id,
+    kind,
+    pos: { x: 0, y: 0 },
+  });
+  const leg = (id: string, junction: string): Wire => ({
+    id,
+    a: { kind: 'junction', junction },
+    b: { kind: 'free', pos: { x: 0, y: 0 } },
+    points: [],
+  });
+
+  it('is true for the one-in one-out primitives a wire can be rejoined through', () => {
+    for (const kind of ['not', 'buf'] as ComponentKind[])
+      expect(canHealSelection(circuit({ components: [at('c', kind)] }), new Set(['c'])), kind).toBe(
+        true,
+      );
+  });
+
+  it('is false for a gate, which leaves nothing to reconnect', () => {
+    for (const kind of ['and', 'or', 'xor', 'led', 'toggle', 'dff'] as ComponentKind[])
+      expect(canHealSelection(circuit({ components: [at('c', kind)] }), new Set(['c'])), kind).toBe(
+        false,
+      );
+  });
+
+  it('is true for a degree-2 pass-through junction and false for a T', () => {
+    const two = circuit({
+      junctions: [{ id: 'j', pos: { x: 0, y: 0 } }],
+      wires: [leg('w1', 'j'), leg('w2', 'j')],
+    });
+    const three = circuit({
+      junctions: [{ id: 'j', pos: { x: 0, y: 0 } }],
+      wires: [leg('w1', 'j'), leg('w2', 'j'), leg('w3', 'j')],
+    });
+    expect(canHealSelection(two, new Set(['j']))).toBe(true);
+    expect(canHealSelection(three, new Set(['j']))).toBe(false);
+  });
+
+  it('is false for an empty selection, and true if any one member qualifies', () => {
+    const c = circuit({ components: [at('g', 'and'), at('n', 'not')] });
+    expect(canHealSelection(c, new Set())).toBe(false);
+    expect(canHealSelection(c, new Set(['g']))).toBe(false);
+    expect(canHealSelection(c, new Set(['g', 'n']))).toBe(true);
   });
 });

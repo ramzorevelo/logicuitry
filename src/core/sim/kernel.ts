@@ -54,6 +54,12 @@ export interface SettleReport {
 
 type Listener = (net: number, value: bv.BusValue, time: number) => void;
 
+/** Weak pulls claim only the bits every driver left floating. */
+function applyPull(value: bv.BusValue, pull: 0 | 1 | undefined): bv.BusValue {
+  if (pull === undefined || !value.z) return value;
+  return { v: (value.v | (pull ? value.z : 0)) >>> 0, x: value.x, z: 0 };
+}
+
 export class Simulator {
   time = 0;
   /** Self-timed wakes (clock sources) only fire while running; power-on
@@ -90,7 +96,7 @@ export class Simulator {
     private readonly traceCapacity = 65536,
   ) {
     this.specs = circuit.primitives.map((p) => getPrimitive(p.kind));
-    this.netValues = circuit.nets.map((n) => bv.allZ(n.width));
+    this.netValues = circuit.nets.map((n) => applyPull(bv.allZ(n.width), n.pull));
     this.contributions = circuit.nets.map(() => []);
     this.outputSlots = circuit.primitives.map(() => []);
     this.lastScheduled = circuit.primitives.map((p, pi) =>
@@ -120,7 +126,10 @@ export class Simulator {
     this.traceCount = 0;
     this.circuit.nets.forEach((n, i) => {
       const driven = this.contributions[i]!.length > 0;
-      this.netValues[i] = driven ? bv.allX(n.width) : bv.allZ(n.width);
+      // A net nobody drives is never dirty, so the settle loop would never
+      // reach it: its pull has to be applied here or a pull on a wholly
+      // undriven net does nothing at all.
+      this.netValues[i] = applyPull(driven ? bv.allX(n.width) : bv.allZ(n.width), n.pull);
       this.record(i, this.netValues[i]!, NO_CAUSE);
     });
     this.circuit.primitives.forEach((p, pi) => {
@@ -188,11 +197,7 @@ export class Simulator {
     const changedNets: number[] = [];
     for (const net of [...dirtyNets].sort((a, b) => a - b)) {
       const meta = this.circuit.nets[net]!;
-      let value = bv.resolve(this.contributions[net]!, meta.width);
-      // Weak pulls claim only the bits every driver left floating.
-      if (meta.pull !== undefined && value.z) {
-        value = { v: (value.v | (meta.pull ? value.z : 0)) >>> 0, x: value.x, z: 0 };
-      }
+      const value = applyPull(bv.resolve(this.contributions[net]!, meta.width), meta.pull);
       if (bv.equal(value, this.netValues[net]!)) continue;
       this.netValues[net] = value;
       const cause = causeByPrim.get(net + this.circuit.primitives.length) ?? NO_CAUSE;

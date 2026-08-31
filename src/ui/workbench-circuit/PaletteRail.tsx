@@ -5,8 +5,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
 import { useCompact } from '../compact';
+import { useCoarsePointer } from '../pointerKind';
+import { isBuiltinChipId } from '../../core/parts/packages';
 import { LONG_PRESS_MS } from './touchGestures';
-import { PALETTE, PALETTE_GROUPS } from './palette';
+import { PALETTE, PALETTE_GROUPS, PARTS_GROUP } from './palette';
 import { PaletteGlyph } from './PaletteGlyph';
 
 interface Props {
@@ -25,6 +27,11 @@ export function PaletteRail({ paletteRef, width }: Props) {
   // rest collapsed to their headings. Desktop keeps every group expandable
   // independently, exactly as before.
   const compact = useCompact();
+  // Continuous placement is armed two different ways, and naming the wrong one
+  // is worse than naming neither: a long press does nothing with a mouse, and
+  // Ctrl+click happens on the board, not on this button.
+  const coarse = useCoarsePointer();
+  const keepPlacing = coarse ? 'hold to keep placing' : 'Ctrl+click as you place to keep placing';
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   // Nothing open until a group is picked: the parts row costs height a phone
   // has none of, and an arbitrary default group is the wrong one most of the
@@ -97,15 +104,22 @@ export function PaletteRail({ paletteRef, width }: Props) {
     },
   });
 
-  const chips = useMemo(
-    () => [...chipLib.values()].sort((a, b) => a.name.localeCompare(b.name)),
-    [chipLib],
-  );
+  // Built-in parts and the instructor's own chips are both ChipDefs, but they
+  // are not the same kind of thing to reach for: parts are a fixed catalogue,
+  // "My chips" is whatever this board's author packaged.
+  const [parts, chips] = useMemo(() => {
+    const all = [...chipLib.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [all.filter((d) => isBuiltinChipId(d.id)), all.filter((d) => !isBuiltinChipId(d.id))];
+  }, [chipLib]);
 
   // Groups stay mounted and are hidden instead of unmounted: re-expanding one
   // otherwise rebuilds a canvas per item, and each of those is a full
   // schematic draw.
-  const groups = chips.length > 0 ? [...PALETTE_GROUPS, 'My chips'] : [...PALETTE_GROUPS];
+  const groups = [
+    ...PALETTE_GROUPS,
+    ...(parts.length > 0 ? [PARTS_GROUP] : []),
+    ...(chips.length > 0 ? ['My chips'] : []),
+  ];
 
   return (
     <aside
@@ -147,7 +161,7 @@ export function PaletteRail({ paletteRef, width }: Props) {
                     : ''
                 }`}
                 disabled={mode === 'bubble'}
-                title={`${item.label} (hold to keep placing)`}
+                title={`${item.label} (${keepPlacing})`}
                 {...holdProps(
                   () =>
                     store.getState().setTool({
@@ -171,45 +185,47 @@ export function PaletteRail({ paletteRef, width }: Props) {
           </div>
         </Fragment>
       ))}
-      {chips.length > 0 && (
-        <>
-          <PaletteSection
-            label="My chips"
-            open={isOpen('My chips')}
-            onToggle={() => toggleGroup('My chips')}
-          />
-          <div className="palette-group" hidden={!isOpen('My chips')}>
-            {chips.map((def) => (
-              <button
-                key={def.id}
-                type="button"
-                className={`palette-item${
-                  tool.kind === 'place' && tool.componentKind === 'chip' && tool.defId === def.id
-                    ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}`
-                    : ''
-                }`}
-                disabled={mode === 'bubble'}
-                title={`${def.name} (hold to keep placing)`}
-                {...holdProps(
-                  () =>
-                    store
-                      .getState()
-                      .setTool({ kind: 'place', componentKind: 'chip', defId: def.id }),
-                  () =>
-                    store.getState().setTool({
-                      kind: 'place',
-                      componentKind: 'chip',
-                      defId: def.id,
-                      repeat: true,
-                    }),
-                )}
-              >
-                <PaletteGlyph kind="chip" chipLib={chipLib} defId={def.id} />
-                <span className="palette-item__label">{def.name}</span>
-              </button>
-            ))}
-          </div>
-        </>
+      {[[PARTS_GROUP, parts] as const, ['My chips', chips] as const].map(([label, defs]) =>
+        defs.length === 0 ? null : (
+          <Fragment key={label}>
+            <PaletteSection
+              label={label}
+              open={isOpen(label)}
+              onToggle={() => toggleGroup(label)}
+            />
+            <div className="palette-group" hidden={!isOpen(label)}>
+              {defs.map((def) => (
+                <button
+                  key={def.id}
+                  type="button"
+                  className={`palette-item${
+                    tool.kind === 'place' && tool.componentKind === 'chip' && tool.defId === def.id
+                      ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}`
+                      : ''
+                  }`}
+                  disabled={mode === 'bubble'}
+                  title={`${def.name} (${keepPlacing})`}
+                  {...holdProps(
+                    () =>
+                      store
+                        .getState()
+                        .setTool({ kind: 'place', componentKind: 'chip', defId: def.id }),
+                    () =>
+                      store.getState().setTool({
+                        kind: 'place',
+                        componentKind: 'chip',
+                        defId: def.id,
+                        repeat: true,
+                      }),
+                  )}
+                >
+                  <PaletteGlyph kind="chip" chipLib={chipLib} defId={def.id} />
+                  <span className="palette-item__label">{def.name}</span>
+                </button>
+              ))}
+            </div>
+          </Fragment>
+        ),
       )}
     </aside>
   );

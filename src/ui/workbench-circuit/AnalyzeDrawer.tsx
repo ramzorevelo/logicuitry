@@ -25,6 +25,8 @@ import {
 import { readTheme } from '../../render/theme';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { isFullyKnown } from '../../core/value/busValue';
+import { LONG_PRESS_MS, TAP_SLOP } from './touchGestures';
+import { useCoarsePointer } from '../pointerKind';
 
 // Analyze drawer: per-output truth tables (reachable,
 // net-deduped inputs) plus an interactive K-map for 2-4 inputs. Circles and
@@ -466,7 +468,22 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
   /** Cells already toggled by the current press-drag pass (no flutter);
    *  `mode` mirrors Ctrl-grouping vs Alt-don't-care so one drag pass never
    *  mixes the two gestures. */
-  const gestureRef = useRef<{ mode: 'group' | 'dc'; cells: Set<number> } | null>(null);
+  const coarse = useCoarsePointer();
+  const gestureRef = useRef<{
+    mode: 'group' | 'dc';
+    cells: Set<number>;
+    /** Started by a long press, so no modifier is held to keep it alive. */
+    touch?: boolean;
+  } | null>(null);
+  // Touch has no Ctrl, so a long press on a cell arms the same grouping sweep
+  // the modifier does; dragging on from it circles the run of cells.
+  const longPressRef = useRef(0);
+  const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const cancelLongPress = () => {
+    window.clearTimeout(longPressRef.current);
+    longPressRef.current = 0;
+    pressOriginRef.current = null;
+  };
 
   // Pointer path never moves the keyboard cursor -- a Ctrl gesture leaving a
   // cursor square behind read as a stuck selection.
@@ -531,6 +548,23 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
     }
+    if (e.pointerType === 'touch' && userGroupAt(p.x, p.y) === undefined) {
+      // Armed, not started: a press that turns into a drag or lifts early is
+      // still a pan or a plain tap, and must not circle anything.
+      pressOriginRef.current = p;
+      const target = e.target as Element;
+      const pointerId = e.pointerId;
+      longPressRef.current = window.setTimeout(() => {
+        const origin = pressOriginRef.current;
+        if (!origin) return;
+        const m = kmapCellAt(layout, origin.x, origin.y);
+        if (m === undefined) return;
+        gestureRef.current = { mode: 'group', cells: new Set([m]), touch: true };
+        toggleCell(m);
+        target.setPointerCapture(pointerId);
+      }, LONG_PRESS_MS);
+      return;
+    }
     // Plain click: outlines only (decision 4). Shift+click deletes the hit
     // group; plain click selects it (highlight persists).
     const hit = userGroupAt(p.x, p.y);
@@ -545,6 +579,8 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
   const onPointerMove = (e: React.PointerEvent) => {
     if (!layout) return;
     const p = canvasPoint(e);
+    const origin = pressOriginRef.current;
+    if (origin && Math.hypot(p.x - origin.x, p.y - origin.y) > TAP_SLOP) cancelLongPress();
     if (gestureRef.current?.mode === 'dc' && e.altKey) {
       const m = kmapCellAt(layout, p.x, p.y);
       if (m === undefined || gestureRef.current.cells.has(m)) return;
@@ -552,7 +588,7 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
       toggleDc(m);
       return;
     }
-    if (gestureRef.current?.mode === 'group' && e.ctrlKey) {
+    if (gestureRef.current?.mode === 'group' && (e.ctrlKey || gestureRef.current.touch)) {
       const m = kmapCellAt(layout, p.x, p.y);
       if (m === undefined || gestureRef.current.cells.has(m)) return;
       gestureRef.current.cells.add(m);
@@ -565,9 +601,13 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
   const onPointerUp = () => {
     // The gesture pass ends; the candidate stays live until Ctrl is released
     // (DC marks already committed live, nothing pending to keep).
+    cancelLongPress();
     gestureRef.current = null;
   };
-  const onPointerLeave = () => setHoverGroup(null);
+  const onPointerLeave = () => {
+    cancelLongPress();
+    setHoverGroup(null);
+  };
 
   const moveCursor = (dr: number, dc: number, grow: boolean) => {
     if (!layout) return;
@@ -736,7 +776,11 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
             type="button"
             className="tool-btn"
             aria-pressed={maximized}
-            title={maximized ? 'Back to the drawer (Esc)' : 'Focus the K-map screen-center'}
+            title={
+              maximized
+                ? `Back to the drawer${coarse ? '' : ' (Esc)'}`
+                : 'Focus the K-map screen-center'
+            }
             onClick={() => setMaximized((v) => !v)}
           >
             {maximized ? 'Restore' : 'Maximize'}
@@ -752,7 +796,11 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
         />
         <div className="analyze-sop">
           {myCircles.length === 0 ? (
-            <span className="analyze-muted">Ctrl+click or Ctrl+drag cells to circle a group.</span>
+            <span className="analyze-muted">
+              {coarse
+                ? 'Long-press a cell, then drag, to circle a group.'
+                : 'Ctrl+click or Ctrl+drag cells to circle a group.'}
+            </span>
           ) : (
             <span>
               {nameOfPath(outPath)} ={' '}

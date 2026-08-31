@@ -5,6 +5,7 @@ import { buildLocalGeometry, primitivePins } from '../../render/glyphs/symbol';
 import '../../render/glyphs/gates';
 import '../../render/glyphs/chip';
 import '../../render/glyphs/io';
+import '../../render/glyphs/power';
 import type { Theme } from '../../render/theme';
 import { makeTestTheme } from '../../render/theme.fixture';
 import { PALETTE, PALETTE_GROUPS } from './palette';
