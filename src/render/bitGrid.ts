@@ -17,16 +17,26 @@ export interface BitRowLayout {
   cells: BitCell[];
   width: number; // pixel width of the row
   height: number; // pixel height incl. index labels
+  groupBits: number; // where the wider gap falls; also which columns get labelled
 }
 
 export interface BitGridMetrics {
-  cell: number; // cell edge in px
+  cellW: number; // cell width in px
+  cellH: number; // cell height in px
   gap: number; // gap between adjacent cells
   nibbleGap: number; // extra gap at every 4-bit boundary
   labelH: number; // height reserved for index labels
 }
 
-export const defaultMetrics: BitGridMetrics = { cell: 34, gap: 4, nibbleGap: 10, labelH: 16 };
+// Upright rather than square: a cell holds one digit, so width past what the
+// digit needs only pushes a 32-bit row wider without making it more readable.
+export const defaultMetrics: BitGridMetrics = {
+  cellW: 22,
+  cellH: 34,
+  gap: 4,
+  nibbleGap: 10,
+  labelH: 16,
+};
 
 /**
  * Column weights above the cells. `power` is the whole word's place values;
@@ -35,10 +45,22 @@ export const defaultMetrics: BitGridMetrics = { cell: 34, gap: 4, nibbleGap: 10,
  */
 export type WeightMode = 'power' | 'nibble' | 'triplet';
 
-export function weightLabel(bit: number, width: number, mode: WeightMode): string {
+const SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+
+/** `2^17` written the way the book writes it. */
+export function superscript(n: number): string {
+  return String(n).replace(/\d/g, (d) => SUPERSCRIPT_DIGITS[Number(d)]!);
+}
+
+/**
+ * `exponent` picks the power form over the decimal place value. The caller
+ * decides, per row, by measuring: 128 belongs over an 8-bit row, but 32768
+ * is five glyphs over a cell that holds one.
+ */
+export function weightLabel(bit: number, mode: WeightMode, exponent = false): string {
   if (mode === 'nibble') return String(2 ** (bit % 4));
   if (mode === 'triplet') return String(2 ** (bit % 3));
-  return width <= 16 ? String(2 ** bit) : `2^${bit}`;
+  return exponent ? `2${superscript(bit)}` : String(2 ** bit);
 }
 
 /**
@@ -57,32 +79,12 @@ export interface BorrowMarks {
 /** Uniformly scales cell metrics; used for presentation-mode enlargement. */
 export function scaleMetrics(scale: number, m: BitGridMetrics = defaultMetrics): BitGridMetrics {
   return {
-    cell: m.cell * scale,
+    cellW: m.cellW * scale,
+    cellH: m.cellH * scale,
     gap: m.gap * scale,
     nibbleGap: m.nibbleGap * scale,
     labelH: m.labelH * scale,
   };
-}
-
-/** Legibility floor for a shrunk row: below roughly half size the digit stops
- *  being readable, so a row that still does not fit scrolls instead. */
-export const MIN_FIT_SCALE = 0.5;
-
-/**
- * Scale that fits a `width`-bit row into `availablePx`, never enlarging and
- * never shrinking past the legibility floor. 32 bits on a phone is the case
- * this exists for.
- */
-export function fitScale(
-  width: number,
-  availablePx: number,
-  groupBits = 4,
-  m: BitGridMetrics = defaultMetrics,
-): number {
-  if (availablePx <= 0) return 1;
-  const natural = layoutBitRow(width, 0, 0, m, groupBits).width;
-  if (natural <= availablePx) return 1;
-  return Math.max(MIN_FIT_SCALE, availablePx / natural);
 }
 
 /**
@@ -101,11 +103,11 @@ export function layoutBitRow(
   let x = x0;
   for (let col = 0; col < width; col++) {
     const bit = width - 1 - col; // leftmost column is the MSB
-    cells.push({ bit, rect: { x, y: y0, w: m.cell, h: m.cell } });
-    x += m.cell + m.gap;
+    cells.push({ bit, rect: { x, y: y0, w: m.cellW, h: m.cellH } });
+    x += m.cellW + m.gap;
     if (bit % groupBits === 0 && col !== width - 1) x += m.nibbleGap;
   }
-  return { cells, width: x - x0 - m.gap, height: m.cell + m.labelH };
+  return { cells, width: x - x0 - m.gap, height: m.cellH + m.labelH, groupBits };
 }
 
 export interface BitRowDraw {
@@ -133,6 +135,78 @@ export const topBandH = 16;
 /** Borrow notation stacks two annotation rows over the digits. */
 export const borrowBandH = topBandH * 2;
 
+/**
+ * Whether decimal place values still clear the column pitch. Decided once for
+ * the row, never per cell: half a row reading 1024 and the other half 2^15
+ * looks like a bug rather than a choice. The widest label is always the MSB's.
+ */
+function decimalWeightsFit(
+  ctx: CanvasRenderingContext2D,
+  layout: BitRowLayout,
+  font: string,
+): boolean {
+  const cells = layout.cells;
+  const msb = cells[0];
+  if (!msb || cells.length < 2) return true;
+  let pitch = Infinity;
+  for (let i = 1; i < cells.length; i++) {
+    pitch = Math.min(pitch, cells[i]!.rect.x - cells[i - 1]!.rect.x);
+  }
+  const prev = ctx.font;
+  ctx.font = font;
+  const w = ctx.measureText(String(2 ** msb.bit)).width;
+  ctx.font = prev;
+  return w <= pitch - 2; // 1px of air either side, or the labels touch
+}
+
+const SUPERSCRIPT_RUN = /[⁰¹²³⁴-⁹]+$/;
+
+/**
+ * A weight, centred on `cx`. The exponent is typeset rather than trusted to the
+ * font: a monospace superscript takes a full advance width, so 2^31 overhangs a
+ * cell it should sit inside and 2^10 reads as three separate digits.
+ */
+function drawWeight(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  text: string,
+  cx: number,
+  baseline: number,
+  labelPx: number,
+): void {
+  const run = SUPERSCRIPT_RUN.exec(text);
+  if (!run) {
+    ctx.fillText(text, cx, baseline);
+    return;
+  }
+  const base = text.slice(0, run.index);
+  const exp = [...run[0]].map((ch) => SUPERSCRIPT_DIGITS.indexOf(ch)).join('');
+  const baseFont = `${labelPx}px ${theme.fonts.mono}`;
+  const expFont = `${Math.max(8, Math.round(labelPx * 0.72))}px ${theme.fonts.mono}`;
+  ctx.font = baseFont;
+  const baseW = ctx.measureText(base).width;
+  ctx.font = expFont;
+  const expW = ctx.measureText(exp).width;
+  const x = cx - (baseW + expW) / 2;
+  ctx.textAlign = 'left';
+  ctx.font = baseFont;
+  ctx.fillText(base, x, baseline);
+  ctx.font = expFont;
+  ctx.fillText(exp, x + baseW, baseline - labelPx * 0.34);
+  ctx.textAlign = 'center';
+  ctx.font = baseFont;
+}
+
+/**
+ * On a row too wide to label every column, only each group's own first and last
+ * bit is named, so a nibble still reads as a self-contained 8 4 2 1 unit and the
+ * eye can count inwards from either end of it.
+ */
+function isGroupEdge(bit: number, groupBits: number): boolean {
+  const place = bit % groupBits;
+  return place === 0 || place === groupBits - 1;
+}
+
 export function drawBitRow(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
@@ -141,9 +215,20 @@ export function drawBitRow(
 ): void {
   if (opts.selection) drawSelection(ctx, theme, layout, opts.selection);
   const bits = toString(opts.value, 32); // MSB-left over 32; index by position
-  const cellW = layout.cells[0]?.rect.w ?? defaultMetrics.cell;
-  const fontPx = Math.max(theme.canvasTextMin, Math.round(cellW * 0.5));
+  const cellH = layout.cells[0]?.rect.h ?? defaultMetrics.cellH;
+  const fontPx = Math.max(theme.canvasTextMin, Math.round(cellH * 0.5));
+  // Annotations track the cell rather than sitting at a fixed 13px, so
+  // presentation mode enlarges the weights along with the digits they label.
+  const labelPx = Math.max(theme.canvasTextMin, Math.round(cellH * 0.32));
   const width = layout.cells.length;
+  const labelFont = `${labelPx}px ${theme.fonts.mono}`;
+  // One decision for the whole row, from one measurement: place values as the
+  // course reads them while they fit, the power form and group edges past that.
+  // Nibble/triplet weights are single digits that always fit, so a row showing
+  // them keeps every label and both annotation rows stay in step.
+  const grouped = opts.weights === 'nibble' || opts.weights === 'triplet';
+  const dense = grouped || decimalWeightsFit(ctx, layout, labelFont);
+  const exponent = opts.weights === 'power' && !dense;
   for (const { bit, rect } of layout.cells) {
     const ch = bits[31 - bit];
     const state = ch === '1' ? '1' : ch === '0' ? '0' : 'X';
@@ -179,7 +264,7 @@ export function drawBitRow(
       ctx.stroke();
     }
 
-    ctx.font = `${theme.canvasTextMin}px ${theme.fonts.mono}`;
+    ctx.font = labelFont;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
 
@@ -199,15 +284,22 @@ export function drawBitRow(
         ctx.fillStyle = theme.colors.accent;
         ctx.fillText('1', rect.x + rect.w / 2, rect.y - 2);
       }
-    } else if (opts.weights !== undefined) {
+    } else if (opts.weights !== undefined && (dense || isGroupEdge(bit, layout.groupBits))) {
       ctx.fillStyle = theme.colors.muted;
-      ctx.fillText(weightLabel(bit, width, opts.weights), rect.x + rect.w / 2, rect.y - 2);
+      drawWeight(
+        ctx,
+        theme,
+        weightLabel(bit, opts.weights, exponent),
+        rect.x + rect.w / 2,
+        rect.y - 2,
+        labelPx,
+      );
     }
     ctx.textBaseline = 'middle';
 
-    if (opts.showIndices !== false) {
+    if (opts.showIndices !== false && (dense || isGroupEdge(bit, layout.groupBits))) {
       ctx.fillStyle = theme.colors.muted;
-      ctx.font = `${theme.canvasTextMin}px ${theme.fonts.mono}`;
+      ctx.font = labelFont;
       ctx.textBaseline = 'top';
       ctx.fillText(String(bit), rect.x + rect.w / 2, rect.y + rect.h + 2);
     }

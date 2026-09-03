@@ -8,7 +8,6 @@ import {
   defaultMetrics,
   drawBitRow,
   drawCaret,
-  fitScale,
   layoutBitRow,
   nearestBitAtPoint,
   scaleMetrics,
@@ -27,10 +26,6 @@ import {
   type BitEntry,
   type BitSel,
 } from './bitEntry';
-
-// Page padding either side of the row; the workbench is effectively
-// full-width, so the window is a truthful stand-in for the available space.
-const FIT_MARGIN = 32;
 
 interface BitGridProps {
   value: BusValue;
@@ -96,11 +91,6 @@ export function BitGrid({
   const intensity = useRef<Map<number, number>>(new Map());
   const previewAlpha = useRef(0);
   const raf = useRef(0);
-  // How far the row has to shrink to fit the viewport. Measured off the window
-  // rather than the wrapper, which is inline-block and would size itself from
-  // the canvas we are about to size.
-  const [fit, setFit] = useState(1);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -147,7 +137,7 @@ export function BitGrid({
       if (preview && previewAlpha.current > 0.01) {
         const cur = toUnsigned(value, width);
         const nxt = toUnsigned(preview, width);
-        const fontPx = Math.max(theme.canvasTextMin, Math.round(metrics.cell * 0.5));
+        const fontPx = Math.max(theme.canvasTextMin, Math.round(metrics.cellH * 0.5));
         ctx.save();
         ctx.globalAlpha = previewAlpha.current;
         for (const { bit, rect } of layout.cells) {
@@ -195,26 +185,9 @@ export function BitGrid({
     topH,
     typed,
     focused,
-    fit,
     selSpan?.start,
     selSpan?.end,
   ]);
-
-  useEffect(() => {
-    const measure = () => {
-      const base = document.documentElement.classList.contains('presentation')
-        ? scaleMetrics(2)
-        : defaultMetrics;
-      setFit(fitScale(width, window.innerWidth - FIT_MARGIN, groupBits, base));
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    window.visualViewport?.addEventListener('resize', measure);
-    return () => {
-      window.removeEventListener('resize', measure);
-      window.visualViewport?.removeEventListener('resize', measure);
-    };
-  }, [width, groupBits]);
 
   // Software keyboards report the composed edit, not a key, and Android often
   // sends no usable `key` at all -- this is the phone's route into the same
@@ -236,16 +209,13 @@ export function BitGrid({
 
   // Rendered during SSR smoke tests too, where there is no document to ask.
   // Presentation mode: +0.5 on top of the value-entry section's own 1.5x zoom.
-  // `fit` then shrinks the row to the viewport; both the pixels and every
-  // pointer hit-test read this one function, so they cannot disagree.
-  const rowMetrics = () => {
-    const base =
-      typeof document !== 'undefined' && document.documentElement.classList.contains('presentation')
-        ? scaleMetrics(2)
-        : defaultMetrics;
-    return fit === 1 ? base : scaleMetrics(fit, base);
-  };
-  const cellH = rowMetrics().cell;
+  // A cell never shrinks to fit the viewport -- a 32-bit row scrolls instead,
+  // because a bit box small enough to fit a phone is too small to press.
+  const rowMetrics = () =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('presentation')
+      ? scaleMetrics(2)
+      : defaultMetrics;
+  const cellH = rowMetrics().cellH;
 
   // Every pointer lookup goes through the CANVAS rect, never the event target:
   // the typed-entry overlay is inset from the canvas, so measuring against it
@@ -278,7 +248,7 @@ export function BitGrid({
       onMouseLeave={onHoverBit ? () => onHoverBit(undefined) : undefined}
     />
   );
-  if (!typed) return canvas;
+  if (!typed) return <div className="bit-grid-scroll">{canvas}</div>;
 
   const bits = (text ?? '').padStart(width, '0').slice(-width);
   const entry = { bits, sel: sel ?? { anchor: 0, head: width } };
@@ -296,97 +266,99 @@ export function BitGrid({
   entryRef.current = { entry, commit };
 
   return (
-    <div className="bit-grid-wrap">
-      {canvas}
-      {/* A focus and keyboard sink only: its text is never shown and its own
+    <div className="bit-grid-scroll">
+      <div className="bit-grid-wrap">
+        {canvas}
+        {/* A focus and keyboard sink only: its text is never shown and its own
           layout is irrelevant, because the caret and selection are drawn on the
           canvas from column indices (bitEntry.ts owns the model). */}
-      <input
-        ref={inputRef}
-        className="bit-grid__entry"
-        aria-label="binary value"
-        spellCheck={false}
-        inputMode="numeric"
-        enterKeyHint="done"
-        autoCapitalize="off"
-        autoCorrect="off"
-        autoComplete="off"
-        value={bits}
-        // Not readOnly: a read-only field raises no software keyboard. Every
-        // edit is intercepted (keydown here, beforeinput below), so the field's
-        // own text is never actually mutated.
-        onChange={() => {
-          // Controlled by `bits`; edits arrive through the interceptors.
-        }}
-        style={{ top: 4 + topH, height: cellH }}
-        onFocus={() => {
-          setFocused(true);
-          setSel((cur) => cur ?? { anchor: 0, head: width });
-        }}
-        onBlur={() => {
-          setFocused(false);
-          dragging.current = false;
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'Escape') {
-            e.currentTarget.blur();
-            return;
-          }
-          if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        <input
+          ref={inputRef}
+          className="bit-grid__entry"
+          aria-label="binary value"
+          spellCheck={false}
+          inputMode="numeric"
+          enterKeyHint="done"
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          value={bits}
+          // Not readOnly: a read-only field raises no software keyboard. Every
+          // edit is intercepted (keydown here, beforeinput below), so the field's
+          // own text is never actually mutated.
+          onChange={() => {
+            // Controlled by `bits`; edits arrive through the interceptors.
+          }}
+          style={{ top: 4 + topH, height: cellH }}
+          onFocus={() => {
+            setFocused(true);
+            setSel((cur) => cur ?? { anchor: 0, head: width });
+          }}
+          onBlur={() => {
+            setFocused(false);
+            dragging.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') {
+              e.currentTarget.blur();
+              return;
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+              e.preventDefault();
+              void navigator.clipboard?.writeText(copyText(entry));
+              return;
+            }
+            const next = applyKey(entry, {
+              key: e.key,
+              shift: e.shiftKey,
+              ctrl: e.ctrlKey || e.metaKey,
+            });
+            if (!next) return;
             e.preventDefault();
-            void navigator.clipboard?.writeText(copyText(entry));
-            return;
-          }
-          const next = applyKey(entry, {
-            key: e.key,
-            shift: e.shiftKey,
-            ctrl: e.ctrlKey || e.metaKey,
-          });
-          if (!next) return;
-          e.preventDefault();
-          commit(next);
-        }}
-        onPaste={(e) => {
-          e.preventDefault();
-          commit(applyPaste(entry, e.clipboardData.getData('text')));
-        }}
-        onPointerDown={(e) => {
-          const col = colAt(e);
-          dragging.current = true;
-          moved.current = false;
-          setSel({ anchor: col, head: col });
-          // A synthetic pointer (tests, automation) has no active capture.
-          try {
-            e.currentTarget.setPointerCapture(e.pointerId);
-          } catch {
-            // capture is an optimisation, not a requirement
-          }
-        }}
-        onPointerMove={(e) => {
-          // The field covers the cells, so the row's own hover preview has to
-          // be fed from here or it never fires again.
-          onHoverBit?.(bitAtClient(e.clientX, e.clientY));
-          if (!dragging.current) return;
-          moved.current = true;
-          const col = colAt(e);
-          setSel((cur) => (cur ? dragTo(cur, col) : cur));
-        }}
-        onPointerLeave={() => onHoverBit?.(undefined)}
-        onPointerUp={(e) => {
-          // A click with no drag still toggles the bit, as it always has
-          // (click bits, as in the prototypes).
-          if (dragging.current && !moved.current) {
-            const bit = bitAtClient(e.clientX, e.clientY);
-            if (bit !== undefined) onToggleBit?.(bit);
-          }
-          dragging.current = false;
-          try {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          } catch {
-            // never captured
-          }
-        }}
-      />
+            commit(next);
+          }}
+          onPaste={(e) => {
+            e.preventDefault();
+            commit(applyPaste(entry, e.clipboardData.getData('text')));
+          }}
+          onPointerDown={(e) => {
+            const col = colAt(e);
+            dragging.current = true;
+            moved.current = false;
+            setSel({ anchor: col, head: col });
+            // A synthetic pointer (tests, automation) has no active capture.
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              // capture is an optimisation, not a requirement
+            }
+          }}
+          onPointerMove={(e) => {
+            // The field covers the cells, so the row's own hover preview has to
+            // be fed from here or it never fires again.
+            onHoverBit?.(bitAtClient(e.clientX, e.clientY));
+            if (!dragging.current) return;
+            moved.current = true;
+            const col = colAt(e);
+            setSel((cur) => (cur ? dragTo(cur, col) : cur));
+          }}
+          onPointerLeave={() => onHoverBit?.(undefined)}
+          onPointerUp={(e) => {
+            // A click with no drag still toggles the bit, as it always has
+            // (click bits, as in the prototypes).
+            if (dragging.current && !moved.current) {
+              const bit = bitAtClient(e.clientX, e.clientY);
+              if (bit !== undefined) onToggleBit?.(bit);
+            }
+            dragging.current = false;
+            try {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            } catch {
+              // never captured
+            }
+          }}
+        />
+      </div>
     </div>
   );
 }
