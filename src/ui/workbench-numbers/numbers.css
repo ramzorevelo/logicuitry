@@ -114,6 +114,9 @@
    Width is set inline to span the bit row exactly. */
 .value-entry__slider {
   max-width: 100%;
+  /* Chrome's UA margin on a range input pushed the track 2px past the entry
+     box, which was enough to give the whole workbench a scrollbar. */
+  margin: 0;
   accent-color: var(--accent);
   direction: rtl;
 }
@@ -445,6 +448,17 @@
   margin: 0;
 }
 
+/* A cell is a press target and keeps its size, so a row too wide for the
+   viewport scrolls sideways rather than shrinking. Only this box scrolls: the
+   rest of the group stays put. */
+.bit-grid-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Room for the focus ring and the scrollbar that appears under a wide row. */
+  padding-bottom: 2px;
+}
+
 /* Typed binary entry. The field is a focus and keyboard sink laid over the row;
    its own text is never shown, because the caret and the per-cell selection are
    drawn on the canvas from column indices. */
@@ -474,8 +488,7 @@
 
 /* --- Compact (phone) ------------------------------------------------------
    Stack the top bar and let the instrument keep the full width. The row of
-   cells shrinks itself (render/bitGrid fitScale) down to a legibility floor
-   and scrolls below that, rather than shrinking past readable. */
+   cells keeps its size and scrolls sideways when it does not fit. */
 .app-shell--compact .numbers-workbench {
   gap: calc(var(--space-unit) * 3);
   padding: calc(var(--space-unit) * 2);
