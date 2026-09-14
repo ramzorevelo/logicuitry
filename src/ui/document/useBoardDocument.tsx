@@ -37,6 +37,7 @@ import { useShellStore } from '../store';
 import { getPrefs } from '../prefs';
 import { SHORTCUTS } from '../menu/shortcuts';
 import type { Menu } from '../menu/menuModel';
+import { modalKeysHeld } from '../modalKeys';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -182,6 +183,9 @@ export function useBoardDocument(): BoardDocument {
   const fileNew = () => {
     guardDiscard('Start a new board', () => {
       store.getState().loadBoard(starterBoard());
+      // Like an example, the starter board ships no camera worth restoring, so
+      // it always frames; `fitOnOpen` governs the user's saved boards only.
+      store.getState().requestFit();
       setCurrentFile(null);
       markClean();
     });
@@ -349,6 +353,8 @@ export function useBoardDocument(): BoardDocument {
   onBoardRef.current = onBoard;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A dialog is up: it owns the keyboard, buttons and all.
+      if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (!(e.ctrlKey || e.metaKey) || !onBoardRef.current) return;
       // Ctrl+N is not bound: a browser reserves it for a new window and it

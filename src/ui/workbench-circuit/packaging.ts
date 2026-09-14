@@ -283,7 +283,7 @@ export function draftChipDef(id: string, name: string, source: Circuit): ChipDef
   const { pins } = derivePins([], stripped.components);
   return {
     format: 'lcir.chip',
-    formatVersion: 3,
+    formatVersion: 5,
     id,
     name,
     version: 1,

@@ -3,7 +3,7 @@
 // confirm because "discard or cancel" is a false choice when the real answer
 // is usually "save it".
 
-import { useEffect } from 'react';
+import { useModalKeys } from '../modalKeys';
 
 export function UnsavedChangesDialog({
   action,
@@ -20,16 +20,7 @@ export function UnsavedChangesDialog({
   onDiscard: () => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onCancel]);
+  useModalKeys(onCancel);
 
   return (
     <div

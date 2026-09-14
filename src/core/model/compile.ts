@@ -337,6 +337,16 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
       else tunnelAnchors.set(name, key);
     }
 
+    // Pins a package bonds together internally (a display's two commons):
+    // one node inside the epoxy, so one net here, which is also what makes
+    // wiring them to opposite rails the conflict it really is.
+    for (const comp of circuit.components) {
+      if (comp.kind === 'chip') continue;
+      for (const group of getPrimitive(comp.kind).tiedPins ?? [])
+        for (const pin of group.slice(1))
+          local.union(pinKey(comp.id, group[0]!), pinKey(comp.id, pin));
+    }
+
     // Deterministic local-net numbering: components in array order, pins in
     // declaration order, then junctions. First sight of a root names the net.
     const pinInfos = new Map<string, Map<string, PinInfo>>();

@@ -3,7 +3,7 @@ import { validateDocument } from './validate';
 
 const chip = {
   format: 'lcir.chip',
-  formatVersion: 3,
+  formatVersion: 5,
   id: 'and-gate',
   name: 'AND gate',
   version: 1,
@@ -15,7 +15,7 @@ const chip = {
 
 const board = {
   format: 'lcir.board',
-  formatVersion: 5,
+  formatVersion: 7,
   id: 'b1',
   name: 'demo',
   components: [],

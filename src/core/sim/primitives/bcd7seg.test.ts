@@ -138,7 +138,7 @@ describe('pairing a decoder with a display', () => {
   const drive = (activeLow: boolean, code: number) => [...outputs(activeLow, code)];
 
   it("lights the right digit when the '47 drives a common-anode display", () => {
-    expect(drive(true, 1).map((s) => segmentLit(s, 'anode'))).toEqual([
+    expect(drive(true, 1).map((s) => segmentLit(s, 'anode', '1'))).toEqual([
       false,
       true,
       true,
@@ -150,7 +150,7 @@ describe('pairing a decoder with a display', () => {
   });
 
   it("lights the right digit when the '48 drives a common-cathode display", () => {
-    expect(drive(false, 1).map((s) => segmentLit(s, 'cathode'))).toEqual([
+    expect(drive(false, 1).map((s) => segmentLit(s, 'cathode', '0'))).toEqual([
       false,
       true,
       true,
@@ -164,15 +164,25 @@ describe('pairing a decoder with a display', () => {
   it("lights nothing when a '47 is wired to a common-cathode display", () => {
     for (let code = 0; code < 16; code++)
       expect(
-        drive(true, code).some((s) => segmentLit(s, 'cathode')),
+        drive(true, code).some((s) => segmentLit(s, 'cathode', '0')),
         `code ${code}`,
       ).toBe(false);
   });
 
   it("lights every dark segment when a '48 is wired to a common-anode display", () => {
     // Every '48 output is driven, so an anode display reads the inverse shape.
-    const lit = drive(false, 1).map((s) => segmentLit(s, 'anode'));
+    const lit = drive(false, 1).map((s) => segmentLit(s, 'anode', '1'));
     expect(lit).toEqual([true, false, false, true, true, true, true]);
+  });
+
+  it('stays dark while the common terminal is unwired', () => {
+    expect(drive(true, 1).some((s) => segmentLit(s, 'anode', undefined))).toBe(false);
+    expect(drive(false, 1).some((s) => segmentLit(s, 'cathode', undefined))).toBe(false);
+  });
+
+  it('stays dark when the common terminal is tied to the wrong rail', () => {
+    expect(drive(true, 1).some((s) => segmentLit(s, 'anode', '0'))).toBe(false);
+    expect(drive(false, 1).some((s) => segmentLit(s, 'cathode', '1'))).toBe(false);
   });
 
   it('defaults to cathode, so boards written before this keep their behaviour', () => {

@@ -349,7 +349,7 @@ describe('symbolBounds (Task 1: box width is label-independent)', () => {
   it('a chip instance is byte-for-byte unchanged: def name inside, label outside only', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 3,
+      formatVersion: 5,
       id: 'def1',
       name: 'Adder4',
       version: 1,

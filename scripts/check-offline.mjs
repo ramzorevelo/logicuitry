@@ -24,6 +24,10 @@ function walk(dir) {
       // form opened in a tab when a user asks to attach a screenshot. Neither
       // is fetched at load.
       //
+      // github.com/<owner>/logicuitry/releases is the third documented
+      // exception: the Help > Download the desktop app item, shown only in the
+      // browser build and opened only when a user picks it. Never fetched.
+      //
       // Inert URLs: namespaces, license comments, framework error-docs links,
       // Workbox's own console.warn text (bit.ly/wb-precache),
       // JSON Schema vocabulary $id constants (ajv bundles the meta-schemas;

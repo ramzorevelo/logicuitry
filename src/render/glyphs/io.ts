@@ -8,8 +8,16 @@
 // a one-off fudge.
 
 import type { Rect, Vec2 } from '../scene';
-import { bodyRectPath, paintBody, paintEmphasis } from './relief';
-import { signalStyle, type SignalState, type Theme } from '../theme';
+import { bodyRectPath, paintBody, paintEmission, paintLens } from './relief';
+import {
+  isLedColor,
+  isLedShape,
+  signalStyle,
+  type LedShape,
+  type SignalState,
+  type Theme,
+} from '../theme';
+import type { Params } from '../../core/sim/primitives/types';
 import {
   bitState,
   drawStub,
@@ -354,6 +362,25 @@ export function drawButton(
 
 // --- LED (diode + cathode bar + two arrow strokes; the actual ANSI mark) ---
 
+/** Physical LED colour: a token name on the component, resolved through the
+ *  theme, so a red LED is red on every board. Never a stored hex. */
+export function ledColorOf(theme: Theme, params: Params | undefined): string {
+  const name = params?.['color'];
+  return theme.ledColors[isLedColor(name) ? name : 'red'];
+}
+
+/** What the same LED spills when lit, which is its lens colour for every
+ *  colour but white. */
+export function ledEmissionOf(theme: Theme, params: Params | undefined): string {
+  const name = params?.['color'];
+  return theme.ledEmission[isLedColor(name) ? name : 'red'];
+}
+
+export function ledShapeOf(params: Params | undefined): LedShape {
+  const shape = params?.['shape'];
+  return isLedShape(shape) ? shape : 'symbol';
+}
+
 export interface LedLayout {
   g: number;
   H: number;
@@ -423,51 +450,61 @@ export function drawLed(
   const top = l.topPad;
   const apexX = bodyX0 + 0.9 * l.H;
   const midY = top + l.H / 2;
+  const lit = ledColorOf(theme, input.params);
+  const glow = ledEmissionOf(theme, input.params);
+  const round = ledShapeOf(input.params) === 'round';
+  const radius = l.H / 2;
+  const centerX = bodyX0 + radius;
   withPlacement(ctx, l.bounds, placement, () => {
-    const diode = () => {
+    const body = () => {
+      if (round) {
+        ctx.arc(centerX, midY, radius, 0, Math.PI * 2);
+        return;
+      }
       ctx.moveTo(bodyX0, top);
       ctx.lineTo(bodyX0, top + l.H);
       ctx.lineTo(apexX, midY);
       ctx.closePath();
     };
-    ctx.beginPath();
-    diode();
-    ctx.fillStyle = on ? signalStyle(theme, '1').color : theme.colors.surface;
-    ctx.strokeStyle = theme.colors.ink;
     ctx.lineWidth = theme.strokes.wire;
-    ctx.fill();
+    if (on) paintEmission(ctx, theme, glow, body);
+    paintLens(ctx, theme, lit, on, body);
+    ctx.strokeStyle = theme.colors.ink;
     ctx.stroke();
-    // A lit output is where emission earns its cost; unlit stays flat.
-    if (on) paintEmphasis(ctx, theme, signalStyle(theme, '1').color, diode);
 
-    // Cathode bar, perpendicular to the apex, same height as the triangle's base.
-    ctx.beginPath();
-    ctx.moveTo(apexX, top);
-    ctx.lineTo(apexX, top + l.H);
-    ctx.stroke();
+    if (!round) {
+      // Cathode bar, perpendicular to the apex, same height as the triangle's base.
+      ctx.beginPath();
+      ctx.moveTo(apexX, top);
+      ctx.lineTo(apexX, top + l.H);
+      ctx.stroke();
+    }
 
     // Two parallel arrows radiating 45 degrees up-right, away from the body
     // (light leaves an LED): shaft ~1.5G plus an open head at the far end,
-    // near end >= 0.5G clear of the triangle's upper edge.
-    const u = Math.SQRT1_2; // unit 45-degree components
-    const shaft = 1.5 * g;
-    const head = 0.5 * g;
-    for (const along of [0.25 * l.H, 0.5 * l.H]) {
-      // Point on the upper edge at this x, then back off 0.5G perpendicular.
-      const ex = bodyX0 + along;
-      const edgeY = top + (along / (0.9 * l.H)) * (l.H / 2);
-      const sx = ex + 0.5 * g * u;
-      const sy = edgeY - 0.5 * g * u;
-      const fx = sx + shaft * u;
-      const fy = sy - shaft * u;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(fx, fy);
-      // Open arrowhead: two strokes back from the far end.
-      ctx.moveTo(fx - head, fy);
-      ctx.lineTo(fx, fy);
-      ctx.lineTo(fx, fy + head);
-      ctx.stroke();
+    // near end >= 0.5G clear of the body edge. They decorate the ANSI diode
+    // mark, so the round bulb goes without.
+    if (!round) {
+      const u = Math.SQRT1_2; // unit 45-degree components
+      const shaft = 1.5 * g;
+      const head = 0.5 * g;
+      const starts: Vec2[] = [0.25 * l.H, 0.5 * l.H].map((along) => {
+        // Point on the upper edge at this x, then back off 0.5G perpendicular.
+        const edgeY = top + (along / (0.9 * l.H)) * (l.H / 2);
+        return { x: bodyX0 + along + 0.5 * g * u, y: edgeY - 0.5 * g * u };
+      });
+      for (const s of starts) {
+        const fx = s.x + shaft * u;
+        const fy = s.y - shaft * u;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(fx, fy);
+        // Open arrowhead: two strokes back from the far end.
+        ctx.moveTo(fx - head, fy);
+        ctx.lineTo(fx, fy);
+        ctx.lineTo(fx, fy + head);
+        ctx.stroke();
+      }
     }
 
     drawStub(
@@ -509,6 +546,9 @@ function drawLedBank(
   const names = expanded ? ins.map((p) => p.name) : [ins[0]!.name];
   const l = ledBankLayout(theme.gridSchematic, width, names);
   const g = l.g;
+  const lit = ledColorOf(theme, input.params);
+  const glow = ledEmissionOf(theme, input.params);
+  const round = ledShapeOf(input.params) === 'round';
   withPlacement(ctx, l.bounds, placement, () => {
     paintBody(ctx, theme, () => bodyRectPath(ctx, theme, l.housing), { rect: l.housing });
 
@@ -530,40 +570,49 @@ function drawLedBank(
       const triTopY = symMidY - triHalfH;
       // Diode triangle+bar (the ANSI LED mark, scaled to the cell) --
       // distinguishes each cell as an LED, not a switch lever's plain rect.
-      ctx.beginPath();
-      ctx.moveTo(triLeftX, triTopY);
-      ctx.lineTo(triLeftX, symMidY + triHalfH);
-      ctx.lineTo(triRightX, symMidY);
-      ctx.closePath();
-      ctx.fillStyle = on ? signalStyle(theme, '1').color : theme.colors.surface;
-      ctx.fill();
-      ctx.strokeStyle = theme.colors.ink;
+      const cellBody = () => {
+        if (round) {
+          ctx.arc((triLeftX + triRightX) / 2, symMidY, triHalfH, 0, Math.PI * 2);
+          return;
+        }
+        ctx.moveTo(triLeftX, triTopY);
+        ctx.lineTo(triLeftX, symMidY + triHalfH);
+        ctx.lineTo(triRightX, symMidY);
+        ctx.closePath();
+      };
       ctx.lineWidth = theme.strokes.min;
+      if (on) paintEmission(ctx, theme, glow, cellBody);
+      paintLens(ctx, theme, lit, on, cellBody);
+      ctx.strokeStyle = theme.colors.ink;
       ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(triRightX, symMidY - triHalfH);
-      ctx.lineTo(triRightX, symMidY + triHalfH);
-      ctx.stroke();
+      if (!round) {
+        ctx.beginPath();
+        ctx.moveTo(triRightX, symMidY - triHalfH);
+        ctx.lineTo(triRightX, symMidY + triHalfH);
+        ctx.stroke();
+      }
 
       // Two short arrows radiating up-right, staggered starting points to
       // the right of the cathode bar (never crossing its vertical line).
-      const u = Math.SQRT1_2;
-      const shaft = 0.8 * g;
-      const head = 0.3 * g;
-      const starts: Vec2[] = [
-        { x: triRightX + 0.15 * g, y: symMidY - 0.55 * g },
-        { x: triRightX + 0.45 * g, y: symMidY - 0.25 * g },
-      ];
-      for (const s of starts) {
-        const fx = s.x + shaft * u;
-        const fy = s.y - shaft * u;
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(fx, fy);
-        ctx.moveTo(fx - head, fy);
-        ctx.lineTo(fx, fy);
-        ctx.lineTo(fx, fy + head);
-        ctx.stroke();
+      if (!round) {
+        const u = Math.SQRT1_2;
+        const shaft = 0.8 * g;
+        const head = 0.3 * g;
+        const starts: Vec2[] = [
+          { x: triRightX + 0.15 * g, y: symMidY - 0.55 * g },
+          { x: triRightX + 0.45 * g, y: symMidY - 0.25 * g },
+        ];
+        for (const s of starts) {
+          const fx = s.x + shaft * u;
+          const fy = s.y - shaft * u;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(fx, fy);
+          ctx.moveTo(fx - head, fy);
+          ctx.lineTo(fx, fy);
+          ctx.lineTo(fx, fy + head);
+          ctx.stroke();
+        }
       }
       if (row > 0) {
         // Divider between cells.
@@ -600,6 +649,114 @@ function drawLedBank(
       placement,
       label,
       { x: l.housing.x + l.housing.w + 0.5 * g, y: l.pinY },
+      { x: 1, y: 0 },
+    );
+  });
+}
+
+// --- LED matrix: a rows x cols dot grid, row pins down the left and column
+// pins along the bottom, the ordinary row-drive/column-sink wiring. Lighting
+// is decided by matrixDotLit in core; this layer only paints. ---
+
+export interface LedMatrixLayout {
+  g: number;
+  rows: number;
+  cols: number;
+  cell: number;
+  housing: Rect;
+  bounds: Rect;
+  pins: Map<string, Vec2>;
+}
+
+export function ledMatrixLayout(
+  g: number,
+  rowNames: readonly string[],
+  colNames: readonly string[],
+): LedMatrixLayout {
+  const rows = rowNames.length;
+  const cols = colNames.length;
+  const cell = 2 * g; // one dot per cell, same 2G pitch the DIP bank uses
+  const housing: Rect = { x: 2 * g, y: 0, w: cols * cell, h: rows * cell };
+  const bottomTipY = housing.h + 2 * g;
+  const bounds: Rect = { x: 0, y: 0, w: housing.x + housing.w, h: bottomTipY };
+  const pins = new Map<string, Vec2>();
+  rowNames.forEach((name, i) => pins.set(name, { x: 0, y: snap(i * cell + cell / 2, g) }));
+  colNames.forEach((name, j) =>
+    pins.set(name, { x: snap(housing.x + j * cell + cell / 2, g), y: bottomTipY }),
+  );
+  return { g, rows, cols, cell, housing, bounds, pins };
+}
+
+/** Row pins come first in the primitive's own order, then columns, so the two
+ *  groups split on the `r`/`c` name rather than on a count the glyph would
+ *  have to re-derive from params. */
+function matrixPinNames(input: GeometryInput): { rows: string[]; cols: string[] } {
+  const ins = insSorted(input);
+  return {
+    rows: ins.filter((p) => p.name.startsWith('r')).map((p) => p.name),
+    cols: ins.filter((p) => p.name.startsWith('c')).map((p) => p.name),
+  };
+}
+
+registerGlyphGeometry('ledmatrix', (input, theme) => {
+  const { rows, cols } = matrixPinNames(input);
+  const l = ledMatrixLayout(theme.gridSchematic, rows, cols);
+  return { bounds: l.bounds, pins: l.pins };
+});
+
+export function drawLedMatrix(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  input: GeometryInput,
+  placement: Placement,
+  isLit: (row: string, col: string) => boolean,
+  stateOf: (pin: string) => SignalState | undefined,
+  label?: string,
+): void {
+  const { rows, cols } = matrixPinNames(input);
+  const l = ledMatrixLayout(theme.gridSchematic, rows, cols);
+  const g = l.g;
+  const lit = ledColorOf(theme, input.params);
+  const glow = ledEmissionOf(theme, input.params);
+  const radius = 0.55 * g;
+  withPlacement(ctx, l.bounds, placement, () => {
+    paintBody(ctx, theme, () => bodyRectPath(ctx, theme, l.housing), { rect: l.housing });
+
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = 0; j < cols.length; j++) {
+        const on = isLit(rows[i]!, cols[j]!);
+        const dot = () => {
+          ctx.arc(
+            l.housing.x + j * l.cell + l.cell / 2,
+            i * l.cell + l.cell / 2,
+            radius,
+            0,
+            Math.PI * 2,
+          );
+        };
+        ctx.lineWidth = theme.strokes.min;
+        if (on) paintEmission(ctx, theme, glow, dot);
+        paintLens(ctx, theme, lit, on, dot);
+        ctx.strokeStyle = theme.colors.ink;
+        ctx.stroke();
+      }
+    }
+
+    rows.forEach((name, i) => {
+      const y = snap(i * l.cell + l.cell / 2, g);
+      drawStub(ctx, theme, { x: 0, y }, { x: l.housing.x, y }, stateOf(name));
+    });
+    cols.forEach((name, j) => {
+      const x = snap(l.housing.x + j * l.cell + l.cell / 2, g);
+      drawStub(ctx, theme, { x, y: l.bounds.h }, { x, y: l.housing.h }, stateOf(name));
+    });
+    // Row stubs enter on the left, so the label sits right of the housing.
+    drawDeviceLabel(
+      ctx,
+      theme,
+      placement,
+      label,
+      { x: l.housing.x + l.housing.w + 0.5 * g, y: l.cell / 2 },
       { x: 1, y: 0 },
     );
   });
@@ -670,114 +827,194 @@ export function drawClock(
   });
 }
 
-// --- 7-segment display (raw a..g, and the decoded-hex variant) ---
+// --- 7-segment display (10-pin single-digit package) ---
 
 const SEGMENT_ORDER = ['a', 'b', 'c', 'd', 'e', 'f', 'g'] as const;
-// Segment -> lit for hex digits 0-F, standard mapping.
-const HEX_SEGMENTS: Record<number, string> = {
-  0: 'abcdef',
-  1: 'bc',
-  2: 'abged',
-  3: 'abgcd',
-  4: 'fgbc',
-  5: 'afgcd',
-  6: 'afgedc',
-  7: 'abc',
-  8: 'abcdefg',
-  9: 'abcfgd',
-  10: 'abcefg',
-  11: 'fgedc',
-  12: 'afed',
-  13: 'bgedc',
-  14: 'afged',
-  15: 'afge',
-};
+
+/** Pin pitch. Half the 2G the rest of the board uses: five pins a side at 2G
+ *  would force a body wider than it is tall, which a display never is. */
+const SEG_PITCH = 1; // * G
+/** Stub length above and below the package. */
+const SEG_STUB = 2; // * G
+/** Body edge either side of the outermost pin. Half a pitch, which also lands
+ *  every pin on a whole grid step. */
+const SEG_SIDE_PAD = 0.5; // * G
+/** One line of pin label inside the body. Each edge gets two: single letters
+ *  on the outer line, and `com` -- the only label longer than a character --
+ *  on its own inner line, tucked between the letters and the digit. The
+ *  commons sit dead centre of each row, so that line lands over the digit like
+ *  a part marking, under `f`/`a` at the top and over `d`/`c` at the bottom.
+ *  `dp` joins them there, two pins clear of the bottom `com`. */
+const SEG_LABEL_BAND = 1; // * G
+/** Pin letters print below glyph text: the digit is what has to read from the
+ *  back of the room, not these. */
+const SEG_LABEL_SCALE = 0.65;
+/** Body height. Taller than the 5G the pin rows make it wide, as a display is. */
+const SEG_BODY_H = 11; // * G
+const SEG_DIGIT_W = 3.2; // * G
+/** Breathing room between the label bands and the digit ink. */
+const SEG_DIGIT_GAP = 0.15; // * G
 
 export interface SevenSegLayout {
   g: number;
-  pinColumnHeight: number;
-  digitW: number;
-  digitH: number;
+  /** Digit cell: the seven bars are laid out inside it, dp just outside. */
   digitX: number;
   digitY: number;
+  digitW: number;
+  digitH: number;
+  /** Segment bar thickness, derived from the digit so it reads at TV distance. */
+  thick: number;
+  labelFontPx: number;
+  housing: Rect;
+  topNames: readonly string[];
+  bottomNames: readonly string[];
+  /** What each pin prints on the symbol, where that differs from its name. */
+  labelOf: ReadonlyMap<string, string>;
   bounds: Rect;
   pins: Map<string, Vec2>;
 }
 
-function sevenSegLayoutRaw(g: number, pinNames: string[]): SevenSegLayout {
-  const pinColumnHeight = Math.max(1, pinNames.length) * g;
-  const digitW = 2 * g;
-  const digitH = 3 * g;
-  const bodyX0 = g;
-  const digitX = bodyX0;
-  const digitY = snap((pinColumnHeight - digitH) / 2, g); // centered when the pin column is taller
-  const height = Math.max(pinColumnHeight, digitH);
-  const width = bodyX0 + digitW + g;
-  const bounds: Rect = { x: 0, y: 0, w: width, h: height };
+/** Fixed package geometry: a real display's outline does not grow with what
+ *  you wire to it, and its pin count never varies. */
+export function sevenSegLayout(
+  g: number,
+  fontPx: number,
+  topNames: readonly string[],
+  bottomNames: readonly string[],
+  labelOf: ReadonlyMap<string, string> = new Map(),
+): SevenSegLayout {
+  const perSide = Math.max(topNames.length, bottomNames.length, 1);
+  const bodyW = (perSide * SEG_PITCH + 2 * SEG_SIDE_PAD) * g;
+  const bodyH = SEG_BODY_H * g;
+  const housing: Rect = { x: 0, y: SEG_STUB * g, w: bodyW, h: bodyH };
+  const bounds: Rect = { x: 0, y: 0, w: bodyW, h: bodyH + 2 * SEG_STUB * g };
+
+  // What is left once both label lines are taken off each edge.
+  const band = 2 * SEG_LABEL_BAND * g;
+  const innerTop = housing.y + band;
+  const innerH = bodyH - 2 * band;
+
+  const digitW = SEG_DIGIT_W * g;
+  const thick = digitW / 6;
+  // The painted digit is taller than its own box: the a and d bars straddle
+  // the top and bottom edges, and the decimal point hangs below the baseline.
+  // Sizing against the box alone is what ran `com` through the a and d bars.
+  const gap = SEG_DIGIT_GAP * g;
+  const overTop = thick / 2;
+  const underBase = 0.6 * thick;
+  const digitH = innerH - overTop - underBase - 2 * gap;
+  const digitY = innerTop + gap + overTop;
+  // dp sits right of the digit, so the digit shifts left to keep the painted
+  // ink centred in the body rather than the seven bars alone.
+  const digitX = (bodyW - (digitW + 2 * thick)) / 2;
+
+  const pinX = (i: number) => (SEG_SIDE_PAD + (i + 0.5) * SEG_PITCH) * g;
   const pins = new Map<string, Vec2>();
-  pinNames.forEach((name, i) => pins.set(name, { x: 0, y: i * g }));
-  return { g, pinColumnHeight, digitW, digitH, digitX, digitY: Math.max(0, digitY), bounds, pins };
+  topNames.forEach((name, i) => pins.set(name, { x: pinX(i), y: 0 }));
+  bottomNames.forEach((name, i) => pins.set(name, { x: pinX(i), y: bounds.h }));
+
+  return {
+    g,
+    digitX,
+    digitY,
+    digitW,
+    digitH,
+    thick,
+    labelFontPx: fontPx * SEG_LABEL_SCALE,
+    housing,
+    topNames,
+    bottomNames,
+    labelOf,
+    bounds,
+    pins,
+  };
+}
+
+/** Package pin order is physical: `order` 0..4 are pins 1-5 along the bottom
+ *  edge left to right, 5..9 are pins 6-10 coming back along the top, so the
+ *  top row reads right to left the way the package numbers it. */
+function sevenSegPinGroups(input: GeometryInput): {
+  top: string[];
+  bottom: string[];
+  labelOf: Map<string, string>;
+} {
+  const ins = input.pins.filter((p) => p.dir === 'in').sort((a, b) => a.order - b.order);
+  const half = Math.ceil(ins.length / 2);
+  const labelOf = new Map<string, string>();
+  for (const p of ins) if (p.label) labelOf.set(p.name, p.label);
+  return {
+    bottom: ins.slice(0, half).map((p) => p.name),
+    top: ins
+      .slice(half)
+      .reverse()
+      .map((p) => p.name),
+    labelOf,
+  };
+}
+
+function sevenSegLayoutOf(input: GeometryInput, theme: Theme): SevenSegLayout {
+  const { top, bottom, labelOf } = sevenSegPinGroups(input);
+  return sevenSegLayout(theme.gridSchematic, theme.glyphText, top, bottom, labelOf);
 }
 
 registerGlyphGeometry('sevenseg', (input, theme) => {
-  const ins = input.pins.filter((p) => p.dir === 'in').sort((a, b) => a.order - b.order);
-  const l = sevenSegLayoutRaw(
-    theme.gridSchematic,
-    ins.map((p) => p.name),
-  );
-  return { bounds: l.bounds, pins: l.pins };
-});
-registerGlyphGeometry('sevenseghex', (input, theme) => {
-  const ins = input.pins.filter((p) => p.dir === 'in').sort((a, b) => a.order - b.order);
-  const l = sevenSegLayoutRaw(
-    theme.gridSchematic,
-    ins.map((p) => p.name),
-  );
+  const l = sevenSegLayoutOf(input, theme);
   return { bounds: l.bounds, pins: l.pins };
 });
 
-/** Bar geometry for each of the 7 segments, clipped-end rectangles around a digitW x digitH cell. */
-function segmentBar(
-  seg: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  thick: number,
-): [Vec2, Vec2, number, number] {
-  const half = w / 2;
+/** One segment bar as the mitred hexagon a real display uses: the ends taper
+ *  to a point so adjacent segments meet at a clean diagonal instead of
+ *  overlapping squares. */
+function segmentPath(ctx: CanvasRenderingContext2D, seg: string, l: SevenSegLayout): void {
+  const t = l.thick;
+  const gap = t * 0.6; // keeps neighbouring bars visibly separate
+  const half = t / 2;
+  const x0 = l.digitX;
+  const x1 = l.digitX + l.digitW;
+  const yTop = l.digitY;
+  const yMid = l.digitY + l.digitH / 2;
+  const yBot = l.digitY + l.digitH;
+
+  const horizontal = (y: number): void => {
+    const a = x0 + gap;
+    const b = x1 - gap;
+    ctx.moveTo(a, y);
+    ctx.lineTo(a + half, y - half);
+    ctx.lineTo(b - half, y - half);
+    ctx.lineTo(b, y);
+    ctx.lineTo(b - half, y + half);
+    ctx.lineTo(a + half, y + half);
+    ctx.closePath();
+  };
+  const vertical = (x: number, ya: number, yb: number): void => {
+    const a = ya + gap;
+    const b = yb - gap;
+    ctx.moveTo(x, a);
+    ctx.lineTo(x + half, a + half);
+    ctx.lineTo(x + half, b - half);
+    ctx.lineTo(x, b);
+    ctx.lineTo(x - half, b - half);
+    ctx.lineTo(x - half, a + half);
+    ctx.closePath();
+  };
+
   switch (seg) {
     case 'a':
-      return [{ x: x + thick, y }, { x: x + w - thick, y }, w - 2 * thick, thick];
+      return horizontal(yTop);
     case 'g':
-      return [
-        { x: x + thick, y: y + h / 2 },
-        { x: x + w - thick, y: y + h / 2 },
-        w - 2 * thick,
-        thick,
-      ];
+      return horizontal(yMid);
     case 'd':
-      return [{ x: x + thick, y: y + h }, { x: x + w - thick, y: y + h }, w - 2 * thick, thick];
+      return horizontal(yBot);
     case 'f':
-      return [{ x, y: y + thick }, { x, y: y + h / 2 - thick }, thick, h / 2 - 2 * thick];
+      return vertical(x0, yTop, yMid);
     case 'b':
-      return [
-        { x: x + w, y: y + thick },
-        { x: x + w, y: y + h / 2 - thick },
-        thick,
-        h / 2 - 2 * thick,
-      ];
+      return vertical(x1, yTop, yMid);
     case 'e':
-      return [{ x, y: y + h / 2 + thick }, { x, y: y + h - thick }, thick, h / 2 - 2 * thick];
+      return vertical(x0, yMid, yBot);
     case 'c':
-      return [
-        { x: x + w, y: y + h / 2 + thick },
-        { x: x + w, y: y + h - thick },
-        thick,
-        h / 2 - 2 * thick,
-      ];
+      return vertical(x1, yMid, yBot);
     default:
-      return [{ x, y }, { x, y }, 0, half];
+      return;
   }
 }
 
@@ -785,27 +1022,80 @@ function drawDigit(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
   l: SevenSegLayout,
-  lit: Set<string>,
+  lit: ReadonlySet<string>,
+  color: string,
 ): void {
-  const thick = 0.15 * l.g;
   for (const seg of SEGMENT_ORDER) {
-    const [p0, , w, h] = segmentBar(seg, l.digitX, l.digitY, l.digitW, l.digitH, thick);
-    ctx.beginPath();
-    if (seg === 'a' || seg === 'd' || seg === 'g') ctx.rect(p0.x, p0.y - thick / 2, w, thick);
-    else ctx.rect(p0.x - thick / 2, p0.y, thick, h);
-    ctx.fillStyle = lit.has(seg) ? signalStyle(theme, '1').color : theme.colors.surface;
-    ctx.fill();
-    ctx.strokeStyle = theme.colors.ink;
+    const on = lit.has(seg);
+    const bar = () => segmentPath(ctx, seg, l);
     ctx.lineWidth = theme.strokes.min;
+    if (on) paintEmission(ctx, theme, color, bar);
+    paintLens(ctx, theme, color, on, bar);
+    ctx.strokeStyle = theme.colors.ink;
     ctx.stroke();
   }
-  // Decimal point, lower right -- no driving pin on the raw primitive, static unlit.
-  ctx.beginPath();
-  ctx.arc(l.digitX + l.digitW + thick, l.digitY + l.digitH, thick, 0, Math.PI * 2);
-  ctx.fillStyle = theme.colors.surface;
-  ctx.fill();
+  // Decimal point, lower right, driven by the dp pin like any other segment.
+  const dpOn = lit.has('dp');
+  const dot = () => {
+    ctx.arc(
+      l.digitX + l.digitW + l.thick * 1.4,
+      l.digitY + l.digitH,
+      l.thick * 0.6,
+      0,
+      Math.PI * 2,
+    );
+  };
+  ctx.lineWidth = theme.strokes.min;
+  if (dpOn) paintEmission(ctx, theme, color, dot);
+  paintLens(ctx, theme, color, dpOn, dot);
   ctx.strokeStyle = theme.colors.ink;
   ctx.stroke();
+}
+
+function drawSevenSegBody(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  l: SevenSegLayout,
+  placement: Placement,
+  lit: ReadonlySet<string>,
+  stateOf: (pin: string) => SignalState | undefined,
+  color: string,
+  label?: string,
+): void {
+  withPlacement(ctx, l.bounds, placement, () => {
+    paintBody(ctx, theme, () => bodyRectPath(ctx, theme, l.housing), { rect: l.housing });
+    drawDigit(ctx, theme, l, lit, color);
+
+    const band = SEG_LABEL_BAND * l.g;
+    const bodyBottom = l.housing.y + l.housing.h;
+    ctx.font = `${l.labelFontPx}px ${theme.fonts.mono}`;
+    const rows = [
+      { names: l.topNames, edgeY: l.housing.y, tipY: 0, inward: 1 },
+      { names: l.bottomNames, edgeY: bodyBottom, tipY: l.bounds.h, inward: -1 },
+    ];
+    for (const row of rows) {
+      for (const name of row.names) {
+        const pin = l.pins.get(name)!;
+        drawStub(ctx, theme, { x: pin.x, y: row.edgeY }, { x: pin.x, y: row.tipY }, stateOf(name));
+        ctx.fillStyle = theme.colors.muted;
+        const text = l.labelOf.get(name) ?? name;
+        // Anything wider than its own 1G slot takes the inner line: `com` and
+        // `dp`. They sit two pins apart, so they never meet there.
+        const line = text.length > 1 ? 1.5 : 0.5;
+        const y = row.edgeY + row.inward * line * band;
+        drawUprightText(ctx, placement, text, { x: pin.x, y }, { x: 0, y: 0 });
+      }
+    }
+
+    drawDeviceLabel(
+      ctx,
+      theme,
+      placement,
+      label,
+      { x: l.housing.w + 0.5 * l.g, y: l.housing.y + l.housing.h / 2 },
+      { x: 1, y: 0 },
+    );
+  });
 }
 
 export function drawSevenSeg(
@@ -814,44 +1104,19 @@ export function drawSevenSeg(
   input: GeometryInput,
   placement: Placement,
   litSegments: ReadonlySet<string>,
+  stateOf: (pin: string) => SignalState | undefined = () => undefined,
+  label?: string,
 ): void {
-  const ins = input.pins.filter((p) => p.dir === 'in').sort((a, b) => a.order - b.order);
-  const l = sevenSegLayoutRaw(
-    theme.gridSchematic,
-    ins.map((p) => p.name),
+  drawSevenSegBody(
+    ctx,
+    theme,
+    sevenSegLayoutOf(input, theme),
+    placement,
+    litSegments,
+    stateOf,
+    ledColorOf(theme, input.params),
+    label,
   );
-  withPlacement(ctx, l.bounds, placement, () => {
-    drawDigit(ctx, theme, l, new Set(litSegments));
-    ins.forEach((p, i) =>
-      drawStub(
-        ctx,
-        theme,
-        { x: 0, y: i * l.g },
-        { x: l.g, y: i * l.g },
-        litSegments.has(p.name) ? '1' : '0',
-      ),
-    );
-  });
-}
-
-export function drawSevenSegHex(
-  ctx: CanvasRenderingContext2D,
-  theme: Theme,
-  input: GeometryInput,
-  placement: Placement,
-  value: number | undefined,
-): void {
-  const ins = input.pins.filter((p) => p.dir === 'in').sort((a, b) => a.order - b.order);
-  const l = sevenSegLayoutRaw(
-    theme.gridSchematic,
-    ins.map((p) => p.name),
-  );
-  const lit = new Set(value !== undefined ? HEX_SEGMENTS[value & 0xf]!.split('') : []);
-  withPlacement(ctx, l.bounds, placement, () => {
-    drawDigit(ctx, theme, l, lit);
-    const pin = ins[0];
-    if (pin) drawStub(ctx, theme, { x: 0, y: 0 }, { x: l.g, y: 0 });
-  });
 }
 
 // --- Bit probe / bus value display: a stub into a narrow ink-outlined tag ---

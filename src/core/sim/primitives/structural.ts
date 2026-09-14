@@ -1,16 +1,7 @@
 import * as bv from '../../value/busValue';
-import { expandPin, parsePinView, pinViewOf, reindexPins, splitBus } from './busPins';
+import { onePinLane, parsePinView, pinViewOf, splitBus } from './busPins';
 import type { EvalResult, Params, PrimitivePin, PrimitiveSpec } from './types';
 import { intParam, widthParam } from './types';
-
-// Lane expand for a primitive's single wide pin (mirrors stimulus.ts's onePinLane).
-function onePinLane(name: string, dir: 'in' | 'out', params: Params): PrimitivePin[] {
-  const w = widthParam(params);
-  const view = parsePinView(params);
-  const base: PrimitivePin = { name, dir, width: w, role: 'data', order: 0 };
-  const expanded = w > 1 && pinViewOf(view, name, 'collapsed') === 'expanded';
-  return reindexPins(expanded ? expandPin(base, w) : [base]);
-}
 
 /** LSB-first split sizes from params.splits, e.g. "1,1,1,1" or "4,4". */
 export function splitSizes(params: Params): number[] {

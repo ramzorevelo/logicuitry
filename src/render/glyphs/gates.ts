@@ -41,13 +41,20 @@ const AND_FAMILY: ReadonlySet<GateKind> = new Set(['and', 'nand']);
 // extends to reach the outer pins, Logisim-style.
 const BODY_MAX_N = 4;
 
+// NOT/BUF draw at half a 2-input gate's scale, as H&H and the simulators do:
+// body, input stub and output lead all halve. A full-size inverter wastes TV
+// space and its 9G footprint forced bends in routes that don't need them. The
+// halving is in G, so the ratio to the other gates holds in presentation too.
+const TRIANGLE_KINDS: ReadonlySet<GateKind> = new Set(['not', 'buf']);
+const TRIANGLE_SCALE = 0.5;
+
 export interface GateLayout {
   kind: GateKind;
   g: number;
   H: number; // pin span (bounds height)
   Hbody: number; // body silhouette height, <= H (frozen at BODY_MAX_N pitch)
   bodyY0: number; // local y where the body band starts ((H - Hbody) / 2)
-  bodyX0: number; // local x where the base shape begins (2G in, for the input stub)
+  bodyX0: number; // local x where the base shape begins (the input stub's length)
   bodyRightRaw: number; // raw (unsnapped) x of the base shape's tip/cap edge
   /** AND family only: the frozen cap radius and the local x where the flat
    *  top/bottom edges end and the cap begins -- 0 for every other kind. */
@@ -95,10 +102,14 @@ export function gateLayout(kind: GateKind, input: GeometryInput, theme: Theme): 
   const nIn = Math.max(1, ins.length);
   const nOut = Math.max(1, outs.length);
   const n = Math.max(nIn, nOut);
-  const H = 2 * Math.max(2, n) * g;
-  const Hbody = 2 * Math.min(Math.max(2, n), BODY_MAX_N) * g;
+  // A triangle has one input, so its pin span is a single 2G pitch unless a
+  // pinView-expanded output fans out more rows.
+  const triangle = TRIANGLE_KINDS.has(kind);
+  const scale = triangle ? TRIANGLE_SCALE : 1;
+  const H = 2 * Math.max(triangle ? 1 : 2, n) * g;
+  const Hbody = triangle ? 4 * scale * g : 2 * Math.min(Math.max(2, n), BODY_MAX_N) * g;
   const bodyY0 = (H - Hbody) / 2;
-  const bodyX0 = 2 * g; // one pin pitch (2G) reserved on the left for the input stubs
+  const bodyX0 = 2 * scale * g; // reserved on the left for the input stubs
 
   const andCapRadius = AND_FAMILY.has(kind) ? Hbody / 2 : 0;
   const andRectRight = AND_FAMILY.has(kind) ? bodyX0 + 0.75 * Hbody : 0;
@@ -114,7 +125,7 @@ export function gateLayout(kind: GateKind, input: GeometryInput, theme: Theme): 
   const bubble = BUBBLE_KINDS.has(kind) || input.params['outputBubble'] === true;
   const bubbleDiameter = g; // fixed 1G, never scaled by input count
   const afterBubbleRaw = bubble ? bodyRightRaw + bubbleDiameter : bodyRightRaw;
-  const outputTipX = snap(afterBubbleRaw + 2 * g, g);
+  const outputTipX = snap(afterBubbleRaw + 2 * scale * g, g);
   const outputY = snap(H / 2, g);
 
   // Rows at 2G pitch symmetric about the centerline: y = G(2i+1) when

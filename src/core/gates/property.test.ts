@@ -89,7 +89,7 @@ function randomBoard(rng: Prng, nIn: number, nGates: number, nOut: number): Boar
 
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'rand',
     name: 'rand',
     components,
@@ -203,7 +203,9 @@ describe('bubble-push property test (1000 seeded circuits)', () => {
         current = next!;
       }
     }
-  });
+    // 1000 circuits runs in ~1.5s alone but past vitest's 5s default when the
+    // whole suite shares the cores.
+  }, 30_000);
 
   it('injected illegal moves are rejected, model unchanged (structural hash identical)', () => {
     const rng = mulberry32(0xbadc0de);
@@ -214,10 +216,10 @@ describe('bubble-push property test (1000 seeded circuits)', () => {
       const b = annihilate(randomBoard(rng, nIn, nGates, 1));
       const before = structuralHash(b);
 
-      // Deliberately attempt pushInputsForward on every gate that does NOT
-      // have every input bubbled (the documented failed-drag case), and
-      // pushOutputBackward/pushOutputAcrossFanout on every gate with no
-      // output bubble (nothing to push).
+      // Deliberately attempt pushInputsForward on every gate with NO input
+      // bubble at all (nothing to push -- a partially bubbled gate is legal,
+      // it bubbles the clean siblings), and pushOutputBackward/
+      // pushOutputAcrossFanout on every gate with no output bubble.
       for (const c of b.components) {
         if (
           c.kind !== 'and' &&
@@ -229,8 +231,8 @@ describe('bubble-push property test (1000 seeded circuits)', () => {
         )
           continue;
         const pins = c.kind === 'buf' || c.kind === 'not' ? ['a'] : ['a', 'b'];
-        const allBubbled = pins.every((p) => getInputBubbles(c).has(p));
-        if (!allBubbled) {
+        const anyBubbled = pins.some((p) => getInputBubbles(c).has(p));
+        if (!anyBubbled) {
           expect(pushInputsForward(b, c.id)).toBeNull();
           rejections++;
         }

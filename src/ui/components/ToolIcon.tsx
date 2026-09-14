@@ -5,6 +5,7 @@
 
 export type IconName =
   | 'select'
+  | 'marquee'
   | 'lasso'
   | 'wire'
   | 'junction'
@@ -17,6 +18,7 @@ export type IconName =
   | 'package'
   | 'bubble'
   | 'analyze'
+  | 'build'
   | 'power'
   | 'run'
   | 'pause'
@@ -44,10 +46,20 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   // The marquee itself, dashed, with the corner the drag starts from marked.
-  lasso: (
+  marquee: (
     <>
       <path d="M4 4 H20 V20 H4 Z" strokeDasharray="3 3" />
       <circle cx="4" cy="4" r="1.5" fill="currentColor" />
+    </>
+  ),
+  // The same dashed line, uneven and left open where the rope crosses back.
+  lasso: (
+    <>
+      <path
+        d="M8 18 C2 15 3 7 10 6 C14 5.4 13 9 17 8 C22 7 23 15 16 17 C13 17.8 10 17.4 8 15"
+        strokeDasharray="3 3"
+      />
+      <circle cx="8" cy="18" r="1.5" fill="currentColor" />
     </>
   ),
   cut: <path d="M4 12 H20 M8 19 L16 5" />,
@@ -82,11 +94,17 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   analyze: <path d="M4 5 H20 V19 H4 Z M12 5 V19 M4 12 H20" />,
+  // An expression box driving a wire out: the builder turns one into the other.
+  build: <path d="M3 7 H11 V17 H3 Z M11 12 H21 M18 9 L21 12 L18 15" />,
   power: <path d="M12 4 V11 M6.5 7 A7 7 0 1 0 17.5 7" />,
   run: <path d="M7 4 L19 12 L7 20 Z" />,
   pause: <path d="M9 5 V19 M15 5 V19" />,
   step: <path d="M6 5 L15 12 L6 19 Z M18 5 V19" />,
-  timing: <path d="M3 17 V7 H9 V17 H15 V7 H21" />,
+  // Delay, not a waveform: the square wave this used to be read as "open the
+  // waveform panel". Two offset edges would say propagation delay exactly, but
+  // they are still edges and muddy at 16px; an hourglass is unmistakable at
+  // that size and its silhouette cannot be confused with sta's stopwatch.
+  timing: <path d="M7 4 H17 L12 12 L17 20 H7 L12 12 Z" />,
   sta: (
     <>
       <circle cx="12" cy="13" r="7" />

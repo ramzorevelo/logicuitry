@@ -9,6 +9,8 @@ import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
 import type { Params } from '../../core/sim/primitives/types';
 import type { ParamValue } from '../../core/model/types';
 import { MAX_WIDTH } from '../../core/value/busValue';
+import { MATRIX_MAX, MATRIX_MIN } from '../../core/sim/primitives/display';
+import { isLedColor, isLedShape } from '../../render/theme';
 import { VARIABLE_ARITY_GATES } from './circuitStore';
 
 /** True when bumping `params.width` by one changes some pin's width --
@@ -52,6 +54,18 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
   if (kind === 'mux' || kind === 'demux' || kind === 'decoder') keys.add('hasEnable');
   if (kind === 'mux' || kind === 'demux') keys.add('selSide');
   if (kind === 'toggle') keys.add('initial');
+  if (kind === 'led') {
+    keys.add('color');
+    keys.add('shape');
+  }
+  if (kind === 'sevenseg') {
+    keys.add('color');
+    keys.add('common');
+  }
+  if (kind === 'ledmatrix') {
+    keys.add('rows');
+    keys.add('cols');
+  }
   if (kind === 'constant') keys.add('value');
   return keys;
 }
@@ -92,9 +106,23 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
       const n = Number(raw);
       return Number.isFinite(n) ? n : null;
     }
+    case 'color':
+      return (kind === 'led' || kind === 'sevenseg') && isLedColor(raw) ? raw : null;
+    case 'common':
+      return kind === 'sevenseg' ? (raw === 'anode' ? 'anode' : 'cathode') : null;
+    case 'shape':
+      return kind === 'led' && isLedShape(raw) ? raw : null;
+    case 'rows':
+    case 'cols': {
+      const n = Math.round(Number(raw));
+      if (kind !== 'ledmatrix' || !Number.isFinite(n)) return null;
+      return Math.min(MATRIX_MAX, Math.max(MATRIX_MIN, n));
+    }
     case 'value':
       return kind === 'constant' ? raw : null;
     default:
       return null;
   }
 }
+
+export { isLiveEditable, liveParamsOnly, paramLiveness, type ParamLiveness } from './paramLiveness';

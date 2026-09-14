@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "format": { "const": "lcir.board" },
-    "formatVersion": { "const": 5 },
+    "formatVersion": { "const": 7 },
     "id": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1 },
     "components": {

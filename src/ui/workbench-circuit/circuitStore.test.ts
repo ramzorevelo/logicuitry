@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { seedNextId, starterBoard, useCircuitStore, type ResolveWireEnd } from './circuitStore';
+import {
+  seedNextId,
+  starterBoard,
+  useCircuitStore,
+  type ComponentPins,
+  type ResolveWireEnd,
+} from './circuitStore';
 import type { Board, ChipDef, Point } from '../../core/model/types';
+import { usePrefsStore } from '../prefs';
 import { pushOutputBackward } from '../../core/gates/transform';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
 import type { Theme } from '../../render/theme';
@@ -633,6 +640,24 @@ describe('circuitStore power + pinSignal', () => {
     expect(useCircuitStore.getState().board.wires.length).toBe(before.length);
   });
 
+  it('a part placed inside a group joins it, so it moves with the border', () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 400, y: 200 }, 8, undefined, undefined, undefined, undefined, 'g1');
+    const placed = useCircuitStore
+      .getState()
+      .board.components.find((c) => c.pos.x === 400 && c.pos.y === 200)!;
+    expect(placed.group).toBe('g1');
+  });
+
+  it('a part placed outside every border stays ungrouped', () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 800, y: 600 }, 8);
+    const placed = useCircuitStore
+      .getState()
+      .board.components.find((c) => c.pos.x === 800 && c.pos.y === 600)!;
+    expect(placed.group).toBeUndefined();
+  });
+
   it('gate input count adjusts 2-8 and shrink drops wires to removed pins in one undo', () => {
     const s = useCircuitStore.getState();
     s.place('and', { x: 400, y: 200 }, 8);
@@ -821,7 +846,7 @@ describe('circuitStore power + pinSignal', () => {
 function bufDef(id: string): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 3,
+    formatVersion: 5,
     id,
     name: id,
     version: 1,
@@ -871,7 +896,7 @@ function bufDef(id: string): ChipDef {
 function emptyBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'test',
     name: 'test',
     components: [],
@@ -1403,10 +1428,70 @@ describe('M4.2 P0.4 dragging preserves power', () => {
   });
 });
 
+describe('pins dropped onto each other wire themselves up', () => {
+  beforeEach(() =>
+    useCircuitStore.setState({
+      board: { ...emptyBoard(), components: [], wires: [], junctions: [] },
+      selection: new Set(),
+      powered: false,
+    }),
+  );
+
+  /** Stands in for the canvas layer: two pins at the origin, one in one out,
+   *  so a placed part always lands on whatever is already there. */
+  const stacked: ComponentPins = () => [
+    { name: 'a', pos: { x: 0, y: 0 }, width: 1, dir: 'in' },
+    { name: 'y', pos: { x: 0, y: 0 }, width: 1, dir: 'out' },
+  ];
+
+  const wireBetween = (a: string, b: string) =>
+    useCircuitStore
+      .getState()
+      .board.wires.find(
+        (w) =>
+          w.a.kind === 'pin' &&
+          w.b.kind === 'pin' &&
+          new Set([w.a.component, w.b.component]).size === 2 &&
+          [w.a.component, w.b.component].includes(a) &&
+          [w.a.component, w.b.component].includes(b),
+      );
+
+  it('wires a placed part to a pin it lands exactly on, in the same undo step', () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 0, y: 0 }, 8, undefined, undefined, undefined, stacked);
+    s.place('led', { x: 0, y: 0 }, 8, undefined, undefined, undefined, stacked);
+    const ids = useCircuitStore.getState().board.components.map((c) => c.id);
+    expect(wireBetween(ids[0]!, ids[1]!)).toBeDefined();
+    useCircuitStore.getState().undo();
+    expect(useCircuitStore.getState().board.wires).toHaveLength(0);
+    expect(useCircuitStore.getState().board.components).toHaveLength(1);
+  });
+
+  it('leaves pins alone when no resolver is supplied', () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 0, y: 0 }, 8);
+    s.place('led', { x: 0, y: 0 }, 8);
+    expect(useCircuitStore.getState().board.wires).toHaveLength(0);
+  });
+
+  it('never lands a second driver on an input', () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 0, y: 0 }, 8, undefined, undefined, undefined, stacked);
+    s.place('or', { x: 0, y: 0 }, 8, undefined, undefined, undefined, stacked);
+    s.place('xor', { x: 0, y: 0 }, 8, undefined, undefined, undefined, stacked);
+    const wires = useCircuitStore.getState().board.wires;
+    const inputEnds = wires.flatMap((w) =>
+      [w.a, w.b].filter((e) => e.kind === 'pin' && e.pin === 'a'),
+    );
+    const keys = inputEnds.map((e) => (e.kind === 'pin' ? e.component + ' ' + e.pin : ''));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe('id generation never collides with an already-loaded board', () => {
   beforeEach(reset);
 
-  it('seedNextId advances past the highest id suffix already on the board', () => {
+  it('seedNextId advances past the highest suffix on that prefix', () => {
     const board: Board = {
       ...useCircuitStore.getState().board,
       wires: [
@@ -1420,9 +1505,55 @@ describe('id generation never collides with an already-loaded board', () => {
     };
     seedNextId(board);
     const s = useCircuitStore.getState();
-    s.place('toggle', { x: 0, y: 400 }, 8);
-    const created = useCircuitStore.getState().board.components.at(-1)!;
-    expect(Number(/(\d+)$/.exec(created.id)![1])).toBeGreaterThan(99);
+    s.place('button', { x: 0, y: 400 }, 8);
+    const ids = useCircuitStore.getState().board.wires.map((w) => w.id);
+    expect(ids).not.toContain('w99');
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('numbers each kind from one, so the first button is button1', () => {
+    const s = useCircuitStore.getState();
+    s.place('button', { x: 0, y: 400 }, 8);
+    s.place('button', { x: 200, y: 400 }, 8);
+    const ids = useCircuitStore.getState().board.components.map((c) => c.id);
+    expect(ids).toContain('button1');
+    expect(ids).toContain('button2');
+  });
+
+  it('keeps a chip id clear of the board even when its defId ends in digits', () => {
+    const def: ChipDef = {
+      format: 'lcir.chip',
+      formatVersion: 5,
+      id: '74LS00',
+      name: '74LS00',
+      version: 1,
+      pins: [
+        {
+          id: 'p1',
+          name: 'y',
+          dir: 'out',
+          width: 1,
+          role: 'data',
+          order: 0,
+          boundComponent: 'o1',
+        },
+      ],
+      components: [{ id: 'o1', kind: 'outport', pos: { x: 0, y: 0 } }],
+      wires: [],
+      junctions: [],
+    };
+    const board: Board = {
+      ...useCircuitStore.getState().board,
+      components: [
+        ...useCircuitStore.getState().board.components,
+        { id: '74LS001', kind: 'chip', defId: '74LS00', pos: { x: 0, y: 0 } },
+      ],
+    };
+    useCircuitStore.setState({ board, chipLib: new Map([['74LS00', def]]) });
+    seedNextId(board);
+    useCircuitStore.getState().place('chip', { x: 200, y: 0 }, 8, undefined, undefined, '74LS00');
+    const ids = useCircuitStore.getState().board.components.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('a wire drawn right after loading the starter board never reuses one of its hardcoded ids', () => {
@@ -2538,7 +2669,7 @@ describe('Task 1b: naming a gate/mux/decoder/chip participates in labelSync', ()
   it('naming a chip instance derives one label per boundary output pin, via renameComponent', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 3,
+      formatVersion: 5,
       id: 'chipdef1',
       name: 'MyChip',
       version: 1,
@@ -2880,6 +3011,45 @@ describe('M6.6 Phase 6: pinView reshapes drop stale wires in one undo step', () 
     const ok = useCircuitStore.getState().setComponentParams('g1', { pinView: 'y=expanded' });
     expect(ok).toBe(true);
     expect(useCircuitStore.getState().board.wires.find((w) => w.id === 'gw3')).toBeUndefined();
+  });
+
+  it('expanding a pin wired to a bus display rewires bit-for-bit instead of dropping', () => {
+    // The priority-encoder board's shape: a wide output feeding a bus display.
+    // The display had no pinView group of its own, so this used to drop the
+    // wire and leave the display showing a bus nothing drove.
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: [
+          ...st.board.components,
+          { id: 'bd1', kind: 'busdisplay', pos: { x: 200, y: 0 }, params: { width: 3 } },
+        ],
+        wires: [
+          ...st.board.wires,
+          {
+            id: 'gw9',
+            a: { kind: 'pin', component: 'g1', pin: 'y' },
+            b: { kind: 'pin', component: 'bd1', pin: 'value' },
+            points: [],
+          },
+        ],
+      },
+    }));
+    expect(useCircuitStore.getState().setComponentParams('g1', { pinView: 'y=expanded' })).toBe(
+      true,
+    );
+    const st = useCircuitStore.getState();
+    expect(st.board.wires.find((w) => w.id === 'gw9')).toBeUndefined(); // replaced, not kept whole
+    // The display followed, and every bit is wired to its own lane.
+    expect(st.board.components.find((c) => c.id === 'bd1')!.params?.['pinView']).toBe(
+      'value=expanded',
+    );
+    const displayPins = st.board.wires
+      .flatMap((w) => [w.a, w.b])
+      .filter((e) => e.kind === 'pin' && e.component === 'bd1')
+      .map((e) => (e.kind === 'pin' ? e.pin : ''))
+      .sort();
+    expect(displayPins).toEqual(['value0', 'value1', 'value2']);
   });
 
   it('expanding a gate output wired directly (no junction) to an Out port produces one wire per bit', () => {
@@ -4105,7 +4275,7 @@ describe('loadChipDefs (library folder -> chipLib)', () => {
 
   const def = (id: string): ChipDef => ({
     format: 'lcir.chip',
-    formatVersion: 3,
+    formatVersion: 5,
     id,
     name: id,
     version: 1,
@@ -4157,7 +4327,7 @@ describe('loadBoard (session restore / File > Open)', () => {
 
   const loaded = (): Board => ({
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'opened',
     name: 'opened',
     components: [
@@ -4478,7 +4648,7 @@ describe('circuitStore label sharing across a buffer', () => {
 
   const chainBoard = (withBuffer: boolean): Board => ({
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'chain',
     name: 'chain',
     components: [
@@ -4524,7 +4694,7 @@ describe('circuitStore label sharing across a buffer', () => {
   /** sw -> chain of single-input parts -> led. */
   const throughBoard = (kinds: readonly string[]): Board => ({
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'chain',
     name: 'chain',
     components: [
@@ -4593,5 +4763,154 @@ describe('circuitStore label sharing across a buffer', () => {
     useCircuitStore.getState().loadBoard(b);
     expect(useCircuitStore.getState().renameComponent('sw', 'A')).toBe(true);
     expect(useCircuitStore.getState().renameComponent('lamp', 'A')).toBe(false);
+  });
+});
+
+describe('powered param edits (liveness gate)', () => {
+  beforeEach(reset);
+
+  const litBoard = (st: { board: Board }): { board: Board } => ({
+    board: {
+      ...st.board,
+      components: [
+        { id: 'c1', kind: 'toggle', pos: { x: 0, y: 0 }, params: { initial: false } },
+        { id: 'c2', kind: 'led', pos: { x: 100, y: 0 }, params: { color: 'red' } },
+        { id: 'k1', kind: 'constant', pos: { x: 0, y: 200 }, params: { width: 4, value: 5 } },
+      ],
+      wires: [
+        {
+          id: 'w1',
+          a: { kind: 'pin', component: 'c1', pin: 'y' },
+          b: { kind: 'pin', component: 'c2', pin: 'a' },
+          points: [],
+        },
+      ],
+    },
+  });
+
+  // The reported bug: changing an LED's colour forced a power cycle, which
+  // also reset every switch, so the instructor had to re-drive the board.
+  it('an LED colour change keeps the sim powered', () => {
+    useCircuitStore.setState(litBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    s.toggleInput('c1');
+    expect(useCircuitStore.getState().setComponentParams('c2', { color: 'green' })).toBe(true);
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().board.components.find((c) => c.id === 'c2')!.params).toEqual({
+      color: 'green',
+    });
+  });
+
+  it('the switch it was driving keeps its value across that edit', () => {
+    useCircuitStore.setState(litBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleInput('c1');
+    expect(useCircuitStore.getState().pinSignal('c1', 'y')).toBe('1');
+    useCircuitStore.getState().setComponentParams('c2', { shape: 'square' });
+    expect(useCircuitStore.getState().powered).toBe(true);
+    // The switch is still driving 1: no power cycle reset it to its initial.
+    expect(useCircuitStore.getState().pinSignal('c1', 'y')).toBe('1');
+    expect(useCircuitStore.getState().pinSignal('c2', 'a')).toBe('1');
+  });
+
+  it('a width change still drops power (structural, needs a recompile)', () => {
+    useCircuitStore.setState(litBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    useCircuitStore.getState().setComponentParams('c2', { width: 4 });
+    expect(useCircuitStore.getState().powered).toBe(false);
+  });
+
+  it('a rename still drops power: net paths the readouts use are compiled in', () => {
+    useCircuitStore.setState(litBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    useCircuitStore.getState().setComponentParams('c2', { color: 'red' }, 'Lamp');
+    expect(useCircuitStore.getState().powered).toBe(false);
+  });
+
+  it('a live constant value reaches the net without a power cycle', () => {
+    useCircuitStore.setState(litBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    useCircuitStore.getState().setComponentParams('k1', { width: 4, value: 10 });
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().board.components.find((c) => c.id === 'k1')!.params).toEqual({
+      width: 4,
+      value: 10,
+    });
+  });
+});
+
+describe('switch positions across a power cycle (opt-in pref)', () => {
+  beforeEach(() => {
+    reset();
+    usePrefsStore.getState().setPref('keepSwitchesAcrossPower', false);
+  });
+
+  const swBoard = (st: { board: Board }): { board: Board } => ({
+    board: {
+      ...st.board,
+      components: [
+        { id: 'sw', kind: 'toggle', pos: { x: 0, y: 0 }, params: { initial: 0 } },
+        { id: 'l', kind: 'led', pos: { x: 100, y: 0 } },
+        // Unwired, so changing its arity is a structural edit that still
+        // leaves the board compiling (a width clash would not).
+        { id: 'g', kind: 'and', pos: { x: 0, y: 400 }, params: { inputs: 2 } },
+      ],
+      wires: [
+        {
+          id: 'w1',
+          a: { kind: 'pin', component: 'sw', pin: 'y' },
+          b: { kind: 'pin', component: 'l', pin: 'a' },
+          points: [],
+        },
+      ],
+    },
+  });
+
+  it('default (off) starts cold: the switch returns to its initial value', () => {
+    useCircuitStore.setState(swBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleInput('sw');
+    expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
+    useCircuitStore.getState().power(); // off
+    useCircuitStore.getState().power(); // on
+    expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('0');
+  });
+
+  it('on: the switch comes back as it was left, so a recompile costs no setup', () => {
+    usePrefsStore.getState().setPref('keepSwitchesAcrossPower', true);
+    useCircuitStore.setState(swBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleInput('sw');
+    expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
+    useCircuitStore.getState().power(); // off
+    useCircuitStore.getState().power(); // on
+    expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
+    // and it really reached the rest of the board, not just the switch
+    expect(useCircuitStore.getState().pinSignal('l', 'a')).toBe('1');
+  });
+
+  it('a width edit between the cycles keeps the restored position', () => {
+    usePrefsStore.getState().setPref('keepSwitchesAcrossPower', true);
+    useCircuitStore.setState(swBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleInput('sw');
+    // A structural edit drops power (that is the point), but the position it
+    // cost the instructor is exactly what the pref is for.
+    useCircuitStore.getState().setComponentParams('g', { inputs: 3 });
+    expect(useCircuitStore.getState().powered).toBe(false);
+    useCircuitStore.getState().power();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
   });
 });

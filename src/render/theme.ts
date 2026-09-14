@@ -45,6 +45,31 @@ export interface WaveDials {
   fillUnderHigh: boolean;
 }
 
+/** Physical LED colours. This array is both the set and the picker order:
+ *  the param overlay's colour list and the Settings default both read it. */
+export const LED_COLORS = [
+  'red',
+  'green',
+  'blue',
+  'yellow',
+  'orange',
+  'cyan',
+  'magenta',
+  'white',
+] as const;
+export type LedColor = (typeof LED_COLORS)[number];
+
+export const LED_SHAPES = ['symbol', 'round'] as const;
+export type LedShape = (typeof LED_SHAPES)[number];
+
+export function isLedColor(v: unknown): v is LedColor {
+  return typeof v === 'string' && (LED_COLORS as readonly string[]).includes(v);
+}
+
+export function isLedShape(v: unknown): v is LedShape {
+  return typeof v === 'string' && (LED_SHAPES as readonly string[]).includes(v);
+}
+
 export interface Theme {
   name: ThemeName;
   appearance: 'light' | 'dark';
@@ -66,6 +91,15 @@ export interface Theme {
     /** 8 categorical K-map group strokes (--kmap-g1..8). */
     kmapGroups: string[];
   };
+  /** Physical LED colours (--led-*). Not signal colours: a lit LED shows the
+   *  part's own colour, so the same board reads the same in every theme.
+   *  White is the one exception: on a pale surface no value reads as white and
+   *  still separates, so every pale-surfaced theme re-authors it. */
+  ledColors: Record<LedColor, string>;
+  /** What a lit LED spills, which need not be what its lens is
+   *  (--led-*-glow). Only white declares one: a warm spill separates from a
+   *  pale ground where its own fill cannot. */
+  ledEmission: Record<LedColor, string>;
   fonts: { ui: string; mono: string; display: string };
   strokes: { min: number; wire: number; bus: number; cornerRadius: number };
   glyph: GlyphDials;
@@ -128,6 +162,8 @@ export function readTheme(root: HTMLElement = document.documentElement): Theme {
     if (!value) throw new Error(`missing design token ${name}`);
     return value;
   };
+  /** For tokens only some colours declare; the caller supplies the fallback. */
+  const optional = (name: string): string => style.getPropertyValue(name).trim();
   const px = (name: string): number => Number.parseFloat(token(name));
   // A token whose value is outside the dial's vocabulary is an authoring typo;
   // fall back rather than crash the whole canvas over decoration.
@@ -157,6 +193,13 @@ export function readTheme(root: HTMLElement = document.documentElement): Theme {
       signalMixed: token('--signal-mixed'),
       kmapGroups: Array.from({ length: 8 }, (_, i) => token(`--kmap-g${i + 1}`)),
     },
+    ledColors: Object.fromEntries(LED_COLORS.map((c) => [c, token(`--led-${c}`)])) as Record<
+      LedColor,
+      string
+    >,
+    ledEmission: Object.fromEntries(
+      LED_COLORS.map((c) => [c, optional(`--led-${c}-glow`) || token(`--led-${c}`)]),
+    ) as Record<LedColor, string>,
     fonts: { ui: token('--font-ui'), mono: token('--font-mono'), display: token('--display-font') },
     strokes: {
       min: px('--stroke-min') * strokeScale,

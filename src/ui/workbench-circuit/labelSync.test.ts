@@ -343,3 +343,47 @@ describe('labelSyncForOutput (Task 1b)', () => {
     expect(r.conflict).toBeNull();
   });
 });
+
+describe('a bus display takes part in label sync like the probe beside it', () => {
+  // DATA_PIN named the pin 'a', but a bus display's pin is 'value', so the
+  // lookup found nothing and displays were invisible to every path here:
+  // no inherited name, no name handed to the net, no conflict detection.
+  const board = (displayLabel?: string): Circuit => ({
+    components: [
+      { id: 'sw1', kind: 'toggle', pos: { x: 0, y: 0 }, params: { width: 2 }, label: 'SUM' },
+      {
+        id: 'bd1',
+        kind: 'busdisplay',
+        pos: { x: 100, y: 0 },
+        params: { width: 2 },
+        ...(displayLabel ? { label: displayLabel } : {}),
+      },
+    ],
+    wires: [
+      {
+        id: 'w1',
+        a: { kind: 'pin', component: 'sw1', pin: 'y' },
+        b: { kind: 'pin', component: 'bd1', pin: 'value' },
+        points: [],
+      },
+    ],
+    junctions: [],
+  });
+
+  it('inherits the net name from the switch driving it', () => {
+    const r = labelSync(board(), { component: 'sw1', pin: 'y' });
+    expect(r.inherit).toEqual([{ id: 'bd1', label: 'SUM' }]);
+    expect(r.conflict).toBeNull();
+  });
+
+  it('raises a conflict when it disagrees with the net it is on', () => {
+    const r = labelSync(board('TOTAL'), { component: 'sw1', pin: 'y' });
+    expect(r.inherit).toEqual([]);
+    expect(r.conflict?.candidates.sort()).toEqual(['SUM', 'TOTAL']);
+  });
+
+  it('is reachable from its own pin, not only from the far end', () => {
+    const r = labelSync(board(), { component: 'bd1', pin: 'value' });
+    expect(r.inherit).toEqual([{ id: 'bd1', label: 'SUM' }]);
+  });
+});

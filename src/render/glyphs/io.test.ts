@@ -328,3 +328,39 @@ describe('port/tag row band grows around the pin, not below it', () => {
     expect(ys[2]! - ys[1]!).toBe(l.rowH);
   });
 });
+
+describe('sevenSegLayout', () => {
+  const comp: Component = { id: 'ds1', kind: 'sevenseg', pos: { x: 0, y: 0 } };
+  const geo = symbolBounds(comp, glyphTheme);
+
+  it('is a fixed 10-pin package, taller than it is wide', () => {
+    expect(geo.bounds.w).toBeCloseTo(6 * G, 6);
+    expect(geo.bounds.h).toBeCloseTo(15 * G, 6);
+    expect(geo.bounds.h).toBeGreaterThan(geo.bounds.w);
+  });
+
+  it('splits the ten pins five above and five below', () => {
+    const pins = [...geo.pins.values()];
+    expect(pins).toHaveLength(10);
+    expect(pins.filter((p) => p.y === 0)).toHaveLength(5);
+    expect(pins.filter((p) => p.y === geo.bounds.h)).toHaveLength(5);
+  });
+
+  it('numbers the package the way a datasheet does: 1-5 along the bottom, 6-10 back along the top', () => {
+    const rowNames = (y: number) =>
+      [...geo.pins.entries()]
+        .filter(([, p]) => p.y === y)
+        .sort((a, b) => a[1].x - b[1].x)
+        .map(([name]) => name);
+    expect(rowNames(geo.bounds.h)).toEqual(['e', 'd', 'com1', 'c', 'dp']);
+    expect(rowNames(0)).toEqual(['g', 'f', 'com2', 'a', 'b']);
+  });
+
+  it('keeps the two rows on the same 1G pitch, one above the other', () => {
+    const xs = [...new Set([...geo.pins.values()].map((p) => p.x))].sort((a, b) => a - b);
+    expect(xs).toHaveLength(5);
+    for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeCloseTo(1 * G, 6);
+    // Half a pitch of body either side puts every pin on a whole grid step.
+    for (const x of xs) expect(x % G).toBeCloseTo(0, 6);
+  });
+});

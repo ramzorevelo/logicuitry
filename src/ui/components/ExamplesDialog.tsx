@@ -3,8 +3,8 @@
 // point on a phone and on an empty first launch, where the menu bar is not
 // where anyone looks first.
 
-import { useEffect } from 'react';
 import { EXAMPLES, type Example } from '../../examples';
+import { useModalKeys } from '../modalKeys';
 
 export function ExamplesDialog({
   onOpen,
@@ -13,16 +13,7 @@ export function ExamplesDialog({
   onOpen: (example: Example) => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onCancel]);
+  useModalKeys(onCancel);
 
   return (
     <div

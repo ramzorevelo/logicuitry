@@ -18,6 +18,117 @@ export function routeOrthogonal(a: Vec2, b: Vec2, flip = false): Vec2[] {
   return [a, elbowCorner(a, b, flip), b];
 }
 
+/** How far a wire runs straight out of a pin before it may turn, in grid
+ *  steps. Enough to read as leaving the pin rather than the body. */
+export const PIN_STUB = 2;
+
+export type Axis = 'h' | 'v';
+export type Side = 'left' | 'right' | 'up' | 'down';
+
+const SIDE_STEP: Record<Side, Vec2> = {
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+};
+
+export const axisOfSide = (s: Side): Axis => (s === 'left' || s === 'right' ? 'h' : 'v');
+
+/** Which body edge a pin sits on, and so which way its wire has to leave.
+ *  Undefined where there is no body to read it from, or the point is as close
+ *  to a horizontal edge as to a vertical one (a corner), where neither
+ *  direction is the obvious one. */
+export function pinExitSide(p: Vec2, rect: Rect | undefined): Side | undefined {
+  if (!rect) return undefined;
+  const dl = Math.abs(p.x - rect.x);
+  const dr = Math.abs(p.x - (rect.x + rect.w));
+  const dt = Math.abs(p.y - rect.y);
+  const db = Math.abs(p.y - (rect.y + rect.h));
+  const h = Math.min(dl, dr);
+  const v = Math.min(dt, db);
+  if (h === v) return undefined;
+  if (h < v) return dl <= dr ? 'left' : 'right';
+  return dt <= db ? 'up' : 'down';
+}
+
+export function pinExitAxis(p: Vec2, rect: Rect | undefined): Axis | undefined {
+  const side = pinExitSide(p, rect);
+  return side && axisOfSide(side);
+}
+
+/** Which axis a single-elbow route leads with, as routeOrthogonal's `flip`.
+ *  A wire leaves its start pin along that pin's axis and arrives at the far
+ *  pin along the far pin's; one elbow can honour both only where the two
+ *  differ. Reading this off the pins rather than the argument order is what
+ *  stops the drawn route depending on which end the drag started from. */
+export function leadFlip(from: Axis | undefined, to: Axis | undefined): boolean {
+  if (from) return from === 'v';
+  // No start axis to honour: the LAST leg is what has to match the far pin,
+  // and a horizontal-leading elbow arrives vertically.
+  if (to) return to === 'h';
+  return false;
+}
+
+/** How a route should leave and arrive, read from its two pins. */
+export interface RoutePreference {
+  from?: Side | undefined;
+  to?: Side | undefined;
+  /** Minimum run straight out of a pin before the first turn. A wire that
+   *  turns on the pin itself reads as leaving sideways out of the body, and
+   *  on a densely-pinned edge it runs along its own pin row grazing every
+   *  neighbouring stub. */
+  stub?: number;
+}
+
+/** Drops repeated points, keeping every corner. */
+export function dedupePoints(pts: readonly Vec2[]): Vec2[] {
+  const out: Vec2[] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && last.x === p.x && last.y === p.y) continue;
+    out.push({ x: p.x, y: p.y });
+  }
+  return out;
+}
+
+/** Drops repeated points and any corner that is not actually a corner, so a
+ *  stubbed route collapses back to a straight line where the stubs happened
+ *  to be collinear with it.
+ *
+ *  Note this also erases an out-and-back: a -> a+stub -> a reads as three
+ *  collinear points and comes out as a single one. That is the right shape to
+ *  DRAW, but it means a candidate whose stub doubled back cannot be recognised
+ *  after simplifying -- which is why routeAvoiding tests for reversal on the
+ *  unsimplified polyline and simplifies only what it returns. */
+export function simplifyPolyline(pts: readonly Vec2[]): Vec2[] {
+  const out = dedupePoints(pts);
+  for (let i = 1; i < out.length - 1; ) {
+    const p0 = out[i - 1]!;
+    const p1 = out[i]!;
+    const p2 = out[i + 1]!;
+    if ((p0.x === p1.x && p1.x === p2.x) || (p0.y === p1.y && p1.y === p2.y)) out.splice(i, 1);
+    else i++;
+  }
+  return out;
+}
+
+/** The pin end of a route: `d` straight out along the pin, but never past the
+ *  far end of the wire.
+ *
+ *  The stub is a MINIMUM run out of the pin, not a fixed one. Unclamped, a pin
+ *  sitting one grid step to the side of its target got the full 2G, sailed
+ *  past it and had to come back -- a bend, where a clean corner was there for
+ *  the taking. Only a target the pin has to reach ACROSS is clamped; one
+ *  behind the pin keeps the full stub, because coming out and around really is
+ *  required there. */
+function stubEnd(p: Vec2, side: Side | undefined, d: number, far: Vec2): Vec2 {
+  if (!side) return p;
+  const v = SIDE_STEP[side];
+  const avail = v.x !== 0 ? (far.x - p.x) * v.x : (far.y - p.y) * v.y;
+  const len = avail >= 0 ? Math.min(d, avail) : d;
+  return { x: p.x + v.x * len, y: p.y + v.y * len };
+}
+
 /** True when the axis-aligned segment p0->p1 passes through rect's interior
  *  (touching an edge doesn't count -- a wire landing exactly on a pin at the
  *  body's boundary is normal, not a body crossing). */
@@ -86,29 +197,90 @@ export function routeAvoiding(
   obstacles: readonly Rect[],
   wireObstacles: readonly Vec2[][] = [],
   grid = 16,
+  prefer?: RoutePreference,
 ): Vec2[] {
-  if (obstacles.length === 0 && wireObstacles.length === 0) return routeOrthogonal(a, b);
-  const straight = routeOrthogonal(a, b);
-  const flipped = routeOrthogonal(a, b, true);
-  const detour = routeTwoElbow(a, b);
-  const shifted: Vec2[][] = [];
-  if (a.x !== b.x && a.y !== b.y) {
-    const baseX = Math.round((a.x + b.x) / 2);
-    const baseY = Math.round((a.y + b.y) / 2);
-    for (const step of [1, 2, 3]) {
+  const stub = prefer?.stub ?? 0;
+  // Every candidate starts and ends with the run straight out of its pin, so
+  // the choice below is only ever about how to join the two stub ends.
+  const pa = stubEnd(a, prefer?.from, stub, b);
+  const pb = stubEnd(b, prefer?.to, stub, a);
+  const flip = leadFlip(
+    prefer?.from && axisOfSide(prefer.from),
+    prefer?.to && axisOfSide(prefer.to),
+  );
+  // Raw keeps the stub corners so a doubled-back candidate is still visible;
+  // pts is what would actually be drawn.
+  const join = (mid: Vec2[]): { raw: Vec2[]; pts: Vec2[] } => {
+    const raw = dedupePoints([a, pa, ...mid, pb, b]);
+    return { raw, pts: simplifyPolyline(raw) };
+  };
+
+  const zOn = (vertical: boolean): Vec2[] => {
+    if (pa.x === pb.x || pa.y === pb.y) return [pa, pb];
+    if (vertical) {
+      const midY = Math.round((pa.y + pb.y) / 2);
+      return [pa, { x: pa.x, y: midY }, { x: pb.x, y: midY }, pb];
+    }
+    const midX = Math.round((pa.x + pb.x) / 2);
+    return [pa, { x: midX, y: pa.y }, { x: midX, y: pb.y }, pb];
+  };
+
+  // Two pins deliberately lined up get the single straight segment they were
+  // lined up for. The stub is there to stop a wire leaving sideways along a
+  // crowded pin row, not to forbid the one-segment route that alignment buys,
+  // and forcing it here turned a straight wire into a three-bend excursion out
+  // past one pin and back. It is still only a candidate: where the straight
+  // run would cut through a body, the stubbed routes below take over.
+  const aligned = a.x === b.x || a.y === b.y;
+  const direct = { raw: [a, b], pts: [a, b] };
+
+  // Both pins facing the same axis cannot be joined by one elbow without one
+  // of them being left or entered sideways, so the Z is the honest first try.
+  const sameAxis =
+    !!prefer?.from && !!prefer.to && axisOfSide(prefer.from) === axisOfSide(prefer.to);
+  const lead = join(routeOrthogonal(pa, pb, flip));
+  const other = join(routeOrthogonal(pa, pb, !flip));
+  const zLead = join(zOn(flip));
+  const zOther = join(zOn(!flip));
+  const first = sameAxis ? zLead : lead;
+
+  // Generated even where the two stub ends share a coordinate. That case used
+  // to be skipped as having nothing to shift, which left a pin whose stub
+  // points AWAY from its target -- a bottom pin wired to something above, say
+  // -- with no candidate but the one that doubles back, straight down through
+  // its own body. These are the only routes that can go round a body, so they
+  // must exist whatever the endpoints line up on. Far enough out to clear a
+  // wide package, nearest step first.
+  const shifted: { raw: Vec2[]; pts: Vec2[] }[] = [];
+  {
+    const baseX = Math.round((pa.x + pb.x) / 2);
+    const baseY = Math.round((pa.y + pb.y) / 2);
+    for (const s of [1, 2, 3, 4, 5, 6, 8, 10]) {
       for (const sign of [1, -1]) {
-        const midX = baseX + step * sign * grid;
-        shifted.push([a, { x: midX, y: a.y }, { x: midX, y: b.y }, b]);
-        const midY = baseY + step * sign * grid;
-        shifted.push([a, { x: a.x, y: midY }, { x: b.x, y: midY }, b]);
+        const midX = baseX + s * sign * grid;
+        shifted.push(join([pa, { x: midX, y: pa.y }, { x: midX, y: pb.y }, pb]));
+        const midY = baseY + s * sign * grid;
+        shifted.push(join([pa, { x: pa.x, y: midY }, { x: pb.x, y: midY }, pb]));
       }
     }
   }
-  const candidates = [straight, flipped, detour, ...shifted];
-  const clearsBody = (pts: Vec2[]) => !polylineCrossesAny(pts, obstacles);
-  for (const c of candidates) if (clearsBody(c) && !routeOverlapsWires(c, wireObstacles)) return c;
-  for (const c of candidates) if (clearsBody(c)) return c;
-  return straight;
+
+  const base = sameAxis
+    ? [zLead, lead, other, zOther, ...shifted]
+    : [lead, other, zLead, zOther, ...shifted];
+  const candidates = aligned ? [direct, ...base] : base;
+  // A stub pointing away from the target can double the route back over
+  // itself; such a candidate is never what was meant, so it is dropped
+  // outright rather than ranked.
+  const sane = candidates.filter((c) => !hasCollinearReversal(c.raw));
+  const pool = sane.length ? sane : candidates;
+  const best = pool[0] ?? first;
+  if (obstacles.length === 0 && wireObstacles.length === 0) return best.pts;
+  const clearsBody = (c: { pts: Vec2[] }) => !polylineCrossesAny(c.pts, obstacles);
+  for (const c of pool)
+    if (clearsBody(c) && !routeOverlapsWires(c.pts, wireObstacles)) return c.pts;
+  for (const c of pool) if (clearsBody(c)) return c.pts;
+  return best.pts;
 }
 
 /** Ensures the first/last legs of a stored-bend-point wire stay orthogonal
@@ -118,9 +290,22 @@ export function routeAvoiding(
  *  (P2.1, M4.2). The interior bend points themselves are left untouched. */
 export function orthogonalPolyline(a: Vec2, mid: readonly Vec2[], b: Vec2): Vec2[] {
   if (mid.length === 0) return routeOrthogonal(a, b);
-  const head = routeOrthogonal(a, mid[0]!);
-  const tail = routeOrthogonal(mid[mid.length - 1]!, b);
-  return [...head.slice(0, -1), ...mid, ...tail.slice(1)];
+  // Each end leg has a free elbow flip, and taking the same one blindly is how
+  // a moved pin turned a stored bend into a spike: the leg ran out past the
+  // bend and straight back over itself. Same idiom dragCorner already uses --
+  // enumerate the four combinations, drop the ones that double back, keep the
+  // shortest (ties to the plain no-flip route, so a route that was already
+  // fine is unchanged).
+  const candidates: Vec2[][] = [];
+  for (const flipHead of [false, true])
+    for (const flipTail of [false, true]) {
+      const head = routeOrthogonal(a, mid[0]!, flipHead);
+      const tail = routeOrthogonal(mid[mid.length - 1]!, b, flipTail);
+      candidates.push([...head.slice(0, -1), ...mid, ...tail.slice(1)]);
+    }
+  const clean = candidates.filter((c) => !hasCollinearReversal(c));
+  const pool = clean.length ? clean : candidates;
+  return pool.reduce((best, c) => (c.length < best.length ? c : best));
 }
 
 /** The exact points a wire is drawn through: explicit stored bends (re-elbowed
@@ -174,11 +359,22 @@ export function computeWireRoutes(
     // small stub left over from an earlier drag permanently disables
     // avoidance for that wire), fall back to a fresh routeAvoiding detour
     // instead of drawing through the obstacle.
+    // ...and the same for a stored route that doubles back on itself once no
+    // elbow flip can save it (the pin moved past its own bend). A wire drawn
+    // over itself is never what the instructor meant, and every gesture that
+    // could author one already refuses to, so it is not a shape to preserve.
+    const sideOf = (end: WireEnd, at: Vec2): Side | undefined =>
+      end.kind === 'pin' ? pinExitSide(at, boundsById.get(end.component)) : undefined;
+    const prefer: RoutePreference = {
+      from: sideOf(wire.a, a),
+      to: sideOf(wire.b, b),
+      stub: PIN_STUB * grid,
+    };
     const stored = wire.points.length ? orthogonalPolyline(a, wire.points, b) : undefined;
     const pts =
-      stored && !polylineCrossesAny(stored, bodyObstacles)
+      stored && !polylineCrossesAny(stored, bodyObstacles) && !hasCollinearReversal(stored)
         ? stored
-        : routeAvoiding(a, b, bodyObstacles, wireObstacles, grid);
+        : routeAvoiding(a, b, bodyObstacles, wireObstacles, grid, prefer);
     routes.set(wire.id, pts);
     wireObstacles.push(pts);
   }
@@ -210,19 +406,23 @@ export function wirePolyline(wire: Wire, resolveEnd: (end: WireEnd) => Vec2): Ve
   return [resolveEnd(wire.a), ...wire.points, resolveEnd(wire.b)];
 }
 
-/** Ids of every wire whose polyline the slash segment properly crosses. */
+/** Ids of every wire whose polyline the cut stroke properly crosses. The
+ *  stroke is an open polyline, so a curved sweep cuts everything it passes
+ *  through rather than everything inside it. */
 export function wiresCrossedBy(
-  slash: [Vec2, Vec2],
+  stroke: readonly Vec2[],
   wires: readonly Wire[],
   resolveEnd: (end: WireEnd) => Vec2,
 ): Set<string> {
   const hit = new Set<string>();
   for (const wire of wires) {
     const pts = wirePolyline(wire, resolveEnd);
-    for (let i = 0; i < pts.length - 1; i++) {
-      if (segmentsIntersect(slash[0], slash[1], pts[i]!, pts[i + 1]!)) {
-        hit.add(wire.id);
-        break;
+    outer: for (let i = 0; i < pts.length - 1; i++) {
+      for (let k = 0; k < stroke.length - 1; k++) {
+        if (segmentsIntersect(stroke[k]!, stroke[k + 1]!, pts[i]!, pts[i + 1]!)) {
+          hit.add(wire.id);
+          break outer;
+        }
       }
     }
   }
@@ -259,6 +459,39 @@ export function segmentIntersectsRect(p0: Vec2, p1: Vec2, rect: Rect): boolean {
     ],
   ];
   return edges.some(([e0, e1]) => segmentsIntersect(p0, p1, e0, e1));
+}
+
+/** Ray cast on the closed path. The freehand lasso is drawn open; closing it
+ *  is implicit, so the last-to-first edge counts. */
+export function pointInPolygon(p: Vec2, poly: readonly Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+      inside = !inside;
+  }
+  return inside;
+}
+
+/** Touching containment against a freehand path, matching what the rectangle
+ *  lasso does: crossed counts, not just fully enclosed. */
+export function polylineIntersectsPolygon(pts: readonly Vec2[], poly: readonly Vec2[]): boolean {
+  if (pts.some((p) => pointInPolygon(p, poly))) return true;
+  for (let i = 0; i < pts.length - 1; i++)
+    for (let j = 0, k = poly.length - 1; j < poly.length; k = j++)
+      if (segmentsIntersect(pts[i]!, pts[i + 1]!, poly[j]!, poly[k]!)) return true;
+  return false;
+}
+
+export function rectIntersectsPolygon(rect: Rect, poly: readonly Vec2[]): boolean {
+  const corners: Vec2[] = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y + rect.h },
+    { x: rect.x, y: rect.y + rect.h },
+  ];
+  return polylineIntersectsPolygon([...corners, corners[0]!], poly);
 }
 
 /** True when any segment of the polyline touches or crosses rect -- the real
@@ -765,4 +998,21 @@ export function packDeltas(
     cursor = target + it.bounds[dimKey];
   }
   return out;
+}
+
+/** Whether a bend vertex should win a press over the wire segment also under
+ *  it. A corner's grab radius is the fat one (MIN_HIT_RADIUS) and a wire
+ *  body's is deliberately tight, so an unconditional corner-first rule let a
+ *  NEIGHBOURING wire's bend swallow a press sitting exactly on this wire --
+ *  selecting the wrong wire, and dragging that wire's corner off into a stub
+ *  protruding from the shared point. On its own wire the fat radius is the
+ *  whole intent (press near a bend, grab the vertex, not the nearer leg), so
+ *  it still wins there regardless of distance. */
+export function cornerBeatsSegment(
+  corner: { wireId: string; d: number } | undefined,
+  segment: { wireId: string; d: number } | undefined,
+): boolean {
+  if (!corner) return false;
+  if (!segment) return true;
+  return corner.wireId === segment.wireId || corner.d <= segment.d;
 }

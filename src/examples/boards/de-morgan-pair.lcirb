@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "de-morgan-pair",
   "name": "De Morgan pair",
   "components": [
@@ -18,7 +18,7 @@
       "kind": "toggle",
       "pos": {
         "x": 48,
-        "y": 192
+        "y": 184
       },
       "label": "B"
     },
@@ -51,7 +51,7 @@
       "kind": "or",
       "pos": {
         "x": 264,
-        "y": 160
+        "y": 152
       }
     },
     {
@@ -68,7 +68,7 @@
       "kind": "led",
       "pos": {
         "x": 376,
-        "y": 152
+        "y": 144
       },
       "label": "OR of inverses",
       "params": {
@@ -118,7 +118,7 @@
       "points": [
         {
           "x": 152,
-          "y": 144
+          "y": 136
         }
       ]
     },
@@ -143,13 +143,13 @@
     {
       "id": "w9",
       "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
         "kind": "pin",
         "component": "b",
         "pin": "y"
-      },
-      "b": {
-        "kind": "junction",
-        "junction": "j2"
       },
       "points": []
     },
@@ -167,7 +167,7 @@
       "points": []
     },
     {
-      "id": "w3",
+      "id": "w4",
       "a": {
         "kind": "pin",
         "component": "n_a",
@@ -180,17 +180,17 @@
       },
       "points": [
         {
-          "x": 256,
-          "y": 144
+          "x": 208,
+          "y": 136
         },
         {
-          "x": 256,
-          "y": 168
+          "x": 208,
+          "y": 160
         }
       ]
     },
     {
-      "id": "w4",
+      "id": "w3",
       "a": {
         "kind": "pin",
         "component": "g_or",
@@ -203,12 +203,12 @@
       },
       "points": [
         {
-          "x": 256,
-          "y": 184
+          "x": 208,
+          "y": 176
         },
         {
-          "x": 256,
-          "y": 208
+          "x": 208,
+          "y": 200
         }
       ]
     },
@@ -253,7 +253,7 @@
       "id": "j2",
       "pos": {
         "x": 136,
-        "y": 208
+        "y": 200
       }
     }
   ],

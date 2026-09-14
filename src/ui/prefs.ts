@@ -1,5 +1,13 @@
 import { create } from 'zustand';
-import { isSelectableTheme, isThemeName, type ThemeName } from '../render/theme';
+import {
+  isLedColor,
+  isLedShape,
+  isSelectableTheme,
+  isThemeName,
+  type LedColor,
+  type LedShape,
+  type ThemeName,
+} from '../render/theme';
 
 // One persisted blob for every user preference. A preference lives here only if
 // it has a real seam to drive: it supplies the initial value of state that
@@ -10,6 +18,8 @@ export interface Prefs {
   alwaysShowPinBusWidth: boolean;
   waveformArrows: boolean;
   glitchThresholdNs: number;
+  /** Off spells each name out beside its icon, which can wrap a narrow rail. */
+  hideToolbarNames: boolean;
   hideAnswersDefault: boolean;
   timingModel: 'ideal' | 'datasheet';
   presentationAtLaunch: boolean;
@@ -18,6 +28,16 @@ export interface Prefs {
    *  and reshapes every wire routed around it. */
   thickenStrokesInPresentation: boolean;
   defaultTheme: ThemeName;
+  /** Applied by `place` to a palette LED that carries no explicit colour or
+   *  shape of its own. Physical colours, so they never follow the theme. */
+  defaultLedColor: LedColor;
+  defaultLedShape: LedShape;
+  /** Seeds the session shape; the tool's own menu overrides it. */
+  defaultSelectShape: 'marquee' | 'lasso';
+  /** Carry switch positions across a power cycle, so an edit that needs a
+   *  recompile does not also cost the input setup. Off by default: an all-X
+   *  cold start is the lesson a power-on is meant to show. */
+  keepSwitchesAcrossPower: boolean;
   restoreLastBoard: boolean;
   /** Frame a board to the viewport when it opens, as Home does. A bundled
    *  example always frames whatever this says -- it ships no camera worth
@@ -38,11 +58,16 @@ export const DEFAULT_PREFS: Prefs = {
   alwaysShowPinBusWidth: false,
   waveformArrows: false,
   glitchThresholdNs: 25,
+  hideToolbarNames: true,
   hideAnswersDefault: true,
   timingModel: 'ideal',
   presentationAtLaunch: false,
   thickenStrokesInPresentation: true,
   defaultTheme: 'light',
+  defaultLedColor: 'red',
+  defaultLedShape: 'symbol',
+  defaultSelectShape: 'lasso',
+  keepSwitchesAcrossPower: false,
   restoreLastBoard: true,
   fitOnOpen: true,
   autosave: true,
@@ -78,6 +103,7 @@ export function mergePrefs(raw: unknown): Prefs {
     alwaysShowPinBusWidth: bool(r['alwaysShowPinBusWidth'], d.alwaysShowPinBusWidth),
     waveformArrows: bool(r['waveformArrows'], d.waveformArrows),
     glitchThresholdNs: num(r['glitchThresholdNs'], d.glitchThresholdNs, 1, 10000),
+    hideToolbarNames: bool(r['hideToolbarNames'], d.hideToolbarNames),
     hideAnswersDefault: bool(r['hideAnswersDefault'], d.hideAnswersDefault),
     timingModel: r['timingModel'] === 'datasheet' ? 'datasheet' : 'ideal',
     presentationAtLaunch: bool(r['presentationAtLaunch'], d.presentationAtLaunch),
@@ -86,6 +112,10 @@ export function mergePrefs(raw: unknown): Prefs {
       d.thickenStrokesInPresentation,
     ),
     defaultTheme: theme(r['defaultTheme']),
+    defaultLedColor: isLedColor(r['defaultLedColor']) ? r['defaultLedColor'] : d.defaultLedColor,
+    defaultLedShape: isLedShape(r['defaultLedShape']) ? r['defaultLedShape'] : d.defaultLedShape,
+    defaultSelectShape: r['defaultSelectShape'] === 'marquee' ? 'marquee' : d.defaultSelectShape,
+    keepSwitchesAcrossPower: bool(r['keepSwitchesAcrossPower'], d.keepSwitchesAcrossPower),
     restoreLastBoard: bool(r['restoreLastBoard'], d.restoreLastBoard),
     fitOnOpen: bool(r['fitOnOpen'], d.fitOnOpen),
     autosave: bool(r['autosave'], d.autosave),

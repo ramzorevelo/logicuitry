@@ -7,7 +7,7 @@ import type { CompiledCircuit } from '../model/compile';
 import type { DelayModel } from './delay';
 import { EventQueue } from './eventQueue';
 import { getPrimitive } from './primitives/registry';
-import type { PrimitiveSpec } from './primitives/types';
+import type { Params, PrimitiveSpec } from './primitives/types';
 
 export const OSC_EVENT_LIMIT = 10_000;
 
@@ -295,6 +295,20 @@ export class Simulator {
   setPrimitiveStateAt(pi: number, state: unknown): void {
     if (pi < 0 || pi >= this.states.length) throw new Error(`no primitive at index ${pi}`);
     this.states[pi] = state;
+    this.scheduleWake(pi, this.time, NO_CAUSE);
+  }
+
+  /** Patches a primitive's compiled params in place and wakes it, so a param
+   *  that evaluate() re-reads every call (a constant's value) can change under
+   *  a live sim instead of forcing a power cycle. Only params that cannot
+   *  alter pin count or width may come through here: the netlist, the nets'
+   *  widths and the delay bindings are already built from the old ones, so a
+   *  pin-shape change would leave the kernel describing a circuit that is no
+   *  longer the one on the board. Callers gate on paramSpecs' liveness. */
+  setPrimitiveParamsAt(pi: number, patch: Params): void {
+    const prim = this.circuit.primitives[pi];
+    if (!prim) throw new Error(`no primitive at index ${pi}`);
+    prim.params = { ...prim.params, ...patch };
     this.scheduleWake(pi, this.time, NO_CAUSE);
   }
 

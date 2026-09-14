@@ -6,6 +6,7 @@
 import type { CompiledCircuit } from '../model/compile';
 import * as bv from '../value/busValue';
 import type { BusValue } from '../value/busValue';
+import { getPrimitive } from '../sim/primitives/registry';
 import { evaluateNets } from './evaluate';
 
 /** Inputs ≤8 -> ≤256 rows, exhaustive and instant. */
@@ -40,8 +41,11 @@ export function resolveInputNet(circuit: CompiledCircuit, path: string): number 
   return net;
 }
 
-/** Net read by the sink primitive at `path` (its sole 'a' input), or the
- *  aliased net itself for a pure-label terminal path. */
+/** Net read by the sink primitive at `path` (its sole 'a' input), the aliased
+ *  net itself for a pure-label terminal path, or the named input pin when the
+ *  path carries one: a multi-input observer like a 7-segment display is one
+ *  terminal per segment, so `main/DS1.a` has to resolve to that pin's own net
+ *  rather than to the component's first. */
 export function resolveOutputNet(circuit: CompiledCircuit, path: string): number {
   const i = circuit.pathToPrimitive.get(path);
   if (i !== undefined) {
@@ -50,8 +54,24 @@ export function resolveOutputNet(circuit: CompiledCircuit, path: string): number
     return net;
   }
   const net = circuit.pathToNet.get(path);
-  if (net === undefined) throw new RangeError(`no primitive or net at path '${path}'`);
-  return net;
+  if (net !== undefined) return net;
+  const pinNet = resolveInputPinNet(circuit, path);
+  if (pinNet !== undefined) return pinNet;
+  throw new RangeError(`no primitive or net at path '${path}'`);
+}
+
+function resolveInputPinNet(circuit: CompiledCircuit, path: string): number | undefined {
+  const dot = path.lastIndexOf('.');
+  if (dot <= 0) return undefined;
+  const owner = circuit.pathToPrimitive.get(path.slice(0, dot));
+  if (owner === undefined) return undefined;
+  const prim = circuit.primitives[owner]!;
+  const pinName = path.slice(dot + 1);
+  const index = getPrimitive(prim.kind)
+    .pins(prim.params)
+    .filter((p) => p.dir === 'in')
+    .findIndex((p) => p.name === pinName);
+  return index < 0 ? undefined : prim.inputs[index];
 }
 
 /**

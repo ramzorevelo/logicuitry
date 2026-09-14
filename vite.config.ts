@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { parseChangelog } from './scripts/changelog.mjs';
 
 const version = (JSON.parse(readFileSync('./package.json', 'utf8')) as { version: string }).version;
 
@@ -136,6 +137,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(`v${version}`),
     __BUILD_COMMIT__: JSON.stringify(buildCommit()),
+    // Bundled, not fetched: the What's New sheet works on a machine that has
+    // never been online.
+    __RELEASE_NOTES__: JSON.stringify(parseChangelog(readFileSync('./CHANGELOG.md', 'utf8'))),
   },
   // Offline guarantee: everything bundled, no CDN.
   // sourcemap is stated rather than inherited: shipping no readable original

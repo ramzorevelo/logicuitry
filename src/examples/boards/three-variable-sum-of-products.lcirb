@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "three-variable-sum-of-products",
   "name": "Three-variable sum of products",
   "components": [

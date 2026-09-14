@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { oneLine } from '../../render/glyphs/symbol';
+import { useModalKeys } from '../modalKeys';
 import { useCircuitStore } from './circuitStore';
 
 const KEEP_BOTH = '__keep_both__';
@@ -24,17 +25,7 @@ export function LabelConflictDialog() {
     setChoices({});
   }, [conflicts]);
 
-  useEffect(() => {
-    if (!conflicts) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        cancel();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [conflicts, cancel]);
+  useModalKeys(conflicts ? cancel : null);
 
   if (!conflicts || conflicts.length === 0) return null;
   const title =

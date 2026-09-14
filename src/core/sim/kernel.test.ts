@@ -353,3 +353,47 @@ describe('kernel: stepToNextEvent', () => {
     expect(sim.canStep).toBe(true);
   });
 });
+
+describe('kernel: setPrimitiveParamsAt', () => {
+  function constBoard(value: number) {
+    return board({
+      components: [
+        comp('k', 'constant', { width: 4, value }),
+        comp('p', 'probe', { width: 4 }, 'Y'),
+      ],
+      wires: [wire('w1', ['k', 'y'], ['p', 'a'])],
+    });
+  }
+
+  it('a live value patch reaches the net without a power cycle', () => {
+    const compiled = compile(constBoard(5), lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    expect(toString(sim.netValueByPath('main/Y'), 4)).toBe('0101');
+    const before = sim.time;
+    const pi = compiled.componentToPrimitive.get('main/k')!;
+    sim.setPrimitiveParamsAt(pi, { value: 10 });
+    sim.settle();
+    expect(toString(sim.netValueByPath('main/Y'), 4)).toBe('1010');
+    // The point of the live path: sim time advances by the delay, it does not
+    // restart from 0 the way powerOn would.
+    expect(sim.time).toBeGreaterThan(before);
+  });
+
+  it('leaves params the patch did not name alone', () => {
+    const compiled = compile(constBoard(3), lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    const pi = compiled.componentToPrimitive.get('main/k')!;
+    sim.setPrimitiveParamsAt(pi, { value: 12 });
+    sim.settle();
+    // width survived the patch, so the net is still 4 bits wide
+    expect(toString(sim.netValueByPath('main/Y'), 4)).toBe('1100');
+  });
+
+  it('rejects an out-of-range primitive index', () => {
+    const sim = new Simulator(compile(constBoard(1), lib()), idealDelay);
+    sim.powerOn();
+    expect(() => sim.setPrimitiveParamsAt(99, { value: 0 })).toThrow();
+  });
+});

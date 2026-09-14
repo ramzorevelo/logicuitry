@@ -15,7 +15,7 @@
 
 import * as bv from '../../value/busValue';
 import type { BusValue } from '../../value/busValue';
-import type { Params, PrimitivePin } from './types';
+import { widthParam, type Params, type PrimitivePin } from './types';
 
 export type PinViewState = 'expanded' | 'collapsed';
 export type PinViewMap = Readonly<Record<string, PinViewState>>;
@@ -64,6 +64,17 @@ export function expandPin(base: PrimitivePin, width: number, bracketLabels = tru
     });
   }
   return pins;
+}
+
+/** Lane expand for a primitive whose whole interface is one wide pin: a
+ *  toggle, an led, a probe, a bus display, a port. Only where the wire
+ *  attaches changes (one wide stub, or one stub per bit), so every such
+ *  primitive shares this rather than each spelling the same four lines. */
+export function onePinLane(name: string, dir: 'in' | 'out', params: Params): PrimitivePin[] {
+  const w = widthParam(params);
+  const base: PrimitivePin = { name, dir, width: w, role: 'data', order: 0 };
+  const expanded = w > 1 && pinViewOf(parsePinView(params), name, 'collapsed') === 'expanded';
+  return reindexPins(expanded ? expandPin(base, w) : [base]);
 }
 
 /** Renumber `order` 0..n-1 in array order. */

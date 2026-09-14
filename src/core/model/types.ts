@@ -45,7 +45,7 @@ export type ComponentKind =
   | 'probe'
   | 'busdisplay'
   | 'sevenseg'
-  | 'sevenseghex'
+  | 'ledmatrix'
   | 'outport'
   | 'netlabel'
   | 'mux'
@@ -171,7 +171,7 @@ export interface ChipAppearance {
 
 export interface ChipDef extends Circuit {
   format: 'lcir.chip';
-  formatVersion: 3;
+  formatVersion: 5;
   id: string;
   name: string;
   version: number;
@@ -189,7 +189,7 @@ export interface TimingSetting {
 
 export interface Board extends Circuit {
   format: 'lcir.board';
-  formatVersion: 5;
+  formatVersion: 7;
   id: string;
   name: string;
   /** Hierarchical net paths pinned to the waveform view. */

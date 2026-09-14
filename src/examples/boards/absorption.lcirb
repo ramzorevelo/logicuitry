@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "absorption",
   "name": "Absorption",
   "components": [
@@ -29,7 +29,7 @@
       "kind": "and",
       "pos": {
         "x": 136,
-        "y": 136
+        "y": 96
       },
       "group": "gl"
     },
@@ -38,7 +38,7 @@
       "kind": "or",
       "pos": {
         "x": 240,
-        "y": 128
+        "y": 72
       },
       "group": "gl"
     },
@@ -47,7 +47,7 @@
       "kind": "led",
       "pos": {
         "x": 344,
-        "y": 120
+        "y": 64
       },
       "group": "gl",
       "label": "A + AB"
@@ -103,16 +103,7 @@
         "component": "sum",
         "pin": "a"
       },
-      "points": [
-        {
-          "x": 232,
-          "y": 120
-        },
-        {
-          "x": 232,
-          "y": 136
-        }
-      ]
+      "points": []
     },
     {
       "id": "w7",
@@ -128,7 +119,7 @@
       "points": [
         {
           "x": 128,
-          "y": 144
+          "y": 104
         }
       ]
     },
@@ -136,32 +127,50 @@
       "id": "w4",
       "a": {
         "kind": "pin",
-        "component": "b1",
-        "pin": "y"
-      },
-      "b": {
-        "kind": "pin",
         "component": "ab",
         "pin": "b"
       },
-      "points": []
-    },
-    {
-      "id": "w1",
-      "a": {
+      "b": {
         "kind": "pin",
-        "component": "ab",
+        "component": "b1",
         "pin": "y"
       },
-      "b": {
+      "points": [
+        {
+          "x": 128,
+          "y": 120
+        },
+        {
+          "x": 128,
+          "y": 160
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
         "kind": "pin",
         "component": "sum",
         "pin": "b"
       },
-      "points": []
+      "b": {
+        "kind": "pin",
+        "component": "ab",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 96
+        },
+        {
+          "x": 232,
+          "y": 112
+        }
+      ]
     },
     {
-      "id": "w2",
+      "id": "w1",
       "a": {
         "kind": "pin",
         "component": "sum",
@@ -175,7 +184,7 @@
       "points": []
     },
     {
-      "id": "w3",
+      "id": "w2",
       "a": {
         "kind": "pin",
         "component": "a2",
@@ -194,7 +203,7 @@
       "id": "j1",
       "pos": {
         "x": 128,
-        "y": 120
+        "y": 80
       }
     }
   ],

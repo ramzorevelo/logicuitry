@@ -153,7 +153,16 @@ describe('nearestCompatiblePin', () => {
     );
   });
 
-  it('rejects same-direction, occupied, and width-mismatched pins', () => {
+  it('pairs an input with an input, which is how one signal feeds two', () => {
+    expect(
+      nearestCompatiblePin([pin({ dir: 'in' })], cursor, { width: 1, dir: 'in' }, 1),
+    ).toBeDefined();
+    expect(
+      nearestCompatiblePin([pin({ dir: 'in', width: 4 })], cursor, { width: 1, dir: 'in' }, 1),
+    ).toBeUndefined();
+  });
+
+  it('rejects output-to-output, occupied, and width-mismatched pins', () => {
     expect(
       nearestCompatiblePin([pin({ dir: 'out' })], cursor, { width: 1, dir: 'out' }, 1),
     ).toBeUndefined();
@@ -219,10 +228,20 @@ describe('wireWidth', () => {
 describe('labelExempt', () => {
   const target = (componentId: string, pinName: string): PinTarget =>
     pin({ componentId, pinName, dir: 'in', free: false });
+  /** Every pin either test names, so the far end of an existing wire can be
+   *  told apart as a driver or another reader. */
+  const pool: PinTarget[] = [
+    pin({ componentId: 'sw', pinName: 'y', dir: 'out' }),
+    pin({ componentId: 'sw1', pinName: 'y', dir: 'out' }),
+    pin({ componentId: 'sw2', pinName: 'y', dir: 'out' }),
+    pin({ componentId: 'in1', pinName: 'y', dir: 'out' }),
+    pin({ componentId: 'g', pinName: 'a', dir: 'in' }),
+    pin({ componentId: 'g2', pinName: 'a', dir: 'in' }),
+  ];
 
   it('exempts an occupied target when the FROM side is an In/Out label', () => {
     const components = [comp('in1', 'inport', 0, 0), comp('g', 'and', 100, 0)];
-    expect(labelExempt(components, [], 'in1', target('g', 'a'))).toBe(true);
+    expect(labelExempt(components, [], pool, 'in1', target('g', 'a'))).toBe(true);
   });
 
   it('exempts an occupied target whose EXISTING driver is an In/Out label', () => {
@@ -239,7 +258,7 @@ describe('labelExempt', () => {
         points: [],
       },
     ];
-    expect(labelExempt(components, wires, 'sw', target('g', 'a'))).toBe(true);
+    expect(labelExempt(components, wires, pool, 'sw', target('g', 'a'))).toBe(true);
   });
 
   it('does not exempt when neither side is a label (two real drivers)', () => {
@@ -256,7 +275,27 @@ describe('labelExempt', () => {
         points: [],
       },
     ];
-    expect(labelExempt(components, wires, 'sw1', target('g', 'a'))).toBe(false);
+    expect(labelExempt(components, wires, pool, 'sw1', target('g', 'a'))).toBe(false);
+  });
+
+  it('exempts a pin whose only existing wire runs to another INPUT', () => {
+    // Two gate inputs tied together is one signal feeding both, so the pin is
+    // still open to a source; refusing it forced the same net to be drawn as
+    // two separate wires from the switch.
+    const components = [
+      comp('sw', 'toggle', 0, 0),
+      comp('g', 'and', 100, 0),
+      comp('g2', 'and', 200, 0),
+    ];
+    const wires: Wire[] = [
+      {
+        id: 'w1',
+        a: { kind: 'pin', component: 'g2', pin: 'a' },
+        b: { kind: 'pin', component: 'g', pin: 'a' },
+        points: [],
+      },
+    ];
+    expect(labelExempt(components, wires, pool, 'sw', target('g', 'a'))).toBe(true);
   });
 
   it('does not exempt a pin that already has a REAL driver, even when a label ALSO shares it', () => {
@@ -284,7 +323,7 @@ describe('labelExempt', () => {
         points: [],
       },
     ];
-    expect(labelExempt(components, wires, 'sw2', target('g', 'a'))).toBe(false);
+    expect(labelExempt(components, wires, pool, 'sw2', target('g', 'a'))).toBe(false);
   });
 });
 

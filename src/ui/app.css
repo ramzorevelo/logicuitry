@@ -101,32 +101,32 @@ h3 {
   border-color: var(--accent);
 }
 
-/* Theme picker: same chrome as a mode button, wrapping a native select so the
-   seven themes stay reachable without a bespoke menu. */
+/* Theme picker: same chrome as a mode button, opening the app's own popup so
+   the highlight is --accent-fill like every other menu. */
 .theme-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.theme-picker__button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-unit);
   padding: calc(var(--space-unit) + 1px) calc(var(--space-unit) * 2 + 1px);
+  font-family: inherit;
   font-size: var(--text-secondary);
   color: var(--ink);
-  cursor: pointer;
-}
-
-.theme-picker__select {
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
   background: transparent;
   border: 0;
   cursor: pointer;
 }
 
-/* The dropped-open list is painted by the OS, which defaults to white however
-   dark the page is; option colours have to be stated explicitly. */
-.theme-picker__select option {
-  color: var(--ink);
-  background: var(--surface);
+/* Right-aligned: the picker sits at the end of the bar, so a popup hung from
+   its left edge would run off the window. */
+.theme-picker__popup {
+  left: auto;
+  right: 0;
+  min-width: 160px;
 }
 
 /* Workbench switcher */
@@ -468,6 +468,15 @@ h3 {
   padding: var(--space-unit) 0;
 }
 
+/* A native select takes the OS widget font, not the page's. The dropped-down
+   list is a separate surface, so it needs saying twice. */
+.settings-dialog select,
+.settings-dialog option {
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--ink);
+}
+
 .settings-row__text {
   display: flex;
   flex-direction: column;
@@ -482,6 +491,61 @@ h3 {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--text-secondary);
+}
+
+/* --- Build circuit ------------------------------------------------------- */
+.build-dialog {
+  min-width: 460px;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.build-tabs {
+  display: flex;
+  gap: var(--space-unit);
+  margin-bottom: calc(var(--space-unit) * 2);
+}
+
+.build-dialog input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+  padding: var(--space-unit);
+}
+
+/* The caret line under a parse error only lines up in the same metrics the
+   box uses. */
+.build-error {
+  margin: var(--space-unit) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  color: var(--warn);
+  white-space: pre-wrap;
+}
+
+.build-grid {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  margin: var(--space-unit) 0;
+}
+
+.build-grid th,
+.build-grid td {
+  border: var(--stroke-min) solid var(--line);
+  padding: calc(var(--space-unit) / 2) calc(var(--space-unit) * 2);
+  text-align: center;
+}
+
+.build-grid th {
+  color: var(--muted);
+}
+
+.build-cell {
+  min-width: calc(var(--space-unit) * 8);
 }
 
 /* --- Bug report ---------------------------------------------------------- */
@@ -528,6 +592,35 @@ h3 {
   border: var(--stroke-min) solid var(--line);
 }
 
+/* --- Shape-picking tool button -------------------------------------------
+   A menu title, not a toggle: the wrapper only anchors the popup. */
+.tool-split {
+  position: relative;
+  display: inline-flex;
+}
+
+:root .tool-split__btn[data-active] {
+  background: var(--accent);
+  color: var(--accent);
+}
+
+:root .tool-split__btn[data-active]::before {
+  background: var(--accent-fill);
+}
+
+/* U+25BE fills about two fifths of its em box, so it needs oversizing to
+   reach two thirds of the cap height. */
+.tool-btn__caret {
+  font-size: 1.25em;
+  line-height: 1;
+}
+
+.tool-split__popup {
+  top: 100%;
+  left: 0;
+  min-width: 140px;
+}
+
 /* --- Update banner -------------------------------------------------------
    Bottom-centred so it never covers the toolbar or the menu bar mid-lecture. */
 .update-banner {
@@ -544,6 +637,20 @@ h3 {
   border: var(--stroke-min) solid var(--line);
   box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
   transform: translateX(-50%);
+}
+
+/* The notes run to a paragraph, so they get their own line under the version
+   rather than stretching the bar across the screen. */
+.update-banner__notes {
+  display: block;
+  max-width: 46ch;
+  margin-top: calc(var(--space-unit) / 2);
+  color: var(--muted);
+}
+
+.whats-new__list {
+  margin: 0 0 var(--space-unit);
+  padding-left: calc(var(--space-unit) * 4);
 }
 
 .about-dialog {

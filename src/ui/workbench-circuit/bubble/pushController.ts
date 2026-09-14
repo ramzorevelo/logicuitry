@@ -17,12 +17,6 @@ import {
   type MergeFrom,
   type TransformGeom,
 } from '../../../core/gates/transform';
-import {
-  gateInputPins,
-  getInputBubbles,
-  toggleInputBubble,
-  toggleOutputBubble,
-} from '../../../core/gates/bubbleModel';
 import { diffRows, tablesEqual } from '../../../core/boolean/truthTable';
 import { truthTableOf } from '../../../core/gates/verify';
 
@@ -62,31 +56,16 @@ function applyMove(board: Board, move: PushMove, geom?: TransformGeom): Board | 
 }
 
 /** A naive, non-transactional attempt at `move` -- used only to render the
- *  failed-drag ghost + red-flashed truth-table rows the spec calls for
- *  ("dragging a single input bubble forward when siblings lack bubbles").
- *  Never used to actually commit anything. */
+ *  failed-drag ghost + red-flashed truth-table rows the spec calls for.
+ *  Never used to actually commit anything.
+ *
+ *  `inputsForward` used to have a branch here, for a partially-bubbled gate.
+ *  That drag is legal now (pushInputsForward performs the whole De Morgan,
+ *  bubbling the clean siblings), so the branch was unreachable; merging
+ *  inversions upstream is the remaining failure surface. */
 function naiveAttempt(board: Board, move: PushMove, geom?: TransformGeom): Board | null {
   if (move.kind === 'mergeUpstream') return mergeInversionsUpstreamNaive(board, move.from, geom);
-  if (move.kind !== 'inputsForward') return null;
-  const gate = board.components.find((c) => c.id === move.gateId);
-  if (!gate) return null;
-  const pins = gateInputPins(gate);
-  const bubbled = getInputBubbles(gate);
-  if (pins.every((p) => bubbled.has(p))) return null; // that case is actually legal
-  if (!pins.some((p) => bubbled.has(p))) return null; // nothing to drag
-  let next: Board = board;
-  next = {
-    ...next,
-    components: next.components.map((c) => (c.id === move.gateId ? toggleOutputBubble(c) : c)),
-  };
-  for (const p of pins) {
-    if (!bubbled.has(p)) continue;
-    next = {
-      ...next,
-      components: next.components.map((c) => (c.id === move.gateId ? toggleInputBubble(c, p) : c)),
-    };
-  }
-  return next;
+  return null;
 }
 
 /** Computes what a move would do without mutating anything. Legal moves

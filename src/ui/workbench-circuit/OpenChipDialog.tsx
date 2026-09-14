@@ -2,7 +2,7 @@
 // part and a circuit. Ask rather than pick -- "open the chip" and "open what's
 // inside it" are different intentions and neither is rare.
 
-import { useEffect } from 'react';
+import { useModalKeys } from '../modalKeys';
 import type { ChipDef } from '../../core/model/types';
 
 export function OpenChipDialog({
@@ -14,16 +14,7 @@ export function OpenChipDialog({
   onChoose: (as: 'chip' | 'board') => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onCancel]);
+  useModalKeys(onCancel);
 
   return (
     <div

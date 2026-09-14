@@ -8,6 +8,7 @@ import type {
   ComponentKind,
   Junction,
   ParamValue,
+  PinDir,
   Point,
   TimingSetting,
   Wire,
@@ -25,6 +26,7 @@ import { idealDelay, datasheetDelay } from '../../core/sim/delay';
 import * as bv from '../../core/value/busValue';
 import { busSignalState, type SignalState } from '../../render/theme';
 import { History, applyToCircuit, diffCircuits, type ApplyFn } from './history';
+import { paramLiveness } from './paramLiveness';
 import type { WireEnd } from '../../core/model/types';
 import { cloneCircuit, derivePins, detachRemovedPins, findCycle, renamePinRefs } from './packaging';
 import {
@@ -135,27 +137,37 @@ export type Tab =
       baseline: ChipDef;
     };
 
-// Seeded past the starter board's own hardcoded ids (below) so a freshly
-// generated id can never collide with one already on the board -- genId used
-// to start at 1 regardless of what ids the board already had, so the Nth
-// generated entity (any kind; the counter is shared across prefixes) landed
-// on e.g. "w3" whenever N happened to match a starter wire's own suffix,
-// silently duplicating that id (two Wire objects sharing one id breaks any
-// id-keyed lookup, most visibly insert-on-wire's `wires.findIndex`).
-let nextId = 1;
-const genId = (prefix: string) => `${prefix}${nextId++}`;
+// One counter PER PREFIX, seeded past whatever ids the board already carries.
+// A single shared counter made the first button on a board "button42", which
+// is the number the user then reads back in an error message. Uniqueness still
+// holds because the prefix differs.
+const nextId = new Map<string, number>();
+const genId = (prefix: string) => {
+  const n = nextId.get(prefix) ?? 1;
+  nextId.set(prefix, n + 1);
+  return `${prefix}${n}`;
+};
 // Display-friendly id prefixes where the kind name reads poorly on canvas
 // (starter-board switches are sw1/sw2; a placed toggle should match).
 const ID_PREFIX: Record<string, string> = { toggle: 'sw' };
 const idPrefix = (kind: string) => ID_PREFIX[kind] ?? kind;
 export const seedNextId = (board: Board) => {
-  const idNum = (id: string) => Number(/(\d+)$/.exec(id)?.[1] ?? 0);
   const ids = [
     ...board.components.map((c) => c.id),
     ...board.wires.map((w) => w.id),
     ...board.junctions.map((j) => j.id),
   ];
-  nextId = Math.max(nextId, ...ids.map(idNum).map((n) => n + 1));
+  // Where an id splits into prefix and number is ambiguous, because a chip's
+  // defId can itself end in digits ("74LS00" generates "74LS001"). Every legal
+  // split is seeded rather than guessing one, so no generated id can collide
+  // with one the board already carries.
+  for (const id of ids) {
+    for (let cut = id.length - 1; cut >= 0; cut--) {
+      if (!/^\d+$/.test(id.slice(cut))) break;
+      const prefix = id.slice(0, cut);
+      nextId.set(prefix, Math.max(nextId.get(prefix) ?? 1, Number(id.slice(cut)) + 1));
+    }
+  }
 };
 
 export const VARIABLE_ARITY_GATES: ReadonlySet<string> = new Set([
@@ -166,6 +178,72 @@ export const VARIABLE_ARITY_GATES: ReadonlySet<string> = new Set([
   'xor',
   'xnor',
 ]);
+
+/** A palette LED carries no colour or shape of its own, so the user's chosen
+ *  defaults are stamped on at placement. Explicit params always win, which is
+ *  what keeps a duplicated or pasted LED its own colour. */
+const ledDefaults = (
+  params: Record<string, ParamValue> | undefined,
+): Record<string, ParamValue> => {
+  const prefs = getPrefs();
+  return {
+    color: prefs.defaultLedColor,
+    shape: prefs.defaultLedShape,
+    ...(params ?? {}),
+  };
+};
+
+/** Pin geometry for one component, supplied by the canvas layer: the store
+ *  never reaches for a theme. */
+export type ComponentPins = (
+  component: Component,
+) => readonly { name: string; pos: Point; width: number; dir: PinDir }[];
+
+/** Parts dropped pin-on-pin are wired where they touch, so landing an LED on a
+ *  gate's output connects it. Wire ends are pin references, so dragging the
+ *  parts apart later leaves a real routed wire. Anything the rule refuses is
+ *  simply left unconnected. */
+const connectAbutting = (
+  draft: Circuit,
+  moved: ReadonlySet<string>,
+  pinsOf: ComponentPins,
+  newWireId: () => string,
+): void => {
+  const wired = new Set<string>();
+  for (const w of draft.wires)
+    for (const end of [w.a, w.b]) if (end.kind === 'pin') wired.add(`${end.component} ${end.pin}`);
+  // An output may fan out further, but a second driver on an input is the
+  // conflict multiDriverConflict exists to report, so never create one.
+  const spoken = (id: string, pin: string, dir: PinDir) =>
+    dir === 'in' && wired.has(`${id} ${pin}`);
+  const others = draft.components.filter((c) => !moved.has(c.id));
+  for (const c of draft.components) {
+    if (!moved.has(c.id)) continue;
+    for (const mine of pinsOf(c)) {
+      if (spoken(c.id, mine.name, mine.dir)) continue;
+      for (const other of others) {
+        const hit = pinsOf(other).find(
+          (p) =>
+            p.pos.x === mine.pos.x &&
+            p.pos.y === mine.pos.y &&
+            p.width === mine.width &&
+            !(p.dir === 'out' && mine.dir === 'out') &&
+            !spoken(other.id, p.name, p.dir),
+        );
+        if (!hit) continue;
+        draft.wires.push({
+          id: newWireId(),
+          a: { kind: 'pin', component: c.id, pin: mine.name },
+          b: { kind: 'pin', component: other.id, pin: hit.name },
+          points: [],
+        });
+        wired.add(`${c.id} ${mine.name}`);
+        wired.add(`${other.id} ${hit.name}`);
+        break;
+      }
+    }
+  }
+};
 
 const snapPoint = (p: Point, g: number): Point => ({
   x: Math.round(p.x / g) * g,
@@ -179,9 +257,9 @@ const snapPoint = (p: Point, g: number): Point => ({
 export function starterBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'scratch',
-    name: 'scratch',
+    name: 'Untitled board',
     components: [
       { id: 'sw1', kind: 'toggle', pos: { x: 64, y: 72 }, params: { initial: false } },
       { id: 'sw2', kind: 'toggle', pos: { x: 64, y: 144 }, params: { initial: false } },
@@ -327,6 +405,11 @@ interface CircuitState {
     params?: Record<string, ParamValue>,
     pose?: { rot?: Component['rot']; mirror?: boolean },
     defId?: string,
+    pinsOf?: ComponentPins,
+    /** Group to join, which the caller reads off the drawn borders
+     *  (groupHit's groupContaining) since rects are geometry the store has no
+     *  theme to compute. Dropping a part inside a border joins that group. */
+    group?: string,
   ) => void;
   /** Insert-on-wire: splices a 1-in/1-out primitive into a hit wire. When
    *  `componentId` is given, that EXISTING component is moved to `pos` and
@@ -350,6 +433,9 @@ interface CircuitState {
      *  without colliding with the component it was copied from. */
     label?: string;
     componentId?: string;
+    /** Only for a fresh placement, and read off the drawn borders exactly as
+     *  `place`'s is: a part spliced into a wire inside a group joins it. */
+    group?: string;
   }) => void;
   /** Shift+R group rotate: a dumb applier over pre-computed geometry (pivot +
    *  90-degree rotation, see wireGeom's groupRotateComponent/rotatePointAround)
@@ -383,7 +469,13 @@ interface CircuitState {
    *  live pointer-drag preview needs it too, so it's read off the *current*
    *  (pre-move) store, not the draft being mutated -- pass it through, don't
    *  synthesize it from the draft. */
-  moveSelection: (dx: number, dy: number, resolveEnd?: ResolveWireEnd) => void;
+  /** `pinsOf`, when given, wires up any pin the move landed exactly on another. */
+  moveSelection: (
+    dx: number,
+    dy: number,
+    resolveEnd?: ResolveWireEnd,
+    pinsOf?: ComponentPins,
+  ) => void;
   /** Alt+drag: moves the selection, cutting touched wires to free ends. */
   moveSelectionDetached: (
     dx: number,
@@ -392,6 +484,9 @@ interface CircuitState {
   ) => void;
   /** Duplicate commit / paste: remaps a slice's ids fresh and offsets it in. */
   commitDuplicate: (slice: Circuit, offset: Point) => void;
+  /** Build from an expression or a truth table: drops a synthesized slice on
+   *  the board as its own group, one undo step. Returns the new group's id. */
+  commitSynthesis: (slice: Circuit, groupName: string) => string | null;
   /** `R`: rotates each item individually about its OWN centre (caller-resolved
    *  bounds, same contract as `applyGroupRotate` -- the store never reaches
    *  for a theme). Shift+R (`applyGroupRotate`) rotates the selection as one
@@ -658,6 +753,49 @@ function sameEndTopology(x: WireEnd, y: WireEnd): boolean {
   return JSON.stringify(x) === JSON.stringify(y);
 }
 
+/** How a committed diff item affects a live sim, from least to most costly.
+ *  `none`     -- nothing compiled reads what changed (a drag, an LED colour),
+ *                so a powered sim keeps running untouched.
+ *  `live`     -- a param evaluate() re-reads, applied by patching the compiled
+ *                primitive and waking it instead of recompiling.
+ *  `topology` -- the netlist itself differs; only a recompile can honour it,
+ *                so power drops as it always has. */
+export type SimEffect = 'none' | 'live' | 'topology';
+
+/** Keys on a Component that are pure geometry: changing only these cannot
+ *  affect what the sim computes. `label` is deliberately absent -- a label
+ *  feeds the compiled net path that value readouts look up (see netOfPin),
+ *  so renaming under a live sim would desync those lookups from the board. */
+const GEOMETRY_KEYS = new Set(['pos', 'rot', 'mirror', 'nameOffset']);
+
+export function simEffectOfItem(item: import('./history').PickedItem): SimEffect {
+  if (isPureMoveItem(item)) return 'none';
+  if (item.kind !== 'component' || !item.before || !item.after) return 'topology';
+  const before = item.before as unknown as Component;
+  const after = item.after as unknown as Component;
+  if (before.kind !== after.kind || before.group !== after.group) return 'topology';
+  // Any non-param, non-geometry field differing (label included) is topology.
+  const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const f of fields) {
+    if (f === 'params' || GEOMETRY_KEYS.has(f)) continue;
+    if (
+      JSON.stringify((before as unknown as Record<string, unknown>)[f]) !==
+      JSON.stringify((after as unknown as Record<string, unknown>)[f])
+    )
+      return 'topology';
+  }
+  const pb = (before.params ?? {}) as Record<string, unknown>;
+  const pa = (after.params ?? {}) as Record<string, unknown>;
+  let effect: SimEffect = 'none';
+  for (const key of new Set([...Object.keys(pb), ...Object.keys(pa)])) {
+    if (JSON.stringify(pb[key]) === JSON.stringify(pa[key])) continue;
+    const liveness = paramLiveness(after.kind, key);
+    if (liveness === 'structural') return 'topology';
+    if (liveness === 'stimulus') effect = 'live';
+  }
+  return effect;
+}
+
 function isPureMoveItem(item: import('./history').PickedItem): boolean {
   if (!item.before || !item.after) return false;
   if (item.kind === 'wire') {
@@ -670,6 +808,11 @@ function isPureMoveItem(item: import('./history').PickedItem): boolean {
     JSON.stringify(omitPos(item.after as unknown as Record<string, unknown>))
   );
 }
+
+/** Switch/button positions captured at the last power-off, so the next power-on
+ *  can restore them when the pref asks. Deliberately outside the store: it is
+ *  not board content, nothing should undo it, and no file should carry it. */
+const heldSwitchState = new Map<string, unknown>();
 
 export const useCircuitStore = create<CircuitState>((set, get) => {
   const activeTab = (): Tab => {
@@ -766,6 +909,20 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
   // starts, so it doesn't outlive the click/edit that caused it (the action
   // about to run re-sets it itself if it's rejected too). `width:` is owned
   // by checkWidthMismatch and only clears once a real recompile proves it.
+  // Switch/button positions, kept across the loss of a sim so that an edit
+  // needing a recompile does not also cost the input setup built up to
+  // demonstrate something. Every path that drops `sim` while powered calls
+  // this; the next power-on consumes it, and only if the pref asks.
+  const captureSwitchState = () => {
+    heldSwitchState.clear();
+    if (!sim) return;
+    for (const [componentId, pi] of sim.compiled.componentToPrimitive) {
+      const kind = sim.compiled.primitives[pi]?.kind;
+      if (kind !== 'toggle' && kind !== 'button') continue;
+      heldSwitchState.set(componentId, sim.sim.primitiveStateAt(pi));
+    }
+  };
+
   const clearTransientErrorImpl = () => {
     const err = get().error;
     if (err && !err.startsWith('width:')) set({ error: null });
@@ -791,9 +948,15 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     historyFor(tab.id).commit(cmd);
     if (tab.kind === 'board') {
       // A pure-position diff (drag) never touches connectivity, so leave a
-      // live sim powered and running through it (P0.4) -- only a topology
-      // change (place/delete/rewire/param) resets power like before.
-      const topologyChanged = cmd.items.some((item) => !isPureMoveItem(item));
+      // live sim powered and running through it (P0.4). A render-only param
+      // (an LED's colour) is the same case: nothing compiled reads it. A
+      // stimulus param is applied by patching the live sim instead. Only a
+      // real topology change (place/delete/rewire/width/arity) resets power.
+      const effects = cmd.items.map(simEffectOfItem);
+      const topologyChanged = effects.includes('topology');
+      const liveParamItems = topologyChanged
+        ? []
+        : cmd.items.filter((_, i) => effects[i] === 'live');
       set((s) => ({
         board: { ...s.board, ...draft },
         powered: topologyChanged ? false : s.powered,
@@ -803,7 +966,22 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         replayTimePs: topologyChanged ? null : s.replayTimePs,
         rev: s.rev + 1,
       }));
+      if (!topologyChanged && liveParamItems.length > 0 && sim) {
+        // Params evaluate() re-reads: patch the compiled primitive and wake it,
+        // the same path a switch flip takes, so the board stays powered.
+        for (const item of liveParamItems) {
+          const after = item.after as unknown as Component | undefined;
+          if (!after) continue;
+          const pi = sim.compiled.componentToPrimitive.get(`main/${after.id}`);
+          if (pi === undefined) continue;
+          sim.sim.setPrimitiveParamsAt(pi, (after.params ?? {}) as never);
+        }
+        replayIdx = null;
+        if (!get().running) sim.sim.settle();
+        set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      }
       if (topologyChanged) {
+        captureSwitchState();
         sim = null;
         replayIdx = null;
         // A stale mismatch/compile-error from an earlier edit shouldn't
@@ -1839,6 +2017,28 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     }
   };
 
+  // The two pre-commit checks report different faults; one shared prefix made a
+  // multi-driver conflict read as a naming problem.
+  const labelFault = (message: string | null): string | null =>
+    message === null ? null : `label: ${message}`;
+
+  // Compile speaks in flattened paths ("main/button42.y"), and the root scope
+  // is not the board's name, so a user reads it as a save problem. Rewritten
+  // against the components actually on the board; compile's own wording stands
+  // if the shape ever changes.
+  const describeMultiDriver = (circuit: Circuit, message: string): string => {
+    const m = /^pins (.+) drive the same wire/.exec(message);
+    if (!m) return message;
+    const named = m[1]!.split(' and ').map((token) => {
+      const bare = token.replace(/^main\//, '');
+      const dot = bare.lastIndexOf('.');
+      const owner = dot > 0 ? bare.slice(0, dot) : bare;
+      const comp = circuit.components.find((c) => c.label === owner || c.id === owner);
+      return comp?.label ?? owner;
+    });
+    return `${named.join(' and ')} both drive this wire. Only tristate outputs can share a connection.`;
+  };
+
   // Pre-commit twin of compile.ts's own multi-driver check, via compile()
   // itself so it can't drift from the real rule. `before` compiles first so
   // an already-broken board never blocks an unrelated new wire.
@@ -1864,7 +2064,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       return null;
     } catch (e) {
       return e instanceof CompileError && e.message.includes('drive the same wire')
-        ? e.message
+        ? describeMultiDriver(before, e.message)
         : null;
     }
   };
@@ -2038,20 +2238,23 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       get().undo();
     },
 
-    place: (kind, pos, grid, params, pose, defId) => {
+    place: (kind, pos, grid, params, pose, defId, pinsOf, group) => {
       if (kind === 'chip' ? !defId || !get().chipLib.has(defId) : !hasPrimitive(kind)) return;
       const id = genId(kind === 'chip' ? defId! : idPrefix(kind));
-      edit('place', (d) =>
+      const withDefaults = kind === 'led' ? ledDefaults(params) : params;
+      edit('place', (d) => {
         d.components.push({
           id,
           kind,
           ...(kind === 'chip' ? { defId: defId as string } : {}),
           pos: snapPoint(pos, grid),
-          ...(params ? { params } : {}),
+          ...(withDefaults ? { params: withDefaults } : {}),
           ...(pose?.rot ? { rot: pose.rot } : {}),
           ...(pose?.mirror ? { mirror: true } : {}),
-        }),
-      );
+          ...(group ? { group } : {}),
+        });
+        if (pinsOf) connectAbutting(d, new Set([id]), pinsOf, () => genId('w'));
+      });
     },
 
     // Insert-on-wire: splices a 1-in/1-out primitive into the hit wire, one
@@ -2083,6 +2286,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             ...(opts.rot ? { rot: opts.rot } : {}),
             ...(opts.mirror ? { mirror: opts.mirror } : {}),
             ...(opts.label ? { label: nextLabel(opts.label, used) } : {}),
+            ...(opts.group ? { group: opts.group } : {}),
           });
         }
         d.wires.splice(
@@ -2104,7 +2308,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       });
     },
 
-    moveSelection: (dx, dy, resolveEnd) => {
+    moveSelection: (dx, dy, resolveEnd, pinsOf) => {
       const sel = get().selection;
       if (sel.size === 0) return;
       edit('move', (d) => {
@@ -2133,6 +2337,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         d.junctions = d.junctions.map((j) =>
           sel.has(j.id) ? { ...j, pos: { x: j.pos.x + dx, y: j.pos.y + dy } } : j,
         );
+        if (pinsOf) connectAbutting(d, sel, pinsOf, () => genId('w'));
       });
     },
 
@@ -2316,6 +2521,46 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       edit('mirror', (d) => {
         d.components = d.components.map((c) => (sel.has(c.id) ? { ...c, mirror: !c.mirror } : c));
       });
+    },
+
+    // Synthesis lands as its own isolated group, so the built circuit has its
+    // own switches and its own LED and never reads a signal from whatever is
+    // already on the board. Ids are remapped the same way a paste is, so
+    // building twice from the same expression never collides.
+    commitSynthesis: (slice, groupName) => {
+      if (slice.components.length === 0) return null;
+      const groupId = genId('g');
+      const idMap = new Map<string, string>();
+      edit('place', (d) => {
+        for (const c of slice.components) idMap.set(c.id, genId(idPrefix(c.kind)));
+        for (const j of slice.junctions) idMap.set(j.id, genId('j'));
+        const taken = new Set((d.groups ?? []).map((g) => g.name));
+        let chosen = groupName;
+        for (let n = 2; taken.has(chosen); n++) chosen = `${groupName} ${n}`;
+        d.groups = [...(d.groups ?? []), { id: groupId, name: chosen }];
+        // Labels are scoped to the group, so a second build of the same
+        // expression keeps its own A and B rather than colliding with the
+        // first one's.
+        const remapEnd = (end: WireEnd): WireEnd => {
+          if (end.kind === 'pin')
+            return { kind: 'pin', component: idMap.get(end.component)!, pin: end.pin };
+          if (end.kind === 'junction')
+            return { kind: 'junction', junction: idMap.get(end.junction)! };
+          return end;
+        };
+        for (const c of slice.components)
+          d.components.push({ ...c, id: idMap.get(c.id)!, group: groupId });
+        for (const j of slice.junctions) d.junctions.push({ ...j, id: idMap.get(j.id)! });
+        for (const w of slice.wires)
+          d.wires.push({
+            id: genId('w'),
+            a: remapEnd(w.a),
+            b: remapEnd(w.b),
+            points: w.points.map((p) => ({ ...p })),
+          });
+      });
+      set({ selection: new Set(idMap.values()) });
+      return groupId;
     },
 
     groupSelection: (name) => {
@@ -2550,14 +2795,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       edit('wire', (d) => {
         const trial: Circuit = { ...d, wires: [...d.wires, { id: '__trial', a, b, points: [] }] };
         dirError =
-          labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, b])) ??
+          labelFault(labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, b]))) ??
           multiDriverConflict(d, trial, get().chipLib);
         if (dirError) return; // no mutation -> edit() diffs empty and no-ops
         d.wires.push({ id: genId('w'), a, b, points });
         conflict = syncLabels(d, pinRefs([a, b]));
       });
       if (dirError) {
-        set({ error: `label: ${dirError}` });
+        set({ error: dirError });
         return false;
       }
       if (conflict) set({ labelConflict: conflict });
@@ -2591,14 +2836,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           pairs.flatMap(({ a, b }) => [a, b]),
         );
         dirError =
-          labelDirectionConflict(trial, get().chipLib, touchedPins) ??
+          labelFault(labelDirectionConflict(trial, get().chipLib, touchedPins)) ??
           multiDriverConflict(d, trial, get().chipLib);
         if (dirError) return;
         for (const { a, b } of pairs) d.wires.push({ id: genId('w'), a, b, points: [] });
         conflict = syncLabels(d, touchedPins);
       });
       if (dirError) {
-        set({ error: `label: ${dirError}` });
+        set({ error: dirError });
         return false;
       }
       if (conflict) set({ labelConflict: conflict });
@@ -2662,8 +2907,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             };
             const bEnd: WireEnd = { kind: 'junction', junction: existing.id };
             dirError =
-              labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, bEnd])) ??
-              multiDriverConflict(d, trial, get().chipLib);
+              labelFault(
+                labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, bEnd])),
+              ) ?? multiDriverConflict(d, trial, get().chipLib);
             if (dirError) return;
             d.wires.push({
               id: genId('w'),
@@ -2686,8 +2932,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             wires: [...d.wires, { id: '__trial', a, b: hit.wire.a, points: [] }],
           };
           dirError =
-            labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, hit.wire.a])) ??
-            multiDriverConflict(d, trial, get().chipLib);
+            labelFault(
+              labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, hit.wire.a])),
+            ) ?? multiDriverConflict(d, trial, get().chipLib);
           if (dirError) return;
           const jid = genId('j');
           attachAtHit(d, hit, jid, grid, () => genId('w'));
@@ -2699,7 +2946,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         resolveEnd,
       );
       if (dirError) {
-        set({ error: `label: ${dirError}` });
+        set({ error: dirError });
         return 'rejected';
       }
       if (conflict) set({ labelConflict: conflict });
@@ -2736,8 +2983,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             wires: [...d.wires, { id: '__trial', a, b: bEnd, points: [] }],
           };
           dirError =
-            labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, bEnd])) ??
-            multiDriverConflict(d, trial, get().chipLib);
+            labelFault(
+              labelDirectionConflict(trial, get().chipLib, netTouchedPins(trial, [a, bEnd])),
+            ) ?? multiDriverConflict(d, trial, get().chipLib);
           if (dirError) return;
           d.wires.push({ id: genId('w'), a, b: bEnd, points });
           connected = true;
@@ -2746,7 +2994,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         resolveEnd,
       );
       if (dirError) {
-        set({ error: `label: ${dirError}` });
+        set({ error: dirError });
         return 'rejected';
       }
       if (conflict) set({ labelConflict: conflict });
@@ -2804,10 +3052,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
                 ),
               };
               dirError =
-                labelDirectionConflict(
-                  trial,
-                  get().chipLib,
-                  netTouchedPins(trial, [candidate.wireEnd]),
+                labelFault(
+                  labelDirectionConflict(
+                    trial,
+                    get().chipLib,
+                    netTouchedPins(trial, [candidate.wireEnd]),
+                  ),
                 ) ?? multiDriverConflict(d, trial, get().chipLib);
               if (dirError) return; // no mutation -> free end stays put
               if (candidate.kind === 'pin' || candidate.kind === 'existingJunction') {
@@ -2826,7 +3076,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         drop?.resolveEnd,
       );
       if (dirError) {
-        set({ error: `label: ${dirError}` });
+        set({ error: dirError });
         return;
       }
       // Dragging a dangling stub back onto a pin is the natural way to fix a
@@ -2888,10 +3138,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             wires: [...d.wires, { id: '__trial', a: aTrialEnd, b: bTrialEnd, points: [] }],
           };
           const dirError =
-            labelDirectionConflict(
-              trial,
-              get().chipLib,
-              netTouchedPins(trial, [aTrialEnd, bTrialEnd]),
+            labelFault(
+              labelDirectionConflict(
+                trial,
+                get().chipLib,
+                netTouchedPins(trial, [aTrialEnd, bTrialEnd]),
+              ),
             ) ?? multiDriverConflict(d, trial, get().chipLib);
           if (dirError) {
             wireFromStartError = dirError;
@@ -2916,7 +3168,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         resolveEnd,
       );
       if (wireFromStartError) {
-        set({ error: `label: ${wireFromStartError}` });
+        set({ error: wireFromStartError });
         return 'rejected';
       }
       return committed ? 'connected' : 'miss';
@@ -2968,6 +3220,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     power: () => {
       replayIdx = null;
       if (get().powered) {
+        captureSwitchState();
         sim = null;
         set((s) => ({
           powered: false,
@@ -2990,6 +3243,25 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         const compiled = compile(lowerCircuit(get().board), loweredLib);
         const s = new Simulator(compiled, delayFor(get().timing));
         s.powerOn();
+        // Consumed by the power-on that follows the capture, never held past it:
+        // a later session (another board, the pref flipped on in between) must
+        // not inherit positions from whatever was powered before it.
+        const restoring = getPrefs().keepSwitchesAcrossPower ? new Map(heldSwitchState) : null;
+        heldSwitchState.clear();
+        if (restoring) {
+          // Addressed by component id, never by path: two components can share
+          // a label, and a path would then drive the wrong one.
+          for (const [componentId, state] of restoring) {
+            const pi = compiled.componentToPrimitive.get(componentId);
+            if (pi === undefined) continue;
+            const kind = compiled.primitives[pi]?.kind;
+            // A component whose kind changed while unpowered is a different
+            // part now; its old position means nothing.
+            if (kind !== 'toggle' && kind !== 'button') continue;
+            s.setPrimitiveStateAt(pi, state);
+          }
+          if (restoring.size > 0) s.settle();
+        }
         sim = { sim: s, compiled };
         set((st) => ({
           powered: true,

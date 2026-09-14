@@ -98,10 +98,38 @@ describe('gateLayout', () => {
     }
   });
 
-  it('gives NOT/BUF a height of 4G with the input on the output axis', () => {
-    const layout = gateLayout('not', { kind: 'not', params: {}, pins: pinsFor('not', 1) }, theme);
+  it('draws NOT/BUF at half a 2-input gate scale, input on the output axis', () => {
+    for (const kind of ['not', 'buf'] as const) {
+      const layout = gateLayout(kind, { kind, params: {}, pins: pinsFor(kind, 1) }, theme);
+      expect(layout.H).toBe(2 * G);
+      expect(layout.Hbody).toBe(2 * G);
+      expect(layout.bodyX0).toBe(G);
+      expect(layout.inputYs[0]!.y).toBe(layout.H / 2);
+      // Every length halved against the 2-input gate it is scaled from.
+      const full = gateLayout('and', { kind: 'and', params: {}, pins: pinsFor('and', 2) }, theme);
+      expect(layout.Hbody).toBe(full.Hbody / 2);
+      expect(layout.bodyX0).toBe(full.bodyX0 / 2);
+      expect(layout.bodyRightRaw - layout.bodyX0).toBeCloseTo(0.9 * layout.Hbody, 6);
+    }
+  });
+
+  it('keeps the NOT bubble at the shared 1G, so it reads as the same inversion mark', () => {
+    const not = gateLayout('not', { kind: 'not', params: {}, pins: pinsFor('not', 1) }, theme);
+    const nand = gateLayout('nand', { kind: 'nand', params: {}, pins: pinsFor('nand', 2) }, theme);
+    expect(not.bubbleDiameter).toBe(nand.bubbleDiameter);
+  });
+
+  it('a pinView-expanded NOT output still fans out at 2G pitch over a frozen body', () => {
+    const pins: GeometryInput['pins'] = [
+      { name: 'a', dir: 'in', width: 2, role: 'data', order: 0 },
+      { name: 'y1', dir: 'out', width: 1, role: 'data', order: 0 },
+      { name: 'y0', dir: 'out', width: 1, role: 'data', order: 1 },
+    ];
+    const layout = gateLayout('not', { kind: 'not', params: { width: 2 }, pins }, theme);
     expect(layout.H).toBe(4 * G);
-    expect(layout.inputYs[0]!.y).toBe(layout.H / 2);
+    expect(layout.Hbody).toBe(2 * G);
+    expect(layout.bodyY0).toBe(G);
+    expect(layout.outputYs.map((p) => p.y)).toEqual([G, 3 * G]);
   });
 
   it('spaces inputs at 2G pitch, y = G(2i+1), symmetric about the centerline', () => {

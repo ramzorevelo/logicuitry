@@ -18,19 +18,34 @@ export interface UpdateState {
   /** A newer version exists. */
   available: boolean;
   version?: string;
+  /** Release notes from the update manifest, so the banner can say what the
+   *  new version changes before it is installed. */
+  notes?: string;
   /** The installer is on disk and ready to apply. */
   downloaded: boolean;
   downloading: boolean;
+  /** A check the user asked for is in flight. */
+  checking: boolean;
+  /** How that check came out, for the banner to say so. The launch check
+   *  leaves this null: nobody asked it anything. */
+  result: 'current' | 'failed' | null;
 }
 
 type Listener = (state: UpdateState) => void;
 
-let state: UpdateState = { available: false, downloaded: false, downloading: false };
+let state: UpdateState = {
+  available: false,
+  downloaded: false,
+  downloading: false,
+  checking: false,
+  result: null,
+};
 const listeners = new Set<Listener>();
 
 // The plugin's Update object, held between check -> download -> install.
 let pending: {
   version: string;
+  body?: string;
   downloadAndInstall?: unknown;
   download(): Promise<void>;
   install(): Promise<void>;
@@ -54,19 +69,41 @@ export function updateState(): UpdateState {
 /**
  * Look for an update. Offline this fails and is swallowed: it must never block
  * launch, never show an error, and never retry in a loop.
+ *
+ * `announce` is what separates the launch check from Help > Check for updates.
+ * A menu item that answers nothing at all reads as broken, so an asked-for
+ * check reports being up to date, and reports failing; the launch check stays
+ * silent either way.
  */
-export async function checkForUpdate(): Promise<void> {
+export async function checkForUpdate({ announce = false } = {}): Promise<void> {
   if (!isDesktop()) return;
+  if (state.checking) return;
+  if (announce) emit({ checking: true, result: null });
   try {
     const { check } = await import('@tauri-apps/plugin-updater');
     const found = await check();
-    if (!found) return;
+    if (!found) {
+      emit({ checking: false, available: false, result: announce ? 'current' : null });
+      return;
+    }
     pending = found as unknown as typeof pending;
-    emit({ available: true, version: found.version });
+    emit({
+      checking: false,
+      result: null,
+      available: true,
+      version: found.version,
+      ...(found.body ? { notes: found.body } : {}),
+    });
     if (getPrefs().autoDownloadUpdates) await downloadUpdate();
   } catch {
-    // No network, no manifest, or a malformed one. Nothing to say.
+    // No network, no manifest, or a malformed one.
+    emit({ checking: false, result: announce ? 'failed' : null });
   }
+}
+
+/** Clears the outcome of an asked-for check, once it has been read. */
+export function clearUpdateResult(): void {
+  if (state.result !== null) emit({ result: null });
 }
 
 /** Fetch the installer in the background. The board stays editable throughout. */

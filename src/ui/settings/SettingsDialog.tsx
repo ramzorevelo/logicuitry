@@ -1,8 +1,17 @@
 // Preferences. Changes apply immediately -- a setting that needs an OK button
 // is a dialog, not a setting.
 
-import { useEffect, useState } from 'react';
-import { SELECTABLE_THEMES, applyTheme, type ThemeName } from '../../render/theme';
+import { useState } from 'react';
+import { useModalKeys } from '../modalKeys';
+import {
+  LED_COLORS,
+  LED_SHAPES,
+  SELECTABLE_THEMES,
+  applyTheme,
+  type LedColor,
+  type LedShape,
+  type ThemeName,
+} from '../../render/theme';
 import { isDesktop } from '../../io/platform';
 import { DEFAULT_PREFS, usePrefsStore, type Prefs } from '../prefs';
 import { clearSession } from '../../io/sessionStore';
@@ -17,16 +26,7 @@ export function SettingsDialog({ onClose }: Props) {
   const resetPrefs = usePrefsStore((s) => s.resetPrefs);
   const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  useModalKeys(onClose);
 
   const check = (key: keyof Prefs, label: string, hint?: string) => (
     <label className="settings-row" key={key}>
@@ -57,40 +57,7 @@ export function SettingsDialog({ onClose }: Props) {
           'Off: a wide pin drops its bus label once wired.',
         )}
         {check('waveformArrows', 'Show cause arrows in the waveform panel')}
-        <label className="settings-row">
-          <input
-            type="number"
-            min={1}
-            max={10000}
-            value={prefs.glitchThresholdNs}
-            onChange={(e) => setPref('glitchThresholdNs', Number(e.target.value))}
-          />
-          <span className="settings-row__text">
-            <span>Glitch threshold (ns)</span>
-            <span className="settings-row__hint">Pulses shorter than this are flagged.</span>
-          </span>
-        </label>
-
-        <h4>Teaching</h4>
-        {check('hideAnswersDefault', 'Hide answers by default', 'Enter reveals, as it does today.')}
-        {check('presentationAtLaunch', 'Start in presentation scaling')}
-        {check(
-          'thickenStrokesInPresentation',
-          'Thicker lines in presentation mode',
-          'Off: a board draws identically fullscreen and windowed.',
-        )}
-        <label className="settings-row">
-          <select
-            value={prefs.timingModel}
-            onChange={(e) => setPref('timingModel', e.target.value as Prefs['timingModel'])}
-          >
-            <option value="ideal">Ideal (unit delay)</option>
-            <option value="datasheet">Datasheet (74LS timing)</option>
-          </select>
-          <span className="settings-row__text">
-            <span>Timing model for a new board</span>
-          </span>
-        </label>
+        {check('hideToolbarNames', 'Hide tool names on the toolbar')}
         <label className="settings-row">
           <select
             value={prefs.defaultTheme}
@@ -110,20 +77,87 @@ export function SettingsDialog({ onClose }: Props) {
             <span>Theme</span>
           </span>
         </label>
+        <label className="settings-row">
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            value={prefs.glitchThresholdNs}
+            onChange={(e) => setPref('glitchThresholdNs', Number(e.target.value))}
+          />
+          <span className="settings-row__text">
+            <span>Glitch threshold (ns)</span>
+            <span className="settings-row__hint">Pulses shorter than this are flagged.</span>
+          </span>
+        </label>
+
+        <h4>Presentation</h4>
+        {check('hideAnswersDefault', 'Hide answers by default')}
+        {check('presentationAtLaunch', 'Start in presentation scaling')}
+        {check('thickenStrokesInPresentation', 'Thicker lines in presentation mode')}
 
         <h4>Editor</h4>
+        <label className="settings-row">
+          <select
+            value={prefs.timingModel}
+            onChange={(e) => setPref('timingModel', e.target.value as Prefs['timingModel'])}
+          >
+            <option value="ideal">Ideal (unit delay)</option>
+            <option value="datasheet">Datasheet (74LS timing)</option>
+          </select>
+          <span className="settings-row__text">
+            <span>Timing model for a new board</span>
+          </span>
+        </label>
+        <label className="settings-row">
+          <select
+            value={prefs.defaultLedColor}
+            onChange={(e) => setPref('defaultLedColor', e.target.value as LedColor)}
+          >
+            {LED_COLORS.map((c) => (
+              <option key={c} value={c}>
+                {c[0]!.toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
+          <span className="settings-row__text">
+            <span>Colour for a new LED</span>
+          </span>
+        </label>
+        <label className="settings-row">
+          <select
+            value={prefs.defaultLedShape}
+            onChange={(e) => setPref('defaultLedShape', e.target.value as LedShape)}
+          >
+            {LED_SHAPES.map((shape) => (
+              <option key={shape} value={shape}>
+                {shape === 'symbol' ? 'Diode symbol' : 'Round'}
+              </option>
+            ))}
+          </select>
+          <span className="settings-row__text">
+            <span>Shape for a new LED</span>
+          </span>
+        </label>
+        <label className="settings-row">
+          <select
+            value={prefs.defaultSelectShape}
+            onChange={(e) =>
+              setPref('defaultSelectShape', e.target.value as Prefs['defaultSelectShape'])
+            }
+          >
+            <option value="lasso">Lasso</option>
+            <option value="marquee">Marquee</option>
+          </select>
+          <span className="settings-row__text">
+            <span>Shape the selection tool starts with</span>
+          </span>
+        </label>
+        {check('keepSwitchesAcrossPower', 'Keep switch positions across a power cycle')}
         {check('autosave', 'Autosave the board as you work')}
         {check('restoreLastBoard', 'Reopen the last board at launch')}
-        {check(
-          'fitOnOpen',
-          'Fit the board to the window when it opens',
-          'Bundled examples always fit; this governs your own boards.',
-        )}
-        {check(
-          'confirmReplaceBoard',
-          'Ask before replacing a board with unsaved edits',
-          'Off means New and Open discard unsaved work without asking.',
-        )}
+        {check('fitOnOpen', 'Fit the board to the window when it opens')}
+        {check('confirmReplaceBoard', 'Ask before replacing a board with unsaved edits')}
 
         {/* Meaningless in a browser, where updates come from the service
             worker, so they are not shown there at all. */}

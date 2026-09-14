@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardFlip, easeInOut, expApproach, lerp, tween, tweenDone } from './anim';
+import { cardFlip, easeInOut, expApproach, lerp, tween, tweenDone, warnPulse } from './anim';
 
 describe('anim: easing curves', () => {
   it('easeInOut ports endpoints and is symmetric about the midpoint', () => {
@@ -58,5 +58,33 @@ describe('anim: cardFlip', () => {
     expect(cardFlip(0.5).scaleX).toBeCloseTo(0, 10);
     expect(cardFlip(0.5).face).toBe('back');
     expect(cardFlip(1)).toEqual({ scaleX: 1, face: 'back' });
+  });
+});
+
+describe('warnPulse', () => {
+  it('is silent before and after the pulse window', () => {
+    expect(warnPulse(-1)).toBe(0);
+    expect(warnPulse(420)).toBe(0);
+    expect(warnPulse(1000)).toBe(0);
+  });
+
+  it('stays within [0, 1] across the window', () => {
+    for (let t = 0; t < 420; t += 7) {
+      const a = warnPulse(t);
+      expect(a).toBeGreaterThanOrEqual(0);
+      expect(a).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('beats twice, the second softer than the first', () => {
+    const firstPeak = warnPulse(420 / 4);
+    const secondPeak = warnPulse((420 / 4) * 3);
+    expect(firstPeak).toBeGreaterThan(0.4);
+    expect(secondPeak).toBeGreaterThan(0.1);
+    expect(secondPeak).toBeLessThan(firstPeak);
+  });
+
+  it('resolves well under the 400ms feedback budget by default beats', () => {
+    expect(warnPulse(419)).toBeLessThan(0.05);
   });
 });

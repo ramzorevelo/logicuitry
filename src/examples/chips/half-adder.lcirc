@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 3,
+  "formatVersion": 5,
   "id": "example-half-adder",
   "name": "Half adder",
   "version": 1,

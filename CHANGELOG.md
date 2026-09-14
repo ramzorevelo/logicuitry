@@ -5,6 +5,46 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.3.0] - 2026-09-12
+
+### Added
+
+- LED colour and shape: red, green, amber, blue or white, diode symbol or
+  round body.
+- LED array and LED matrix in the palette.
+- A decimal point and a real common terminal on the 7-segment display.
+- Analyze reads a 7-segment as one truth table and one K-map per wired
+  segment.
+- Build a circuit from a Boolean expression or a truth table, from File >
+  Build circuit or the Analyze drawer.
+- Pins dropped exactly onto each other are wired on the spot.
+- Ctrl+X cuts the selected parts to the clipboard, reconnecting through a
+  NOT or BUF it takes out.
+- The lasso can draw a freehand shape instead of a marquee.
+- The Cut tool follows the stroke you draw, curves included.
+- Preferences > Hide tool names on the toolbar, on by default.
+- On touch, a long press on a K-map group removes it.
+- A What's new sheet after an update, and on demand from the Help menu.
+- Help > Download the desktop app, in the browser build.
+
+### Changed
+
+- Two gate or chip inputs can be wired to each other.
+- Multi-driver errors name the parts involved.
+- Components are numbered per kind.
+- A new board is called Untitled board.
+- The theme picker opens the app's own list.
+- The 7-segment display is drawn larger.
+
+### Removed
+
+- The Shift+F pin picker. Plain F still connects automatically.
+
+### Fixed
+
+- The palette pane can be dragged wider again.
+- The wire ghost no longer draws a diagonal to the first bend.
+
 ## [0.2.0] - 2026-09-03
 
 ### Added

@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../../render/scene';
+import type { Rect } from '../../render/scene';
 import type { Wire, WireEnd } from '../../core/model/types';
 import {
+  pinExitSide,
+  simplifyPolyline,
   alignDeltas,
   computeWireRoutes,
+  cornerBeatsSegment,
   distributeDeltas,
   dragCorner,
   elbowCorner,
   groupRotate,
   groupRotateComponent,
   halfSnap,
+  pointInPolygon,
+  polylineIntersectsPolygon,
+  rectIntersectsPolygon,
   normalizeBends,
   orthogonalPolyline,
   packDeltas,
@@ -123,6 +130,16 @@ describe('wirePolyline / wiresCrossedBy', () => {
     expect(wiresCrossedBy([p(5, 5), p(5, 15)], [w1, w2], resolve)).toEqual(new Set(['w2']));
     expect(wiresCrossedBy([p(5, -5), p(5, 15)], [w1, w2], resolve)).toEqual(new Set(['w1', 'w2']));
     expect(wiresCrossedBy([p(30, -5), p(30, 15)], [w1, w2], resolve)).toEqual(new Set());
+  });
+
+  it('follows a multi-point stroke, and never closes it into an area', () => {
+    // Doubles back between the two wires: each leg crosses one of them.
+    const curve = [p(5, -5), p(5, 5), p(15, 5), p(15, 15)];
+    expect(wiresCrossedBy(curve, [w1, w2], resolve)).toEqual(new Set(['w1', 'w2']));
+    // Both ends sit left of w2's run: a closed path would enclose it, an open
+    // stroke passes it by.
+    const hook = [p(-5, 5), p(-5, 20), p(-2, 20)];
+    expect(wiresCrossedBy(hook, [w1, w2], resolve)).toEqual(new Set());
   });
 });
 
@@ -249,32 +266,35 @@ describe('computeWireRoutes', () => {
     const pinComp = (component: string, pin: string): WireEnd => ({ kind: 'pin', component, pin });
     const free = (x: number, y: number): WireEnd => ({ kind: 'free', pos: p(x, y) });
 
-    it('driver dragged right past its own output pin reroutes around its body', () => {
+    // Every one of these now opens with the 2G run straight out of the pin
+    // (PIN_STUB): a wire that turns on the pin itself reads as leaving
+    // sideways out of the body rather than off the pin, and on a densely
+    // pinned edge it runs along its own pin row grazing every neighbour.
+    it('driver dragged right past its own output pin leaves right, then clears its body', () => {
       const resolve = (e: WireEnd): Vec2 | undefined =>
         e.kind === 'pin' ? p(164, 16) : e.kind === 'free' ? e.pos : undefined;
       const bounds = new Map([['d1', { x: 100, y: 0, w: 64, h: 32 }]]);
       const w: Wire = { id: 'w1', a: pinComp('d1', 'y'), b: free(80, 48), points: [] };
       const routes = computeWireRoutes([w], resolve, bounds, 16);
-      // Naive flip=false's first leg sweeps y=16 (inside the body's height)
-      // from x=164 back through the body to x=80 -- would cross; the vertical-
-      // first flip=true leaves the pin tangent to the body's right edge and
-      // clears it entirely.
-      expect(routes.get('w1')).toEqual(routeOrthogonal(p(164, 16), p(80, 48), true));
+      // Out along the pin to x=196, down clear of the body, then back left.
+      // Turning at the pin instead would sweep y=16 straight back through it.
+      expect(routes.get('w1')).toEqual([p(164, 16), p(196, 16), p(196, 48), p(80, 48)]);
     });
 
-    it('receiver dragged left past its own input pin reroutes around its body', () => {
+    it('receiver dragged left past its own input pin is entered from its own side', () => {
       const resolve = (e: WireEnd): Vec2 | undefined =>
         e.kind === 'pin' ? p(50, 16) : e.kind === 'free' ? e.pos : undefined;
       const bounds = new Map([['r1', { x: 50, y: 0, w: 64, h: 32 }]]);
       const w: Wire = { id: 'w1', a: free(120, 8), b: pinComp('r1', 'a'), points: [] };
       const routes = computeWireRoutes([w], resolve, bounds, 16);
-      // Both single-elbow options cross here (driver's y and the pin's y are
-      // both inside the body's height range), and the plain x-shifted
-      // two-elbow variants re-enter the body on their return leg -- only a
-      // y-shifted variant (this fix's addition) clears, at y=-4.
-      expect(routes.get('w1')).toEqual([p(120, 8), p(120, -4), p(50, -4), p(50, 16)]);
+      // Over the top at y=-4 (the single elbows and x-shifted Zs all cross the
+      // body), down to the pin's own stub at x=18, then in from the left.
+      expect(routes.get('w1')).toEqual([p(120, 8), p(120, -4), p(18, -4), p(18, 16), p(50, 16)]);
     });
 
+    // Lined-up ends keep the single straight segment. The pin stub must not
+    // cost an alignment that was arranged on purpose -- forcing one here sent
+    // the wire out past the pin and back, three bends to replace none.
     it('unchanged: a wire leaving an output pin immediately vertical stays tangent to the body', () => {
       const resolve = (e: WireEnd): Vec2 | undefined =>
         e.kind === 'pin' ? p(64, 16) : e.kind === 'free' ? e.pos : undefined;
@@ -896,5 +916,345 @@ describe('pointAlongPolyline / tAlongPolyline', () => {
     ];
     expect(pointAlongPolyline(dot, 0.5).pos).toEqual({ x: 5, y: 5 });
     expect(tAlongPolyline(dot, { x: 9, y: 9 })).toBe(0);
+  });
+});
+
+describe('freehand lasso containment', () => {
+  // A 100x100 box, drawn open the way a finger draws it.
+  const box: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+  ];
+
+  it('closes the path, so a shape drawn open still encloses', () => {
+    expect(pointInPolygon({ x: 50, y: 50 }, box)).toBe(true);
+    expect(pointInPolygon({ x: 150, y: 50 }, box)).toBe(false);
+  });
+
+  it('selects a wire the path merely crosses, not only one it encloses', () => {
+    const crossing: Vec2[] = [
+      { x: 50, y: -50 },
+      { x: 50, y: 50 },
+    ];
+    expect(polylineIntersectsPolygon(crossing, box)).toBe(true);
+    const outside: Vec2[] = [
+      { x: 200, y: 0 },
+      { x: 200, y: 100 },
+    ];
+    expect(polylineIntersectsPolygon(outside, box)).toBe(false);
+  });
+
+  it('reads a bounds box as touching when the path passes through it', () => {
+    expect(rectIntersectsPolygon({ x: 40, y: 40, w: 20, h: 20 }, box)).toBe(true);
+    expect(rectIntersectsPolygon({ x: 80, y: 80, w: 60, h: 60 }, box)).toBe(true);
+    expect(rectIntersectsPolygon({ x: 300, y: 300, w: 10, h: 10 }, box)).toBe(false);
+  });
+});
+
+describe('cornerBeatsSegment', () => {
+  it('gives a bend its own wire regardless of how much nearer the leg is', () => {
+    expect(cornerBeatsSegment({ wireId: 'w1', d: 11 }, { wireId: 'w1', d: 0 })).toBe(true);
+  });
+
+  it('does not let a neighbouring wire bend steal a press sitting on this wire', () => {
+    expect(cornerBeatsSegment({ wireId: 'w2', d: 11 }, { wireId: 'w1', d: 1 })).toBe(false);
+  });
+
+  it('still takes a neighbouring bend when the press is actually nearer to it', () => {
+    expect(cornerBeatsSegment({ wireId: 'w2', d: 1 }, { wireId: 'w1', d: 4 })).toBe(true);
+  });
+
+  it('takes whichever one exists when only one does', () => {
+    expect(cornerBeatsSegment({ wireId: 'w2', d: 9 }, undefined)).toBe(true);
+    expect(cornerBeatsSegment(undefined, { wireId: 'w1', d: 1 })).toBe(false);
+  });
+});
+
+describe('orthogonalPolyline never doubles back over itself', () => {
+  it('flips the end leg rather than run out past a stored bend and come back', () => {
+    // The encoder repro in miniature: the bend at (40,0) sits on the far side
+    // of the endpoint the wire now has to reach, so the unflipped tail ran
+    // 0 -> 40 -> 20 along y=0, drawing a spur on top of the wire it just drew.
+    const pts = orthogonalPolyline({ x: 0, y: 0 }, [{ x: 40, y: 0 }], { x: 20, y: 30 });
+    expect(pts).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 40, y: 30 },
+      { x: 20, y: 30 },
+    ]);
+  });
+
+  it('leaves a route that was already clean exactly as it was', () => {
+    const pts = orthogonalPolyline({ x: 0, y: 0 }, [{ x: 40, y: 20 }], { x: 80, y: 40 });
+    expect(pts).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 40, y: 20 },
+      { x: 80, y: 20 },
+      { x: 80, y: 40 },
+    ]);
+  });
+});
+
+// The reported bug: a display below and right of a gate. Its pins leave the
+// top and bottom edges, so a route that led horizontally ran along its own
+// pin row and grazed every neighbouring stub -- but only when the drag had
+// started at the display, because the lead axis came from argument order.
+describe('lead direction comes from the pins, not the drag order', () => {
+  const gateBounds: Rect = { x: 0, y: 0, w: 48, h: 48 };
+  const dispBounds: Rect = { x: 160, y: 160, w: 48, h: 120 };
+  const gatePin: Vec2 = { x: 48, y: 24 }; // right edge -> leaves rightward
+  const dispPin: Vec2 = { x: 184, y: 160 }; // top edge -> leaves upward
+  const boundsById = new Map<string, Rect>([
+    ['g1', gateBounds],
+    ['d1', dispBounds],
+  ]);
+  const resolve = (end: WireEnd): Vec2 =>
+    end.kind === 'pin' && end.component === 'g1' ? gatePin : dispPin;
+  const gateEnd: WireEnd = { kind: 'pin', component: 'g1', pin: 'y' };
+  const dispEnd: WireEnd = { kind: 'pin', component: 'd1', pin: 'g' };
+  const routeFor = (a: WireEnd, b: WireEnd): Vec2[] =>
+    computeWireRoutes([{ id: 'w1', a, b, points: [] }], resolve, boundsById, 8).get('w1')!;
+
+  it('draws the same wire whichever end the drag started from', () => {
+    expect(routeFor(dispEnd, gateEnd)).toEqual([...routeFor(gateEnd, dispEnd)].reverse());
+  });
+
+  it('leaves the display pin upward, not across its own pin row', () => {
+    const pts = routeFor(dispEnd, gateEnd);
+    expect(pts[1]!.x).toBe(dispPin.x);
+    expect(pts[1]!.y).toBeLessThan(dispPin.y);
+  });
+
+  it('leaves the gate pin rightward', () => {
+    const pts = routeFor(gateEnd, dispEnd);
+    expect(pts[1]!.y).toBe(gatePin.y);
+    expect(pts[1]!.x).toBeGreaterThan(gatePin.x);
+  });
+});
+
+describe('pinExitSide', () => {
+  const body: Rect = { x: 100, y: 100, w: 40, h: 80 };
+  it('reads the edge a pin sits on', () => {
+    expect(pinExitSide({ x: 100, y: 120 }, body)).toBe('left');
+    expect(pinExitSide({ x: 140, y: 120 }, body)).toBe('right');
+    expect(pinExitSide({ x: 120, y: 100 }, body)).toBe('up');
+    expect(pinExitSide({ x: 120, y: 180 }, body)).toBe('down');
+  });
+
+  it('has no opinion without a body, or at a corner', () => {
+    expect(pinExitSide({ x: 100, y: 120 }, undefined)).toBeUndefined();
+    expect(pinExitSide({ x: 100, y: 100 }, body)).toBeUndefined();
+  });
+});
+
+describe('simplifyPolyline', () => {
+  it('drops repeats and non-corners', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ];
+    expect(simplifyPolyline(pts)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ]);
+  });
+});
+
+// The second half of the report: two pins facing the SAME way but not lined
+// up, so a bend is needed. One elbow cannot serve both -- it has to turn on
+// one of the pins, which draws as leaving that body sideways. The Z leaves
+// and arrives along both pins instead.
+describe('two pins facing the same way, not aligned', () => {
+  const outBounds: Rect = { x: 0, y: 0, w: 48, h: 48 };
+  const inBounds: Rect = { x: 200, y: 80, w: 48, h: 48 };
+  const outPin: Vec2 = { x: 48, y: 24 }; // right edge -> leaves rightward
+  const inPin: Vec2 = { x: 200, y: 104 }; // left edge -> entered from the left
+  const bounds = new Map<string, Rect>([
+    ['g1', outBounds],
+    ['g2', inBounds],
+  ]);
+  const resolve = (end: WireEnd): Vec2 =>
+    end.kind === 'pin' && end.component === 'g1' ? outPin : inPin;
+  const pts = computeWireRoutes(
+    [
+      {
+        id: 'w1',
+        a: { kind: 'pin', component: 'g1', pin: 'y' },
+        b: { kind: 'pin', component: 'g2', pin: 'a' },
+        points: [],
+      },
+    ],
+    resolve,
+    bounds,
+    8,
+  ).get('w1')!;
+
+  it('leaves the output pin along the pin, not straight down off it', () => {
+    expect(pts[1]!.y).toBe(outPin.y);
+    expect(pts[1]!.x).toBeGreaterThanOrEqual(outPin.x + 2 * 8);
+  });
+
+  it('arrives at the input pin along the pin, not straight down onto it', () => {
+    const last = pts[pts.length - 1]!;
+    const before = pts[pts.length - 2]!;
+    expect(last).toEqual(inPin);
+    expect(before.y).toBe(inPin.y);
+    expect(before.x).toBeLessThanOrEqual(inPin.x - 2 * 8);
+  });
+
+  it('turns in between rather than on either pin', () => {
+    expect(pts.length).toBeGreaterThan(3);
+  });
+});
+
+describe('pins lined up stay straight', () => {
+  // The stub must not undo a deliberate alignment. A display pin directly
+  // below a gate's pin end is one straight wire, not an excursion out past
+  // the gate and back.
+  const gateBounds: Rect = { x: 0, y: 0, w: 48, h: 48 };
+  const dispBounds: Rect = { x: 24, y: 200, w: 48, h: 120 };
+  const gatePin: Vec2 = { x: 48, y: 24 };
+  const dispPin: Vec2 = { x: 48, y: 200 }; // same x as the gate's pin
+  const bounds = new Map<string, Rect>([
+    ['g1', gateBounds],
+    ['d1', dispBounds],
+  ]);
+  const resolve = (end: WireEnd): Vec2 =>
+    end.kind === 'pin' && end.component === 'g1' ? gatePin : dispPin;
+  const routeFor = (a: WireEnd, b: WireEnd): Vec2[] =>
+    computeWireRoutes([{ id: 'w1', a, b, points: [] }], resolve, bounds, 8).get('w1')!;
+  const gateEnd: WireEnd = { kind: 'pin', component: 'g1', pin: 'y' };
+  const dispEnd: WireEnd = { kind: 'pin', component: 'd1', pin: 'g' };
+
+  it('is a single segment, whichever end it was drawn from', () => {
+    expect(routeFor(dispEnd, gateEnd)).toEqual([dispPin, gatePin]);
+    expect(routeFor(gateEnd, dispEnd)).toEqual([gatePin, dispPin]);
+  });
+});
+
+// A pin sitting inside the far pin's own stub. With `g` lined up on the gate's
+// output pin, `f` is one grid step to the side of it -- nearer than the 2G
+// stub. An unclamped stub sailed out to its full length, past `f`'s own
+// column, and came back, so `f` alone got a dog-leg while every pin 2G or more
+// away drew a clean corner.
+describe('a pin nearer than the far pin stub', () => {
+  const G = 8;
+  const gatePin: Vec2 = { x: 208, y: 124 }; // right edge of the gate
+  const pinX: Record<string, number> = { g: 208, f: 216, com2: 224, a: 232, b: 240 };
+  const bounds = new Map<string, Rect>([
+    ['g1', { x: 160, y: 100, w: 48, h: 48 }],
+    ['d1', { x: 200, y: 300, w: 48, h: 120 }],
+  ]);
+  const resolve = (e: WireEnd): Vec2 =>
+    e.kind === 'pin' && e.component === 'g1'
+      ? gatePin
+      : { x: pinX[(e as { pin: string }).pin]!, y: 300 };
+  const routeFor = (pin: string, order: string[]): Vec2[] => {
+    const wires: Wire[] = order.map((n, i) => ({
+      id: `w${i}`,
+      a: { kind: 'pin', component: 'd1', pin: n },
+      b: { kind: 'pin', component: 'g1', pin: 'y' },
+      points: [],
+    }));
+    return computeWireRoutes(wires, resolve, bounds, G).get(`w${order.indexOf(pin)}`)!;
+  };
+  const all = ['g', 'f', 'com2', 'a', 'b'];
+
+  it('turns once, like every pin further away', () => {
+    expect(routeFor('f', all)).toEqual([
+      { x: 216, y: 300 },
+      { x: 216, y: 124 },
+      { x: 208, y: 124 },
+    ]);
+  });
+
+  it('never overshoots: no pin takes more than one corner', () => {
+    for (const pin of all) expect(routeFor(pin, all).length).toBeLessThanOrEqual(3);
+  });
+
+  it('the lined-up pin stays a single segment', () => {
+    expect(routeFor('g', all)).toEqual([
+      { x: 208, y: 300 },
+      { x: 208, y: 124 },
+    ]);
+  });
+
+  it('does not depend on the order they were drawn in', () => {
+    const reversed = [...all].reverse();
+    for (const pin of all) expect(routeFor(pin, reversed)).toEqual(routeFor(pin, all));
+  });
+});
+
+// A pin whose stub points away from its target: a display's top pin wired to
+// something below it, or a bottom pin wired to something above. The route has
+// to come out of the pin and round the body, never straight back through it.
+describe('a pin facing away from its target', () => {
+  const G = 8;
+  const disp: Rect = { x: 200, y: 200, w: 6 * G, h: 15 * G };
+  const topY = disp.y;
+  const botY = disp.y + disp.h;
+  const COL: Record<string, number> = { p0: 208, p1: 216, p2: 224, p3: 232, p4: 240 };
+
+  const crossesDisplay = (pts: Vec2[]): boolean => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i]!;
+      const p1 = pts[i + 1]!;
+      const x0 = Math.min(p0.x, p1.x);
+      const x1 = Math.max(p0.x, p1.x);
+      const y0 = Math.min(p0.y, p1.y);
+      const y1 = Math.max(p0.y, p1.y);
+      if (x0 < disp.x + disp.w && x1 > disp.x && y0 < disp.y + disp.h && y1 > disp.y) return true;
+    }
+    return false;
+  };
+
+  const routeFor = (pin: string, rowY: number, gate: Rect, gatePin: Vec2): Vec2[] => {
+    const bounds = new Map<string, Rect>([
+      ['g1', gate],
+      ['d1', disp],
+    ]);
+    const resolve = (e: WireEnd): Vec2 =>
+      e.kind === 'pin' && e.component === 'g1' ? gatePin : { x: COL[pin]!, y: rowY };
+    const w: Wire = {
+      id: 'w1',
+      a: { kind: 'pin', component: 'd1', pin },
+      b: { kind: 'pin', component: 'g1', pin: 'y' },
+      points: [],
+    };
+    return computeWireRoutes([w], resolve, bounds, G).get('w1')!;
+  };
+
+  // Gates tucked just off the display's own column, which is where the detour
+  // candidates used to be skipped for having nothing to shift.
+  const below: [Rect, Vec2] = [
+    { x: 180, y: 420, w: 6 * G, h: 6 * G },
+    { x: 228, y: 444 },
+  ];
+  const above: [Rect, Vec2] = [
+    { x: 180, y: 60, w: 6 * G, h: 6 * G },
+    { x: 228, y: 84 },
+  ];
+
+  it('a top pin wired below goes round the body, never through it', () => {
+    for (const pin of Object.keys(COL))
+      expect(crossesDisplay(routeFor(pin, topY, ...below))).toBe(false);
+  });
+
+  it('a bottom pin wired above goes round the body, never through it', () => {
+    for (const pin of Object.keys(COL))
+      expect(crossesDisplay(routeFor(pin, botY, ...above))).toBe(false);
+  });
+
+  it('still leaves the pin along the pin before turning', () => {
+    const pts = routeFor('p3', topY, ...below);
+    expect(pts[1]!.x).toBe(COL['p3']);
+    expect(pts[1]!.y).toBeLessThan(topY); // out of the top pin, upward
   });
 });

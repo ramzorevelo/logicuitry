@@ -33,7 +33,7 @@ function wire(id: string, ca: string, pa: string, cb: string, pb: string): Wire 
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'b',
     name: 'b',
     components,
@@ -118,18 +118,31 @@ describe('pushInputsForward', () => {
     expect(isEquivalent(b, back!, lib)).toBe(true);
   });
 
-  it('is a failed drag when siblings lack a bubble (only one input bubbled)', () => {
-    const b = nandBoard();
-    const pushed = pushOutputBackward(b, 'g1')!;
-    // clear just one sibling's bubble to simulate a partial state
+  it('pushes one input bubble forward by bubbling the clean sibling', () => {
+    // AND with a bubble on `a` alone is a'b, and De Morgan sends it to
+    // (a + b')' -- an OR body, a bubble at the output, and a bubble the
+    // sibling did not have. Relocating that one bubble on its own would be
+    // (ab)', which is the misconception; this does the whole transformation.
+    const nand = nandBoard();
     const partial = board(
-      pushed.components.map((c) => {
-        if (c.id !== 'g1') return c;
-        return { ...c, params: { ...c.params, inputBubbles: 'a' } };
-      }),
-      pushed.wires,
+      nand.components.map((c) =>
+        c.id === 'g1'
+          ? { ...c, kind: 'and' as const, params: { outputBubble: false, inputBubbles: 'a' } }
+          : c,
+      ),
+      nand.wires,
     );
-    expect(pushInputsForward(partial, 'g1')).toBeNull();
+    const fwd = pushInputsForward(partial, 'g1');
+    expect(fwd).not.toBeNull();
+    const g1 = fwd!.components.find((c) => c.id === 'g1')!;
+    expect(g1.kind).toBe('or');
+    expect(getOutputBubble(g1)).toBe(true);
+    expect([...getInputBubbles(g1)]).toEqual(['b']);
+    expect(isEquivalent(partial, fwd!, lib)).toBe(true);
+  });
+
+  it('is a failed drag when there is no input bubble to push at all', () => {
+    expect(pushInputsForward(nandBoard(), 'g1')).toBeNull();
   });
 });
 

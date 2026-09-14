@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "register-to-register-path",
   "name": "Register-to-register path",
   "components": [
@@ -46,15 +46,15 @@
       "id": "inv",
       "kind": "not",
       "pos": {
-        "x": 352,
-        "y": 48
+        "x": 320,
+        "y": 56
       }
     },
     {
       "id": "g",
       "kind": "xor",
       "pos": {
-        "x": 480,
+        "x": 408,
         "y": 56
       }
     },
@@ -62,7 +62,7 @@
       "id": "ff2",
       "kind": "dff",
       "pos": {
-        "x": 600,
+        "x": 528,
         "y": 32
       }
     },
@@ -70,7 +70,7 @@
       "id": "lq",
       "kind": "led",
       "pos": {
-        "x": 744,
+        "x": 672,
         "y": 48
       },
       "label": "Q"
@@ -78,7 +78,7 @@
   ],
   "wires": [
     {
-      "id": "w5",
+      "id": "w4",
       "a": {
         "kind": "pin",
         "component": "din",
@@ -122,12 +122,12 @@
       },
       "points": [
         {
-          "x": 592,
+          "x": 512,
           "y": 88
         },
         {
-          "x": 592,
-          "y": 104
+          "x": 512,
+          "y": 112
         }
       ]
     },
@@ -150,21 +150,21 @@
       ]
     },
     {
-      "id": "w1",
+      "id": "w3",
       "a": {
-        "kind": "pin",
-        "component": "ff1",
-        "pin": "q"
-      },
-      "b": {
         "kind": "pin",
         "component": "inv",
         "pin": "a"
       },
+      "b": {
+        "kind": "pin",
+        "component": "ff1",
+        "pin": "q"
+      },
       "points": []
     },
     {
-      "id": "w4",
+      "id": "w5",
       "a": {
         "kind": "pin",
         "component": "inv",
@@ -191,17 +191,17 @@
       },
       "points": [
         {
-          "x": 472,
+          "x": 400,
           "y": 80
         },
         {
-          "x": 472,
+          "x": 400,
           "y": 136
         }
       ]
     },
     {
-      "id": "w3",
+      "id": "w2",
       "a": {
         "kind": "pin",
         "component": "g",
@@ -215,7 +215,7 @@
       "points": []
     },
     {
-      "id": "w2",
+      "id": "w1",
       "a": {
         "kind": "pin",
         "component": "ff2",
@@ -234,7 +234,7 @@
       "id": "j1",
       "pos": {
         "x": 200,
-        "y": 104
+        "y": 112
       }
     }
   ],

@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "complement-and-covering",
   "name": "Complement and covering",
   "components": [
@@ -18,8 +18,8 @@
       "id": "inv",
       "kind": "not",
       "pos": {
-        "x": 136,
-        "y": 48
+        "x": 176,
+        "y": 56
       },
       "group": "gl"
     },
@@ -27,8 +27,8 @@
       "id": "comp",
       "kind": "or",
       "pos": {
-        "x": 272,
-        "y": 56
+        "x": 264,
+        "y": 40
       },
       "group": "gl"
     },
@@ -36,8 +36,8 @@
       "id": "lcomp",
       "kind": "led",
       "pos": {
-        "x": 376,
-        "y": 48
+        "x": 368,
+        "y": 32
       },
       "group": "gl",
       "label": "A + A'"
@@ -47,7 +47,7 @@
       "kind": "toggle",
       "pos": {
         "x": 48,
-        "y": 144
+        "y": 136
       },
       "group": "gr",
       "label": "A"
@@ -57,7 +57,7 @@
       "kind": "toggle",
       "pos": {
         "x": 48,
-        "y": 240
+        "y": 224
       },
       "group": "gr",
       "label": "B"
@@ -67,7 +67,7 @@
       "kind": "or",
       "pos": {
         "x": 136,
-        "y": 232
+        "y": 192
       },
       "group": "gr"
     },
@@ -75,8 +75,8 @@
       "id": "gate",
       "kind": "and",
       "pos": {
-        "x": 272,
-        "y": 224
+        "x": 264,
+        "y": 176
       },
       "group": "gr"
     },
@@ -84,8 +84,8 @@
       "id": "lcover",
       "kind": "led",
       "pos": {
-        "x": 376,
-        "y": 216
+        "x": 368,
+        "y": 168
       },
       "group": "gr",
       "label": "A(A + B)"
@@ -95,7 +95,7 @@
       "kind": "led",
       "pos": {
         "x": 136,
-        "y": 136
+        "y": 128
       },
       "group": "gr",
       "label": "A"
@@ -104,19 +104,6 @@
   "wires": [
     {
       "id": "w6",
-      "a": {
-        "kind": "pin",
-        "component": "a1",
-        "pin": "y"
-      },
-      "b": {
-        "kind": "junction",
-        "junction": "j1"
-      },
-      "points": []
-    },
-    {
-      "id": "w7",
       "a": {
         "kind": "junction",
         "junction": "j1"
@@ -129,17 +116,22 @@
       "points": [
         {
           "x": 128,
-          "y": 32
-        },
-        {
-          "x": 264,
-          "y": 32
-        },
-        {
-          "x": 264,
-          "y": 64
+          "y": 48
         }
       ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "points": []
     },
     {
       "id": "w8",
@@ -168,12 +160,8 @@
       },
       "points": [
         {
-          "x": 216,
+          "x": 184,
           "y": 64
-        },
-        {
-          "x": 216,
-          "y": 80
         }
       ]
     },
@@ -232,22 +220,22 @@
     {
       "id": "w12",
       "a": {
-        "kind": "junction",
-        "junction": "j3"
-      },
-      "b": {
         "kind": "pin",
         "component": "gate",
         "pin": "a"
       },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
       "points": [
         {
-          "x": 264,
-          "y": 216
+          "x": 256,
+          "y": 184
         },
         {
-          "x": 264,
-          "y": 232
+          "x": 256,
+          "y": 176
         }
       ]
     },
@@ -265,6 +253,29 @@
       "points": [
         {
           "x": 128,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "cover",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "b2",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 216
+        },
+        {
+          "x": 128,
           "y": 240
         }
       ]
@@ -273,29 +284,24 @@
       "id": "w3",
       "a": {
         "kind": "pin",
-        "component": "b2",
-        "pin": "y"
-      },
-      "b": {
-        "kind": "pin",
-        "component": "cover",
-        "pin": "b"
-      },
-      "points": []
-    },
-    {
-      "id": "w4",
-      "a": {
-        "kind": "pin",
-        "component": "cover",
-        "pin": "y"
-      },
-      "b": {
-        "kind": "pin",
         "component": "gate",
         "pin": "b"
       },
-      "points": []
+      "b": {
+        "kind": "pin",
+        "component": "cover",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 256,
+          "y": 200
+        },
+        {
+          "x": 256,
+          "y": 208
+        }
+      ]
     },
     {
       "id": "w2",
@@ -324,14 +330,14 @@
       "id": "j2",
       "pos": {
         "x": 128,
-        "y": 160
+        "y": 152
       }
     },
     {
       "id": "j3",
       "pos": {
         "x": 128,
-        "y": 216
+        "y": 176
       }
     }
   ],

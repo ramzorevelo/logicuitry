@@ -9,11 +9,13 @@ import type { Menu, MenuEntry } from './menuModel';
 export const CIRCUIT_COMMANDS = {
   import: 'Import circuit...',
   package: 'Package as chip...',
+  build: 'Build circuit...',
   undo: 'Undo',
   redo: 'Redo',
   copy: 'Copy',
   paste: 'Paste',
   delete: 'Delete',
+  cut: 'Cut',
   deleteHeal: 'Delete and reconnect',
   fit: 'Zoom to fit',
   power: 'Power on',
@@ -35,7 +37,11 @@ export function inactiveCircuitMenus(): Menu[] {
   return [
     {
       id: 'file',
-      items: [stub('import', CIRCUIT_COMMANDS.import), stub('package', CIRCUIT_COMMANDS.package)],
+      items: [
+        stub('import', CIRCUIT_COMMANDS.import),
+        stub('package', CIRCUIT_COMMANDS.package),
+        stub('build', CIRCUIT_COMMANDS.build),
+      ],
     },
     {
       id: 'edit',
@@ -47,7 +53,8 @@ export function inactiveCircuitMenus(): Menu[] {
         stub('paste', CIRCUIT_COMMANDS.paste, SHORTCUTS.paste),
         { separator: true },
         stub('delete', CIRCUIT_COMMANDS.delete, SHORTCUTS.delete),
-        stub('deleteHeal', CIRCUIT_COMMANDS.deleteHeal, SHORTCUTS.deleteHeal),
+        stub('cut', CIRCUIT_COMMANDS.cut, SHORTCUTS.cutClipboard),
+        stub('deleteHeal', CIRCUIT_COMMANDS.deleteHeal),
       ],
     },
     { id: 'view', items: [stub('fit', CIRCUIT_COMMANDS.fit, 'Home')] },

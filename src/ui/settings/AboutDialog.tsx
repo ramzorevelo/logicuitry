@@ -2,23 +2,14 @@
 // which build am I running" is a different question from "how should it
 // behave", and Help > About pointing at a settings panel reads as a mistake.
 
-import { useEffect } from 'react';
+import { useModalKeys } from '../modalKeys';
 
 interface Props {
   onClose: () => void;
 }
 
 export function AboutDialog({ onClose }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  useModalKeys(onClose);
 
   return (
     <div

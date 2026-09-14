@@ -35,6 +35,11 @@ export interface AutoPlaceInput {
   components: readonly RoutableComponent[];
   wires: readonly Wire[];
   grid?: number;
+  /** Set when the incoming y is a generated seed rather than someone's
+   *  drawing. A body whose drivers disagree then centres between them instead
+   *  of keeping a y nobody chose, which a staircase seed turns into "hug the
+   *  lowest driver" and compounds down the tree. */
+  centreOnDrivers?: boolean;
 }
 
 export interface AutoPlaceResult {
@@ -134,7 +139,7 @@ export function autoPlace(input: AutoPlaceInput): AutoPlaceResult {
 
   const layers = assignLayers(input.components, nets);
   const order = minimiseCrossings(layers, nets, byId);
-  const proposed = assignCoordinates(order, nets, byId, g);
+  const proposed = assignCoordinates(order, nets, byId, g, input.centreOnDrivers ?? false);
 
   // Keep the instructor's drawing when it is already the better one: a
   // deliberate layout must never be traded for a tidier but worse proposal.
@@ -398,6 +403,7 @@ function assignCoordinates(
   nets: readonly Net[],
   byId: ReadonlyMap<string, RoutableComponent>,
   g: number,
+  centreOnDrivers: boolean,
 ): Map<string, Vec2> {
   const at = new Map<string, Vec2>();
   const layerOf = new Map<string, number>();
@@ -435,13 +441,16 @@ function assignCoordinates(
       }
       if (ys.length === 0) continue;
       // Unanimous wants align a pin exactly, which is the whole point. When
-      // they disagree no y lines anything up, so the median would only cost
-      // the column its pitch for nothing: keep the author's y if it already
-      // lies between the drivers, and otherwise pull it just inside them.
+      // they disagree no y lines anything up, so on someone's own drawing the
+      // median would cost the column its pitch for nothing: keep the author's
+      // y if it already lies between the drivers, and otherwise pull it just
+      // inside them. A generated seed has no y worth keeping, so there the
+      // body centres between its drivers instead.
       const lo = Math.min(...ys);
       const hi = Math.max(...ys);
       const here = byId.get(id)!.bounds.y;
-      want.set(id, lo === hi ? lo : snap(Math.min(hi, Math.max(lo, here)), g));
+      const spread = centreOnDrivers ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, here));
+      want.set(id, lo === hi ? lo : snap(spread, g));
     }
     packColumn(ids, want, byId, at, g);
   });

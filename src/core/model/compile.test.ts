@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CompileError, compile } from './compile';
 import type { ChipLibrary } from './types';
 import { board, chipDef, comp, pin, srLatchDef, wire } from './testFixtures';
+import { sevenseg } from '../sim/primitives/display';
 
 const lib = (...defs: ReturnType<typeof chipDef>[]): ChipLibrary =>
   new Map(defs.map((d) => [d.id, d]));
@@ -286,5 +287,21 @@ describe('netlabel (local net labels)', () => {
       wires: [wire('w1', ['sw', 'y'], ['L1', 'a']), wire('w2', ['d', 'a'], ['L2', 'a'])],
     });
     expect(() => compile(b, new Map())).toThrow(CompileError);
+  });
+});
+
+describe('internally tied pins', () => {
+  it('makes a display two commons one net, so either lead powers it', () => {
+    const b = board({
+      components: [comp('g1', 'gnd'), comp('ds1', 'sevenseg')],
+      wires: [wire('w1', ['g1', 'p'], ['ds1', 'com1'])],
+    });
+    const c = compile(b, new Map());
+    const ds = c.primitives.find((p) => p.kind === 'sevenseg')!;
+    const names = sevenseg.pins({}).map((p) => p.name);
+    const netOf = (name: string) => ds.inputs[names.indexOf(name)];
+    expect(netOf('com2')).toBe(netOf('com1'));
+    // The tie is the two commons only: every segment keeps its own net.
+    expect(netOf('a')).not.toBe(netOf('com1'));
   });
 });

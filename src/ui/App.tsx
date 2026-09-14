@@ -37,6 +37,7 @@ import { SHORTCUTS } from './menu/shortcuts';
 import { inactiveCircuitMenus } from './menu/circuitCommands';
 import { SettingsDialog } from './settings/SettingsDialog';
 import { AboutDialog } from './settings/AboutDialog';
+import { WhatsNewDialog, useWhatsNew } from './settings/WhatsNewDialog';
 import { HelpDialog } from './settings/HelpDialog';
 import { useBoardDocument } from './document/useBoardDocument';
 import { BugReportDialog } from './components/BugReportDialog';
@@ -44,10 +45,15 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { DesktopUpdateBanner } from './desktop/DesktopUpdateBanner';
 import { applyUpdateOnClose, checkForUpdate } from './desktop/updater';
 import { isDesktop } from '../io/platform';
+
+/** Third documented exception to the offline rule: opened only when a user
+ *  picks Help > Download the desktop app, never fetched. */
+const RELEASES_URL = 'https://github.com/ramzorevelo/logicuitry/releases/latest';
 import { ReferenceDrawer, ReferenceDrawerProvider } from './components/ReferenceDrawer';
 import { NumbersWorkbench } from './workbench-numbers/NumbersWorkbench';
 import { CircuitWorkbench } from './workbench-circuit/CircuitWorkbench';
 import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
+import { modalKeysHeld } from './modalKeys';
 
 // Gates workbench retired: bubble pushing is the Circuit workbench's locked
 // bubble mode now (B key / mode bar).
@@ -80,6 +86,22 @@ export function App() {
   const boardsDir = useShellStore((s) => s.boardsDir);
   const [theme, setTheme] = useState<ThemeName>(currentTheme);
   const [presentation, setPresentation] = useState(() => getPrefs().presentationAtLaunch);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!themeMenuOpen) return;
+    const dismiss = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      if (e.type === 'pointerdown' && themeMenuRef.current?.contains(e.target as Node)) return;
+      setThemeMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', dismiss, true);
+    window.addEventListener('keydown', dismiss, true);
+    return () => {
+      window.removeEventListener('pointerdown', dismiss, true);
+      window.removeEventListener('keydown', dismiss, true);
+    };
+  }, [themeMenuOpen]);
   // A folder was picked in an earlier session but this load has no permission
   // yet: the button offers to reconnect instead of pretending nothing was set.
   const [pending, setPending] = useState<LibraryDir | null>(null);
@@ -206,6 +228,11 @@ export function App() {
     document.documentElement.classList.toggle('thin-strokes', !thickStrokes);
   }, [thickStrokes]);
 
+  const hideToolbarNames = usePrefsStore((s) => s.prefs.hideToolbarNames);
+  useEffect(() => {
+    document.documentElement.classList.toggle('toolbar-names', !hideToolbarNames);
+  }, [hideToolbarNames]);
+
   // Esc and F11 leave fullscreen without passing through the button, so the
   // scaled chrome has to follow the real state rather than our memory of it.
   const leftFullscreenRef = useRef(false);
@@ -221,6 +248,8 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A dialog is up: it owns the keyboard, buttons and all.
+      if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'F10') {
         // The APG-conformant way into a menu bar. Alt+letter is deliberately
@@ -269,6 +298,8 @@ export function App() {
   const [reportOpen, setReportOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [whatsNewDue, dismissWhatsNew] = useWhatsNew(presentation);
 
   // Rebuilt whenever the state its handlers read changes: a menu item is a
   // closure, and a stale one acts on a stale value.
@@ -343,12 +374,24 @@ export function App() {
                 {
                   id: 'checkUpdates',
                   label: 'Check for updates',
-                  run: () => void checkForUpdate(),
+                  // Announced: the banner reports the answer, including that
+                  // there is nothing to install.
+                  run: () => void checkForUpdate({ announce: true }),
                 },
                 { separator: true } as const,
               ]
             : []),
           { id: 'keys', label: 'Keys and gestures', shortcut: '?', run: () => setHelpOpen(true) },
+          { id: 'whatsNew', label: "What's new", run: () => setWhatsNewOpen(true) },
+          ...(isDesktop()
+            ? []
+            : [
+                {
+                  id: 'download',
+                  label: 'Download the desktop app...',
+                  run: () => window.open(RELEASES_URL, '_blank', 'noopener'),
+                },
+              ]),
           { id: 'report', label: 'Report a problem...', run: () => setReportOpen(true) },
           { id: 'about', label: 'About', run: () => setAboutOpen(true) },
         ],
@@ -396,23 +439,46 @@ export function App() {
             ))}
           </nav>
           <div className="toolbar-modes">
-            <label className="theme-picker">
-              <span className="theme-picker__icon" aria-hidden="true">
-                {themeInfo(theme).appearance === 'dark' ? '☾' : '☀'}
-              </span>
-              <select
-                className="theme-picker__select"
+            {/* The app's own popup, not a native select: Windows Chrome
+                paints an open list with the OS highlight colour, which is a
+                grey no theme here owns. */}
+            <div className="theme-picker" ref={themeMenuRef}>
+              <button
+                type="button"
+                className="theme-picker__button"
+                aria-haspopup="menu"
+                aria-expanded={themeMenuOpen}
                 aria-label="Theme"
-                value={theme}
-                onChange={(e) => pickTheme(e.target.value as ThemeName)}
+                onClick={() => setThemeMenuOpen((v) => !v)}
               >
-                {SELECTABLE_THEMES.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span className="theme-picker__icon" aria-hidden="true">
+                  {themeInfo(theme).appearance === 'dark' ? '☾' : '☀'}
+                </span>
+                <span>{themeInfo(theme).label}</span>
+              </button>
+              {themeMenuOpen && (
+                <div className="menubar__popup theme-picker__popup" role="menu" aria-label="Theme">
+                  {SELECTABLE_THEMES.map((t) => (
+                    <button
+                      type="button"
+                      key={t.name}
+                      className="menubar__item"
+                      role="menuitemradio"
+                      aria-checked={t.name === theme}
+                      onClick={() => {
+                        pickTheme(t.name);
+                        setThemeMenuOpen(false);
+                      }}
+                    >
+                      <span className="menubar__check" aria-hidden="true">
+                        {t.name === theme ? '✓' : ''}
+                      </span>
+                      <span className="menubar__label">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {compact ? null : (
               <button
                 type="button"
@@ -445,6 +511,14 @@ export function App() {
         {settingsOpen ? <SettingsDialog onClose={() => setSettingsOpen(false)} /> : null}
         {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
         {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
+        {whatsNewOpen || whatsNewDue ? (
+          <WhatsNewDialog
+            onClose={() => {
+              setWhatsNewOpen(false);
+              dismissWhatsNew();
+            }}
+          />
+        ) : null}
         {reportOpen ? <BugReportDialog onClose={() => setReportOpen(false)} /> : null}
         <HoldTip />
         <UpdateBanner presentation={presentation} />

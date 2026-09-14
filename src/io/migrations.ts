@@ -4,8 +4,8 @@
 export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
-  'lcir.chip': 3,
-  'lcir.board': 5,
+  'lcir.chip': 5,
+  'lcir.board': 7,
   'lcir.lesson': 1,
 };
 
@@ -53,6 +53,56 @@ registerMigration('lcir.chip', 2, (doc) => doc);
 // optional `groups` list. An older board has neither, so every component is
 // board-scoped exactly as it was and the document passes through unchanged.
 registerMigration('lcir.board', 4, (doc) => doc);
+
+// Board v5 -> v6, chip v3 -> v4: `amber` left the LED palette. Existing LEDs
+// take yellow, the nearer of the two hues it sat between.
+function retireAmberLeds(doc: Record<string, unknown>): Record<string, unknown> {
+  const components = doc['components'];
+  if (!Array.isArray(components)) return doc;
+  return {
+    ...doc,
+    components: components.map((c) => {
+      const comp = c as Record<string, unknown>;
+      const params = comp['params'] as Record<string, unknown> | undefined;
+      if (comp['kind'] !== 'led' || params?.['color'] !== 'amber') return comp;
+      return { ...comp, params: { ...params, color: 'yellow' } };
+    }),
+  };
+}
+
+registerMigration('lcir.board', 5, retireAmberLeds);
+registerMigration('lcir.chip', 3, retireAmberLeds);
+
+// Board v6 -> v7, chip v4 -> v5: the 7-segment display grew the second common
+// its real 10-pin package has, so the single `common` pin became `com1`/`com2`.
+// A wire that landed on the old pin lands on `com1`, which is the same node:
+// the two are tied inside the package.
+function splitSevenSegCommon(doc: Record<string, unknown>): Record<string, unknown> {
+  const components = doc['components'];
+  const wires = doc['wires'];
+  if (!Array.isArray(components) || !Array.isArray(wires)) return doc;
+  const displays = new Set(
+    components
+      .filter((c) => (c as Record<string, unknown>)['kind'] === 'sevenseg')
+      .map((c) => (c as Record<string, unknown>)['id']),
+  );
+  if (displays.size === 0) return doc;
+  const rename = (end: unknown): unknown => {
+    const e = end as Record<string, unknown> | undefined;
+    if (e?.['kind'] !== 'pin' || e['pin'] !== 'common' || !displays.has(e['component'])) return end;
+    return { ...e, pin: 'com1' };
+  };
+  return {
+    ...doc,
+    wires: wires.map((w) => {
+      const wire = w as Record<string, unknown>;
+      return { ...wire, a: rename(wire['a']), b: rename(wire['b']) };
+    }),
+  };
+}
+
+registerMigration('lcir.board', 6, splitSevenSegCommon);
+registerMigration('lcir.chip', 4, splitSevenSegCommon);
 
 // Files written under an earlier name carry an older format prefix: `logiclab.`
 // from the original name, `lcir.` from the Logic Design Workbench one. Rewriting

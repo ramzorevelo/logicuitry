@@ -1,7 +1,7 @@
 // Closing a dirty def tab (uncommitted history) prompts save/discard/cancel
 // instead of silently dropping the session's edits.
 
-import { useEffect } from 'react';
+import { useModalKeys } from '../modalKeys';
 import { useCircuitStore } from './circuitStore';
 
 export function CloseTabDialog() {
@@ -9,17 +9,7 @@ export function CloseTabDialog() {
   const resolve = useCircuitStore((s) => s.resolveTabClose);
   const cancel = useCircuitStore((s) => s.cancelTabClose);
 
-  useEffect(() => {
-    if (!pending) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        cancel();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [pending, cancel]);
+  useModalKeys(pending ? cancel : null);
 
   if (!pending) return null;
   return (

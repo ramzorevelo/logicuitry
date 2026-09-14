@@ -6,6 +6,7 @@ import { CHIP_EXT } from '../../io/docExtensions';
 
 import { useMemo, useState } from 'react';
 import type { ChipDef, ChipLibrary, Circuit, PinDef, PinDir } from '../../core/model/types';
+import { useModalKeys } from '../modalKeys';
 import { useCircuitStore } from './circuitStore';
 import { useShellStore } from '../store';
 import { exportDoc, pickDirectory, writeDoc } from '../../io/fsAccess';
@@ -133,6 +134,7 @@ function SwatchRow({
 }
 
 export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
+  useModalKeys(onClose);
   const chipsDir = useShellStore((s) => s.chipsDir);
   const setChipsDir = useShellStore((s) => s.setChipsDir);
 
@@ -175,7 +177,7 @@ export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
     const id = slugId(trimmed, new Set(chipLib.keys()));
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 3,
+      formatVersion: 5,
       id,
       name: trimmed,
       version: 1,

@@ -2,10 +2,12 @@
 // itself so a new palette cannot ship without meeting them:
 //   - text contrast >= 4.5:1
 //   - the five signal states separate in luminance, not hue alone
+//   - a lit LED separates from an unlit one in luminance, not hue alone
 
 import { describe, expect, it } from 'vitest';
 import css from './tokens.css?raw';
-import { THEMES } from '../../render/theme';
+import { LED_COLORS, THEMES } from '../../render/theme';
+import { LENS_TINT_ALPHA } from '../../render/glyphs/relief';
 
 function block(selector: string): string {
   const at = css.indexOf(`${selector} {`);
@@ -34,9 +36,13 @@ function rgb(hex: string): [number, number, number] {
   ];
 }
 
-function luminance(hex: string): number {
-  const [r, g, b] = rgb(hex).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+function luminanceOf(channels: [number, number, number]): number {
+  const [r, g, b] = channels.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   return 0.2126 * (r as number) + 0.7152 * (g as number) + 0.0722 * (b as number);
+}
+
+function luminance(hex: string): number {
+  return luminanceOf(rgb(hex));
 }
 
 function contrast(a: string, b: string): number {
@@ -67,6 +73,20 @@ describe.each(THEMES.map((t) => t.name))('theme %s', (name) => {
     expect(gap('--accent', '--muted'), '1 vs 0').toBeGreaterThanOrEqual(0.1);
     expect(gap('--muted', '--warn'), '0 vs X').toBeGreaterThanOrEqual(0.08);
     expect(gap('--accent', '--warn'), '1 vs X').toBeGreaterThanOrEqual(0.018);
+  });
+
+  // Caps LENS_TINT_ALPHA: on and off are states a student reads off the board,
+  // so they may not differ by hue alone.
+  it('keeps every LED colour apart lit and unlit', () => {
+    const surface = rgb(get('--surface'));
+    for (const c of LED_COLORS) {
+      const lit = get(`--led-${c}`);
+      const over = rgb(lit).map(
+        (ch, i) => (surface[i] as number) * (1 - LENS_TINT_ALPHA) + ch * LENS_TINT_ALPHA,
+      );
+      const unlit = luminanceOf(over as [number, number, number]);
+      expect(Math.abs(luminance(lit) - unlit), c).toBeGreaterThanOrEqual(0.12);
+    }
   });
 
   it('keeps the mixed bus apart from the lanes-all-clear colour it alternates with', () => {

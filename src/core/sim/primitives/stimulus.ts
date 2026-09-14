@@ -1,18 +1,7 @@
 import * as bv from '../../value/busValue';
-import { expandPin, parsePinView, pinViewOf, reindexPins, splitBus } from './busPins';
-import type { EvalContext, EvalResult, Params, PrimitivePin, PrimitiveSpec } from './types';
+import { onePinLane, parsePinView, pinViewOf, splitBus } from './busPins';
+import type { EvalContext, EvalResult, Params, PrimitiveSpec } from './types';
 import { intParam, widthParam } from './types';
-
-// Lane expand for a primitive's single wide pin: only changes where the wire
-// attaches (one wide stub, or one stub per bit) -- io.ts's bank glyphs still
-// assume one pin and aren't wired to this yet.
-function onePinLane(name: string, dir: 'in' | 'out', params: Params): PrimitivePin[] {
-  const w = widthParam(params);
-  const view = parsePinView(params);
-  const base: PrimitivePin = { name, dir, width: w, role: 'data', order: 0 };
-  const expanded = w > 1 && pinViewOf(view, name, 'collapsed') === 'expanded';
-  return reindexPins(expanded ? expandPin(base, w) : [base]);
-}
 
 /**
  * Deterministic clock source, a pure function of sim time.

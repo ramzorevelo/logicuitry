@@ -125,6 +125,7 @@ export function smartConnectTargets(
 export function labelExempt(
   components: readonly Component[],
   wires: readonly Wire[],
+  targets: readonly PinTarget[],
   fromComponentId: string,
   target: PinTarget,
 ): boolean {
@@ -133,6 +134,11 @@ export function labelExempt(
     return k === 'inport' || k === 'outport';
   };
   if (isLabel(fromComponentId)) return true;
+  // An input on the far end is another reader of the same signal, not a second
+  // driver, so two inputs tied together leaves both open to a source. An
+  // unresolvable pin blocks, as it did before.
+  const drives = (componentId: string, pinName: string) =>
+    targets.find((t) => t.componentId === componentId && t.pinName === pinName)?.dir !== 'in';
   const key = occupancyKey(target.componentId, target.pinName);
   // A REAL driver already on this pin blocks a new one regardless of
   // whether a label ALSO shares it -- short-circuiting true on the first
@@ -143,7 +149,8 @@ export function labelExempt(
     for (const end of [w.a, w.b]) {
       if (end.kind !== 'pin' || occupancyKey(end.component, end.pin) !== key) continue;
       const other = end === w.a ? w.b : w.a;
-      if (other.kind === 'pin' && !isLabel(other.component)) return false;
+      if (other.kind === 'pin' && !isLabel(other.component) && drives(other.component, other.pin))
+        return false;
     }
   }
   return true;
@@ -153,10 +160,14 @@ export function labelExempt(
  *  so it pairs with anything, and anything pairs with it. */
 const passiveEither = (a: PinDir, b: PinDir): boolean => a === 'passive' || b === 'passive';
 
-// Same width, opposite direction. Role is not filtered: any pin wires to any
-// other by hand; role only constrains smart-connect. `allowOccupied` (e.g.
-// labelExempt) lets an otherwise-occupied `in` pin still qualify -- an In/Out
-// label sharing a net with a real driver is legal, just not two real drivers.
+// Same width; any direction pairing except output to output. Two inputs on one
+// net is how one signal feeds two of them, so wiring input to input and then
+// running a single wire from the source is legal: refusing it here only forced
+// the same net to be drawn the long way. Output to output stays refused, but by
+// `multiDriverConflict` in circuitStore, which reports the actual conflict.
+// Role is not filtered: any pin wires to any other by hand; role only
+// constrains smart-connect. `allowOccupied` (e.g. labelExempt) lets an
+// otherwise-occupied `in` pin still qualify.
 export function nearestCompatiblePin(
   targets: readonly PinTarget[],
   cursor: Vec2,
@@ -171,7 +182,10 @@ export function nearestCompatiblePin(
   let bestDist = Infinity;
   for (const t of targets) {
     if (!t.free && !allowOccupied?.(t)) continue;
-    if (!passiveEither(t.dir, wanted.dir) && (t.width !== wanted.width || t.dir === wanted.dir))
+    if (
+      !passiveEither(t.dir, wanted.dir) &&
+      (t.width !== wanted.width || (t.dir === wanted.dir && t.dir === 'out'))
+    )
       continue;
     const d = Math.hypot(t.worldPos.x - cursor.x, t.worldPos.y - cursor.y);
     if (d < radius && d < bestDist) {

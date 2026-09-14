@@ -251,6 +251,68 @@ export function paintEmphasis(
   ctx.restore();
 }
 
+/** Unlit lens tint, as a real diffused lens shows its colour unpowered. Capped
+ *  by greyscale separation: on and off may not differ by hue alone. */
+export const LENS_TINT_ALPHA = 0.22;
+
+/** Fill a light-emitting body, leaving the path current for the caller's own
+ *  outline. Call paintEmission BEFORE this, never after: bloom fills the
+ *  silhouette, so painting it over a finished body erases the outline. */
+export function paintLens(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  color: string,
+  on: boolean,
+  path: () => void,
+): void {
+  ctx.beginPath();
+  path();
+  ctx.fillStyle = theme.colors.surface;
+  ctx.fill();
+  ctx.save();
+  ctx.globalAlpha = on ? 1 : LENS_TINT_ALPHA;
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Emission from a part whose purpose is to emit: LEDs, banks, matrices,
+ *  7-segment digits. Ignores the --glyph-emphasis dial and the LOD bloom
+ *  budget that paintEmphasis obeys, because here the light IS the state and
+ *  only decoration may degrade. Affordable because lit glyphs are cached per
+ *  state, so the blur is paid on a state change rather than per frame. */
+export function paintEmission(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  color: string,
+  path: () => void,
+): void {
+  // Only the flattest frames drop to the cheap halo; everything above blooms.
+  if (theme.lod === 'flat') {
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = ctx.lineWidth * 3;
+    ctx.beginPath();
+    path();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.9;
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  path();
+  ctx.fill();
+  ctx.globalAlpha = 0.55;
+  ctx.shadowBlur = 16;
+  ctx.fill();
+  ctx.restore();
+}
+
 const patterns = new Map<string, CanvasPattern | null>();
 
 /** One CanvasPattern per theme, built on first use and reused every frame. */

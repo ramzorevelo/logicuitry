@@ -13,6 +13,7 @@ import {
   screenshotFormConfigured,
 } from '../report/reportConfig';
 import { useCompact } from '../compact';
+import { useModalKeys } from '../modalKeys';
 import { openExternal } from '../desktop/openExternal';
 import { serializeDocument } from '../../io/library';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
@@ -52,6 +53,7 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
   const [where, setWhere] = useState<string>(workbench);
   const [status, setStatus] = useState<Status>('idle');
   const compact = useCompact();
+  useModalKeys(onClose);
 
   const payload = useMemo(
     () =>

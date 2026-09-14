@@ -35,6 +35,7 @@ import { BitGrid } from './BitGrid';
 import { ValueEntry, type EntryField } from './ValueEntry';
 import { convertReference } from './referenceContent';
 import { useNumbersStore } from './numbersStore';
+import { modalKeysHeld } from '../modalKeys';
 
 // Harris & Harris avoid the encode/decode verb framing for two's complement.
 // Grouped by base family; digit chips follow flat order 1-9, 0.
@@ -288,6 +289,8 @@ export function ConvertTab() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A dialog is up: it owns the keyboard, buttons and all.
+      if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement) return;
       if (e.key === ' ' || e.key === '.') {
         e.preventDefault();

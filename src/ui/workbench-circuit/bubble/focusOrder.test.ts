@@ -6,7 +6,7 @@ import { focusOrder, nextFocus } from './focusOrder';
 function board(components: Component[], wires: Wire[] = []): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'b',
     name: 'b',
     components,

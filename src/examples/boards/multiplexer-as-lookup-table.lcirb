@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "multiplexer-as-lookup-table",
   "name": "Multiplexer as a lookup table",
   "components": [

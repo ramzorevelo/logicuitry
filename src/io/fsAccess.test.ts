@@ -10,7 +10,7 @@ import type { ChipDef } from '../core/model/types';
 
 const chip = (id: string): ChipDef => ({
   format: 'lcir.chip',
-  formatVersion: 3,
+  formatVersion: 5,
   id,
   name: id,
   version: 1,
@@ -69,7 +69,7 @@ describe('loadChipLibrary', () => {
       components: [{ id: 'in1', kind: 'input', pos: { x: 0, y: 0 } }],
     };
     const { chips } = await loadChipLibrary(fakeRoot({ 'legacy.lcirc': JSON.stringify(v1) }));
-    expect(chips[0]!.formatVersion).toBe(3);
+    expect(chips[0]!.formatVersion).toBe(5);
     expect(chips[0]!.components[0]!.kind).toBe('inport');
   });
 });

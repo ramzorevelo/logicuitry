@@ -16,7 +16,9 @@ export const SHORTCUTS = {
   paste: 'Ctrl+V',
   duplicate: 'Shift+D',
   delete: 'Del',
-  deleteHeal: 'Ctrl+X',
+  // Cut always heals what it takes out; the menu's Delete and reconnect is the
+  // same heal without the clipboard, so it carries no key of its own.
+  cutClipboard: 'Ctrl+X',
   group: 'Ctrl+G',
   ungroup: 'Ctrl+Shift+G',
   rotate: 'R',
@@ -29,7 +31,6 @@ export const SHORTCUTS = {
   convertBubble: 'N',
   fit: 'Home',
   smartConnect: 'F',
-  smartConnectPicker: 'Shift+F',
   bubbleMode: 'B',
   power: 'Space',
   step: '.',

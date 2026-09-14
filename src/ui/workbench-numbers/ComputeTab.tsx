@@ -25,6 +25,7 @@ import { BitGrid } from './BitGrid';
 import { ValueEntry } from './ValueEntry';
 import { operatorReference } from './referenceContent';
 import { useNumbersStore } from './numbersStore';
+import { modalKeysHeld } from '../modalKeys';
 
 export const OPS: { id: Operator; label: string; unary: boolean; shift?: boolean }[] = [
   { id: 'ADD', label: 'A + B', unary: false },
@@ -219,6 +220,8 @@ export function ComputeTab() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A dialog is up: it owns the keyboard, buttons and all.
+      if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement) return;
       // Toggle: Enter re-hides an already revealed result while hiding is on.
       // A focused button keeps its native Enter=click; firing the global reveal

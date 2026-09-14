@@ -7,7 +7,7 @@ const lib = new Map();
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'b',
     name: 'b',
     components,
@@ -50,6 +50,29 @@ describe('analysisTablesOf', () => {
     // NOT cone really inverts.
     expect(tables[0]!.table!.rows[0]![0]!.v & 1).toBe(1);
     expect(tables[0]!.table!.rows[1]![0]!.v & 1).toBe(0);
+  });
+
+  it('gives a 7-segment one table per wired segment, skipping common', () => {
+    const b = board(
+      [
+        { id: 'in1', kind: 'inport', pos: { x: 0, y: 0 }, label: 'A' },
+        { id: 'n1', kind: 'not', pos: { x: 1, y: 0 } },
+        { id: 'gnd1', kind: 'gnd', pos: { x: 1, y: 2 } },
+        { id: 'ds1', kind: 'sevenseg', pos: { x: 2, y: 0 }, label: 'DS1' },
+      ],
+      [
+        wire(pin('in1', 'y'), pin('ds1', 'a')),
+        wire(pin('in1', 'y'), pin('n1', 'a')),
+        wire(pin('n1', 'y'), pin('ds1', 'b')),
+        wire(pin('gnd1', 'p'), pin('ds1', 'com1')),
+      ],
+    );
+    const tables = analysisTablesOf(b, lib);
+    expect(tables.map((t) => t.outputPath)).toEqual(['main/DS1.a', 'main/DS1.b']);
+    // Segment b is the inverse of segment a, which is the whole point of
+    // reading each segment as its own function.
+    expect(tables[1]!.table!.rows[0]![0]!.v & 1).toBe(1);
+    expect(tables[1]!.table!.rows[1]![0]!.v & 1).toBe(0);
   });
 
   it('dedups a switch wired to an In port into one input, preferring the labeled side', () => {
@@ -129,5 +152,27 @@ describe('analysisTablesOf', () => {
     ]);
     expect(tables[1]!.table!.inputPaths).toEqual(['main/sw3[3]']);
     expect(tables[4]!.table!.inputPaths).toEqual(['main/sw3[0]']);
+  });
+});
+
+describe('7-segment segment driven by a gate', () => {
+  it('reaches the switches through the gate, through the gate that drives it', () => {
+    const b = board(
+      [
+        { id: 'sw1', kind: 'toggle', pos: { x: 0, y: 0 } },
+        { id: 'sw2', kind: 'toggle', pos: { x: 0, y: 1 } },
+        { id: 'a1', kind: 'and', pos: { x: 1, y: 0 } },
+        { id: 'ds1', kind: 'sevenseg', pos: { x: 2, y: 0 } },
+      ],
+      [
+        wire(pin('sw1', 'y'), pin('a1', 'a')),
+        wire(pin('sw2', 'y'), pin('a1', 'b')),
+        wire(pin('a1', 'y'), pin('ds1', 'g')),
+      ],
+    );
+    const tables = analysisTablesOf(b, lib);
+    const seg = tables.find((t) => t.outputPath.endsWith('.g'))!;
+    expect(seg.error).toBe(null);
+    expect(seg.table!.inputPaths).toHaveLength(2);
   });
 });

@@ -10,7 +10,7 @@
 // Every cell is the input itself, not a sentence about it: "Click", not "Click
 // it". The row already says what the thing is.
 
-import { useEffect } from 'react';
+import { useModalKeys } from '../modalKeys';
 import { useCoarsePointer } from '../pointerKind';
 import { SHORTCUTS } from '../menu/shortcuts';
 
@@ -59,11 +59,16 @@ const SECTIONS: Section[] = [
     title: 'Circuit: tools',
     rows: [
       { what: 'Select and move', keys: 'Esc', touch: 'Select tool' },
-      { what: 'Lasso a marquee', keys: SHORTCUTS.lasso, touch: 'Lasso tool' },
+      { what: 'Select an area', keys: SHORTCUTS.lasso, touch: 'Marquee or Lasso tool' },
+      {
+        what: 'Switch between a marquee and a drawn shape',
+        keys: 'Marquee or Lasso button',
+        touch: 'Marquee or Lasso button',
+      },
       { what: 'Draw wires', keys: SHORTCUTS.wire, touch: 'Wire tool, then pin to pin' },
       { what: 'Place a junction', keys: SHORTCUTS.junction, touch: 'Junction tool' },
       {
-        what: 'Slash across wires to delete them',
+        what: 'Draw across wires to delete them',
         keys: SHORTCUTS.cut,
         touch: 'Cut tool, then drag across',
       },
@@ -72,7 +77,6 @@ const SECTIONS: Section[] = [
         keys: SHORTCUTS.smartConnect,
         touch: `Connect tool, or ${SELECTION_BAR}`,
       },
-      { what: 'Pair the pins by hand instead', keys: SHORTCUTS.smartConnectPicker },
       {
         what: 'Try a different pairing',
         keys: 'Wheel over the suggestion',
@@ -91,8 +95,13 @@ const SECTIONS: Section[] = [
     rows: [
       { what: 'Delete', keys: SHORTCUTS.delete, touch: SELECTION_BAR },
       {
-        what: 'Delete and reconnect the wire through the gap',
-        keys: SHORTCUTS.deleteHeal,
+        what: 'Cut the selected parts, ready to paste',
+        keys: SHORTCUTS.cutClipboard,
+        touch: SELECTION_BAR,
+      },
+      {
+        what: 'Delete and reconnect, without touching the clipboard',
+        keys: 'Edit menu',
         touch: SELECTION_BAR,
       },
       { what: 'Rotate each item', keys: SHORTCUTS.rotate, touch: SELECTION_BAR },
@@ -149,16 +158,7 @@ const SECTIONS: Section[] = [
 export function HelpDialog({ onClose }: Props) {
   const coarse = useCoarsePointer();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  useModalKeys(onClose);
 
   const sections = SECTIONS.map((section) => ({
     ...section,

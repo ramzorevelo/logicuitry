@@ -52,6 +52,11 @@ export interface PrimitiveSpec {
    * State changes go through the returned state, never shared mutables.
    */
   evaluate(ctx: EvalContext): EvalResult;
+  /** Pin groups the package ties together internally, so the compiler unions
+   *  their nets the way a bond wire does. The two commons of a 7-segment
+   *  display are one node inside the epoxy: wiring either to the rail powers
+   *  it, and wiring them to opposite rails is the short it really is. */
+  tiedPins?: readonly (readonly string[])[];
   /** 74LS part number for datasheet-mode delays, when one exists. A function
    *  form is for a primitive whose real chip varies by param (mux's `inputs`
    *  size maps to a genuinely different part per size). */

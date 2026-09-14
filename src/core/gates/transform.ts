@@ -151,15 +151,23 @@ export function pushOutputBackward<C extends Circuit>(circuit: C, gateId: string
   return healBareBuf(next, gateId);
 }
 
-/** Input bubbles pushed forward, merging through the gate: legal only when
- *  every one of the gate's current inputs already carries a bubble (a
- *  single un-sibling-matched input bubble dragged forward is a failed drag). */
+/** Input bubbles pushed forward through the gate: gate dualizes, the output
+ *  bubble toggles, and every input bubble toggles -- so a clean sibling GAINS
+ *  one. AND with a bubble on `a` becomes OR with a bubble on `b` and one at
+ *  the output: a'b = (a + b')'. Legal whenever there is at least one input
+ *  bubble to push, mirroring pushOutputBackward, which asks only that there
+ *  is an output bubble and likewise bubbles inputs that were clean.
+ *
+ *  What is NOT equivalence-preserving -- and the misconception the tool
+ *  exists to catch -- is relocating that one bubble on its own, leaving the
+ *  body and the siblings alone: a'b is not (ab)'. That move is not reachable
+ *  here; this function only ever performs the whole transformation. */
 export function pushInputsForward<C extends Circuit>(circuit: C, gateId: string): C | null {
   const gate = getGate(circuit, gateId);
   if (!gate) return null;
   const pins = gateInputPins(gate);
   const bubbled = getInputBubbles(gate);
-  if (!pins.every((p) => bubbled.has(p))) return null;
+  if (!pins.some((p) => bubbled.has(p))) return null;
   let next = updateComponent(circuit, gateId, dualizeGate);
   for (const pin of pins) {
     next = updateComponent(next, gateId, (c) => toggleInputBubble(c, pin));

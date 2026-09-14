@@ -8,7 +8,7 @@ import type { Board, ChipDef } from '../core/model/types';
 
 const board = (name: string): Board => ({
   format: 'lcir.board',
-  formatVersion: 5,
+  formatVersion: 7,
   id: 'b1',
   name,
   components: [],
@@ -31,14 +31,14 @@ describe('parseBoard', () => {
       components: [{ id: 'i', kind: 'input', pos: { x: 0, y: 0 } }],
     };
     const out = parseBoard(JSON.stringify(v2));
-    expect(out.formatVersion).toBe(5);
+    expect(out.formatVersion).toBe(7);
     expect(out.components[0]!.kind).toBe('inport');
   });
 
   it('rejects a chip file by format rather than loading it as a board', () => {
     const chip: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 3,
+      formatVersion: 5,
       id: 'c',
       name: 'c',
       version: 1,
@@ -72,7 +72,7 @@ describe('parseDocumentFile', () => {
   it('accepts a chip instead of refusing it -- its internals are a circuit', () => {
     const chip: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 3,
+      formatVersion: 5,
       id: 'c1',
       name: 'buf1',
       version: 1,

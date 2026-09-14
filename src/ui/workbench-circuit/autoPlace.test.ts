@@ -17,8 +17,8 @@ function routable(id: string, x: number, y: number, group?: string): RoutableCom
   return { id, bounds: { x, y, w: 64, h: 64 }, pins, ...(group ? { group } : {}) };
 }
 
-function place(components: RoutableComponent[], wires: Wire[]) {
-  return autoPlace({ components, wires, grid: GRID }).moved;
+function place(components: RoutableComponent[], wires: Wire[], centreOnDrivers = false) {
+  return autoPlace({ components, wires, grid: GRID, centreOnDrivers }).moved;
 }
 
 function shifted(components: RoutableComponent[], wires: Wire[]): Map<string, RoutableComponent> {
@@ -138,5 +138,53 @@ describe('autoPlace groups', () => {
     expect(withoutGroups.get('g')!.pins.get('a')!.pos.y).toBe(
       withoutGroups.get('sw')!.pins.get('y')!.pos.y,
     );
+  });
+});
+
+describe('autoPlace centreOnDrivers', () => {
+  /** One centred input pin: an LED, which is what follows the output gate. */
+  const sink = (id: string, x: number, y: number): RoutableComponent => ({
+    id,
+    bounds: { x, y, w: 64, h: 64 },
+    pins: new Map<string, RoutablePin>([['a', { pos: { x, y: y + 32 }, dir: 'in' }]]),
+  });
+
+  /** Two switches into a gate, into an LED, seeded on the staircase
+   *  circuitFromNetlist lays down: a y per part, in netlist order. */
+  const tree = () => [
+    routable('sw1', 48, 48),
+    routable('sw2', 48, 144),
+    routable('g1', 48, 240),
+    sink('out', 48, 336),
+  ];
+  const wires = [
+    wire('w1', ['sw1', 'y'], ['g1', 'a']),
+    wire('w2', ['sw2', 'y'], ['g1', 'b']),
+    wire('w3', ['g1', 'y'], ['out', 'a']),
+  ];
+  const midOf = (comps: RoutableComponent[], moved: Map<string, { y: number }>, id: string) => {
+    const c = comps.find((c) => c.id === id)!;
+    return c.bounds.y + (moved.get(id)?.y ?? 0) + c.bounds.h / 2;
+  };
+
+  it('centres a body between drivers that disagree, and the output follows', () => {
+    const comps = tree();
+    const moved = place(comps, wires, true);
+    const middle = (midOf(comps, moved, 'sw1') + midOf(comps, moved, 'sw2')) / 2;
+    expect(midOf(comps, moved, 'g1')).toBe(middle);
+    expect(midOf(comps, moved, 'out')).toBe(middle);
+  });
+
+  it('hugs the lowest driver without it, which is what the seed asked for', () => {
+    const comps = tree();
+    expect(midOf(comps, place(comps, wires), 'out')).toBeGreaterThan(
+      midOf(comps, place(comps, wires, true), 'out'),
+    );
+  });
+
+  it('changes nothing when the drivers agree', () => {
+    const comps = [routable('sw', 48, 48), sink('out', 600, 300)];
+    const one = [wire('w1', ['sw', 'y'], ['out', 'a'])];
+    expect(place(comps, one, true)).toEqual(place(comps, one));
   });
 });

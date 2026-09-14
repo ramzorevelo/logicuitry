@@ -11,6 +11,7 @@ import {
   tablesEqual,
   type TruthTable,
 } from '../boolean/truthTable';
+import { SEGMENT_NAMES } from '../sim/primitives/display';
 import { lowerCircuit } from './lower';
 import { dedupTerminals, reachableInputBits, type TerminalRef } from './reach';
 
@@ -20,7 +21,12 @@ import { dedupTerminals, reachableInputBits, type TerminalRef } from './reach';
 // terminal paths); the kind lists live here because they are a gates-mode
 // decision, not a boolean-eval concern.
 export const INPUT_TERMINAL_KINDS: ReadonlySet<string> = new Set(['inport', 'toggle', 'button']);
-export const OUTPUT_TERMINAL_KINDS: ReadonlySet<string> = new Set(['outport', 'led', 'probe']);
+export const OUTPUT_TERMINAL_KINDS: ReadonlySet<string> = new Set([
+  'outport',
+  'led',
+  'probe',
+  'sevenseg',
+]);
 
 /** Whole-board equivalence check (bubble-push defense-in-depth): a board may
  *  legitimately carry width>1 terminals (M6.6 gate data-bit width) even
@@ -46,16 +52,39 @@ export function truthTableOf(board: Board, lib: ChipLibrary): TruthTable {
   return buildTruthTable(compiled, inputCols, outputCols);
 }
 
+/** Pins of `component` that some wire actually lands on. A 7-segment has ten
+ *  of them and an unwired one has no net to build a column from, so a display
+ *  contributes only the segments the board really drives. */
+function wiredPins(board: Board, componentId: string): Set<string> {
+  const wired = new Set<string>();
+  for (const w of board.wires)
+    for (const end of [w.a, w.b])
+      if (end.kind === 'pin' && end.component === componentId) wired.add(end.pin);
+  return wired;
+}
+
+/** One ref per terminal, except a 7-segment display, which emits one per wired
+ *  segment pin: each segment is its own boolean function, which is how Harris &
+ *  Harris presents the seven-segment decoder. The two commons are supply
+ *  terminals, never functions of the inputs, so they are skipped. */
 function terminalRefs(board: Board, kinds: ReadonlySet<string>): TerminalRef[] {
   // The same naming compile uses, from the same function: a group qualifies a
   // name, and a name already taken falls back to the component id.
   const paths = componentPaths(board, 'main/');
   return board.components
     .filter((c) => kinds.has(c.kind))
-    .map((c) => {
+    .flatMap((c): TerminalRef[] => {
       const base = paths.get(c.id)!;
+      if (c.kind === 'sevenseg') {
+        const wired = wiredPins(board, c.id);
+        return SEGMENT_NAMES.filter((pin) => wired.has(pin)).map((pin) => ({
+          path: `${base}.${pin}`,
+          kind: c.kind,
+          labeled: !!c.label,
+        }));
+      }
       const path = c.kind === 'inport' ? `${base}.y` : c.kind === 'outport' ? `${base}.a` : base;
-      return { path, kind: c.kind, labeled: !!c.label };
+      return [{ path, kind: c.kind, labeled: !!c.label }];
     });
 }
 

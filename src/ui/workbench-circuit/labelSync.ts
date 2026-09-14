@@ -15,7 +15,7 @@ const DATA_PIN: Record<string, string> = {
   outport: 'a',
   led: 'a',
   probe: 'a',
-  busdisplay: 'a',
+  busdisplay: 'value',
   clock: 'y',
 };
 

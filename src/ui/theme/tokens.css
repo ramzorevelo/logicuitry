@@ -24,6 +24,24 @@
   /* signal state M: a width>1 net whose lanes disagree */
   --signal-mixed: #26307d;
 
+  /* Physical LED colours. Deliberately declared once, never re-authored per
+     theme: a red LED is red on every board. Wires keep the signal colours.
+     White is the single exception, re-authored below by every pale-surfaced
+     theme: no value reads as white and still separates from that ground.
+     Order here is cosmetic; LED_COLORS in theme.ts fixes the picker order. */
+  --led-red: #e03127;
+  --led-green: #2fb24c;
+  --led-blue: #2f7de0;
+  --led-yellow: #e3c11c;
+  --led-orange: #e8791d;
+  --led-cyan: #21b4c4;
+  --led-magenta: #d4419a;
+  --led-white: #f2f3f7;
+
+  /* A lit LED's spill, where it differs from the lens. White's is warm
+     (~3000K) so it reads against a pale ground, which its fill cannot. */
+  --led-white-glow: #ffd9a0;
+
   /* K-map group palette: 8 categorical strokes, Okabe-Ito-derived, validated
      colorblind-safe against --surface per theme (dataviz six checks). */
   --kmap-g1: #0072b2;
@@ -104,6 +122,7 @@
   --warn: #9a5a0b;
   --ok: #2e6b4f;
   --signal-mixed: #26307d;
+  --led-white: #c3cee3;
 }
 
 :root[data-theme='dark'] {
@@ -173,6 +192,7 @@
   --kmap-g6: #9c3f77;
   --kmap-g7: #2a6f9e;
   --kmap-g8: #8f3a35;
+  --led-white: #c3cee3;
 }
 
 /* Himeko Nova: ivory ground, crimson wiring and borders, champagne gold
@@ -213,6 +233,7 @@
   --kmap-g6: #9a3a70;
   --kmap-g7: #2a6f9e;
   --kmap-g8: #8a3630;
+  --led-white: #d8c8ad;
 }
 
 /* Kinich: a voxel field in shades of jade on deep teal, with saffron tackle
@@ -295,6 +316,7 @@
   --glyph-box-corner: clip;
   --glyph-emphasis: bloom;
   --texture-opacity: 0.04;
+  --led-white: #c3cee3;
 }
 
 :root[data-theme='firefly'].powered {
@@ -355,7 +377,7 @@
 :root .tool-btn,
 :root .mode-btn,
 :root .workbench-tab,
-:root .theme-picker,
+:root .theme-picker__button,
 :root .palette-item,
 :root .drawer-toggle,
 :root .reveal-btn,
@@ -382,7 +404,7 @@
 :root .tool-btn::before,
 :root .mode-btn::before,
 :root .workbench-tab::before,
-:root .theme-picker::before,
+:root .theme-picker__button::before,
 :root .palette-item::before,
 :root .drawer-toggle::before,
 :root .reveal-btn::before,

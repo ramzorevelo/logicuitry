@@ -21,18 +21,23 @@ import {
 import { netPins, type PinRef } from '../../core/gates/netGraph';
 import { drawBox, drawConstant } from '../../render/glyphs/chip';
 import { drawRail } from '../../render/glyphs/power';
-import { segmentLit, sevenSegCommon } from '../../core/sim/primitives/display';
+import {
+  COMMON_PINS,
+  matrixDotLit,
+  segmentLit,
+  sevenSegCommon,
+} from '../../core/sim/primitives/display';
 import { drawDip, isDipPackage } from '../../render/glyphs/dip';
 import {
   drawBusDisplay,
   drawButton,
   drawClock,
   drawLed,
+  drawLedMatrix,
   drawNetLabel,
   drawPort,
   drawProbe,
   drawSevenSeg,
-  drawSevenSegHex,
   drawSwitch,
 } from '../../render/glyphs/io';
 import type { GeometryInput, Placement } from '../../render/glyphs/symbol';
@@ -67,7 +72,7 @@ const BOX_SET = new Set([
   'decoder',
   'encoder',
 ]);
-const SEGMENTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+const SEGMENTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'dp'];
 
 /** Everything one component's glyph needs, so a single glyph can be drawn
  *  outside the board scene (palette thumbnails) through the same code path. */
@@ -124,10 +129,12 @@ export interface RenderParams extends GlyphContext {
   ghost?: Component | undefined;
   /** In-progress lasso-select rectangle, world space. */
   lasso?: Rect | undefined;
-  /** Wires the in-progress cut slash currently crosses, highlighted before delete. */
+  /** In-progress freehand lasso path, world space, drawn closed. */
+  lassoPath?: readonly Vec2[] | undefined;
+  /** Wires the in-progress cut stroke currently crosses, highlighted before delete. */
   cutFlags?: ReadonlySet<string> | undefined;
-  /** In-progress wire-cut freehand slash. */
-  cutSlash?: { from: Vec2; to: Vec2 } | undefined;
+  /** In-progress wire-cut stroke, world space, drawn open. */
+  cutStroke?: readonly Vec2[] | undefined;
   /** Smart-connect ghost preview: one proposed wire per pair, with a pin-name label. */
   smartConnectPreview?: { from: Vec2; to: Vec2; label: string }[] | undefined;
   /** Duplicate/paste ghost group, already offset to its proposed position. */
@@ -157,6 +164,9 @@ export interface RenderParams extends GlyphContext {
    *  pad than the accent selection / warn stale outlines, so it reads as a
    *  distinct ring rather than a thicker selection box). */
   paramHighlight?: ReadonlySet<string> | undefined;
+  /** Components whose gesture the current mode just refused, with the pulse's
+   *  current opacity: the visible half of the blocked-gesture feedback. */
+  blockedFlash?: { ids: ReadonlySet<string>; alpha: number } | undefined;
   /** Net labels sharing the hovered/selected label's name. A name join has no
    *  wire to look at, so an accidental one is invisible until the peers say
    *  so -- this is the only thing that shows the join. */
@@ -308,10 +318,14 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
       if (end.kind !== 'tap') continue;
       drawTapPoint(ctx, theme, pt, end.range);
     }
-    if (p.selection.has(wire.id) || p.cutFlags?.has(wire.id)) {
-      ctx.strokeStyle = p.cutFlags?.has(wire.id) ? theme.colors.warn : theme.colors.accent;
+    const blocked = p.blockedFlash?.ids.has(wire.id) ? p.blockedFlash.alpha : 0;
+    if (p.selection.has(wire.id) || p.cutFlags?.has(wire.id) || blocked > 0) {
+      ctx.strokeStyle =
+        p.cutFlags?.has(wire.id) || blocked > 0 ? theme.colors.warn : theme.colors.accent;
       ctx.lineWidth = theme.strokes.wire + 4;
-      ctx.globalAlpha = 0.35;
+      // A refused gesture pulses rather than sitting at the steady highlight
+      // weight, so it reads as feedback and not as a new selection.
+      ctx.globalAlpha = blocked > 0 ? 0.35 + 0.5 * blocked : 0.35;
       ctx.beginPath();
       ctx.moveTo(pts[0]!.x, pts[0]!.y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
@@ -362,6 +376,12 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     else if (p.changed.has(comp.label || comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     else if (p.stale?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     if (p.paramHighlight?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.ok, 1.8);
+    if (p.blockedFlash?.ids.has(comp.id)) {
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * p.blockedFlash.alpha;
+      outline(ctx, theme, g.bounds, theme.colors.warn, 2.2);
+      ctx.globalAlpha = prev;
+    }
     if (p.peerLabels?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.accent, 1.8);
     const staLabel = p.staOverlay?.labels.get(comp.id);
     if (staLabel) {
@@ -518,25 +538,33 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     ctx.lineWidth = theme.strokes.min;
     ctx.stroke();
   }
-  if (p.cutSlash) {
+  if (p.cutStroke && p.cutStroke.length > 1) {
     ctx.strokeStyle = theme.colors.warn;
     ctx.lineWidth = theme.strokes.wire;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    ctx.moveTo(p.cutSlash.from.x, p.cutSlash.from.y);
-    ctx.lineTo(p.cutSlash.to.x, p.cutSlash.to.y);
+    ctx.moveTo(p.cutStroke[0]!.x, p.cutStroke[0]!.y);
+    for (const pt of p.cutStroke.slice(1)) ctx.lineTo(pt.x, pt.y);
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  if (p.lasso) {
+  if (p.lasso || (p.lassoPath && p.lassoPath.length > 1)) {
     ctx.strokeStyle = theme.colors.accent;
     ctx.fillStyle = theme.colors.accent;
+    ctx.beginPath();
+    if (p.lassoPath && p.lassoPath.length > 1) {
+      ctx.moveTo(p.lassoPath[0]!.x, p.lassoPath[0]!.y);
+      for (const pt of p.lassoPath.slice(1)) ctx.lineTo(pt.x, pt.y);
+      ctx.closePath();
+    } else if (p.lasso) {
+      ctx.rect(p.lasso.x, p.lasso.y, p.lasso.w, p.lasso.h);
+    }
     ctx.globalAlpha = 0.1;
-    ctx.fillRect(p.lasso.x, p.lasso.y, p.lasso.w, p.lasso.h);
+    ctx.fill();
     ctx.globalAlpha = 1;
     ctx.lineWidth = theme.strokes.min;
     ctx.setLineDash([4, 3]);
-    ctx.strokeRect(p.lasso.x, p.lasso.y, p.lasso.w, p.lasso.h);
+    ctx.stroke();
     ctx.setLineDash([]);
   }
 }
@@ -794,12 +822,28 @@ export function drawComponent(
     drawClock(ctx, theme, input, placement, comp.label);
   } else if (comp.kind === 'sevenseg') {
     // A common-anode display lights on a driven 0 and stays dark on Z, which
-    // is exactly what an open-collector 74LS47 gives it.
+    // is exactly what an open-collector 74LS47 gives it. The common terminal
+    // has to be at the matching rail too: unwired means dark, as on the bench.
+    // The two commons are one net after compile, so either lead carries the
+    // rail; reading the one that is actually wired is what the bench does.
     const common = sevenSegCommon(comp.params ?? {});
-    const lit = new Set(SEGMENTS.filter((s) => segmentLit(p.pinSignal(comp.id, s), common)));
-    drawSevenSeg(ctx, theme, input, placement, lit);
-  } else if (comp.kind === 'sevenseghex') {
-    drawSevenSegHex(ctx, theme, input, placement, 0);
+    const commonState = COMMON_PINS.map((c) => p.pinSignal(comp.id, c)).find(
+      (v) => v !== undefined,
+    );
+    const lit = new Set(
+      SEGMENTS.filter((s) => segmentLit(p.pinSignal(comp.id, s), common, commonState)),
+    );
+    drawSevenSeg(ctx, theme, input, placement, lit, (pin) => p.pinSignal(comp.id, pin), comp.label);
+  } else if (comp.kind === 'ledmatrix') {
+    drawLedMatrix(
+      ctx,
+      theme,
+      input,
+      placement,
+      (row, col) => matrixDotLit(p.pinSignal(comp.id, row), p.pinSignal(comp.id, col)),
+      (pin) => p.pinSignal(comp.id, pin),
+      comp.label,
+    );
   } else if (comp.kind === 'probe') {
     // A literal '?' reads as a stuck/broken probe; the component's own id is
     // always present and unique, so it's a sensible default name for a

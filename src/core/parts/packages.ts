@@ -184,7 +184,7 @@ export function buildPackageChipDef(entry: PackageEntry): ChipDef {
 
   return {
     format: 'lcir.chip',
-    formatVersion: 3,
+    formatVersion: 5,
     id: entry.part,
     name: entry.part,
     version: 1,

@@ -29,7 +29,7 @@ import { dff, dlatch, register } from './sequential';
 import { clock, led, probe, pushButton, toggleSwitch } from './stimulus';
 import { mux } from './mux';
 import { demux } from './demux';
-import { busdisplay, sevenseg, sevenseghex } from './display';
+import { busdisplay, ledmatrix, sevenseg } from './display';
 import { decoder, encoder } from './coder';
 import { bcd7seg } from './bcd7seg';
 
@@ -87,8 +87,8 @@ for (const spec of [
   led,
   probe,
   sevenseg,
-  sevenseghex,
   busdisplay,
+  ledmatrix,
   decoder,
   encoder,
   bcd7seg,

@@ -6,7 +6,7 @@ import { commitPush, previewPush } from './pushController';
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'b',
     name: 'b',
     components,
@@ -69,9 +69,13 @@ describe('previewPush / commitPush', () => {
     expect(commitPush(b, { kind: 'inputsForward', gateId: 'g1' }, lib)).toBeNull();
   });
 
-  it('a failed drag (one of two input bubbles, sibling unbubbled) previews a red-flash ghost with diff rows', () => {
+  it('one input bubble pushes forward, bubbling the sibling that had none', () => {
+    // Was a failed drag while the rule asked for every input to be bubbled.
+    // The transform bubbles the clean sibling instead, which is the whole of
+    // De Morgan and leaves the truth table untouched -- so previewPush, which
+    // verifies against core/boolean, calls it legal.
     const b = nandBoard();
-    const pushed = commitPush(b, { kind: 'outputBackward', gateId: 'g1' }, lib)!; // now both inputs bubbled
+    const pushed = commitPush(b, { kind: 'outputBackward', gateId: 'g1' }, lib)!;
     const partial = {
       ...pushed,
       components: pushed.components.map((c) =>
@@ -79,11 +83,7 @@ describe('previewPush / commitPush', () => {
       ),
     };
     const preview = previewPush(partial, { kind: 'inputsForward', gateId: 'g1' }, lib);
-    expect(preview.legal).toBe(false);
-    if (!preview.legal) {
-      expect(preview.attempted).not.toBeNull();
-      expect(preview.diffRows.length).toBeGreaterThan(0);
-    }
-    expect(commitPush(partial, { kind: 'inputsForward', gateId: 'g1' }, lib)).toBeNull();
+    expect(preview.legal).toBe(true);
+    expect(commitPush(partial, { kind: 'inputsForward', gateId: 'g1' }, lib)).not.toBeNull();
   });
 });

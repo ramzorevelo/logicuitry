@@ -54,8 +54,12 @@ export const PALETTE: PaletteItem[] = [
   { kind: 'encoder', label: 'Encoder', group: 'Combinational', params: { addressBits: 2 } },
   { kind: 'dff', label: 'DFF', group: 'Sequential' },
   { kind: 'led', label: 'LED', group: 'Outputs' },
+  { kind: 'led', label: 'LED array', group: 'Outputs', params: { width: 8 } },
+  { kind: 'ledmatrix', label: 'LED matrix', group: 'Outputs', params: { rows: 8, cols: 8 } },
   { kind: 'probe', label: 'Probe', group: 'Outputs' },
   { kind: 'outport', label: 'Out port', group: 'Outputs' },
+  // Two presets of one part: which rail the commons expect is a param the
+  // overlay edits, and it is the choice a student makes at the bench.
   {
     kind: 'sevenseg',
     label: '7-seg (cathode)',

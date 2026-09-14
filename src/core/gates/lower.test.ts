@@ -9,7 +9,7 @@ import { withInputBubble, withOutputBubble } from './bubbleModel';
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 5,
+    formatVersion: 7,
     id: 'b',
     name: 'b',
     components,

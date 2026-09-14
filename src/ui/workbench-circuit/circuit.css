@@ -44,8 +44,20 @@
   flex: none;
 }
 
-/* Presentation mode: the toolbar collapses to an icon rail. A button with no
-   icon keeps its text, so nothing becomes unreachable. */
+/* The Circuit toolbar is an icon rail at every size: spelled-out names wrapped
+   it onto a second row on an ordinary laptop, which costs more board than the
+   names are worth. The name is in the tooltip, on hover or on press-and-hold
+   (HoldTip). Two things keep their text: a button with no icon, which would
+   otherwise be a blank square, and one marked --labelled, whose text is a
+   current VALUE rather than the button's name. .toolbar-names opts out. */
+:root:not(.toolbar-names)
+  .circuit-toolbar
+  .tool-btn:has(.tool-icon):not(.tool-btn--labelled)
+  .tool-btn__label {
+  display: none;
+}
+
+/* Presentation mode: every other workbench's toolbar collapses the same way. */
 :root.presentation .tool-btn:has(.tool-icon) .tool-btn__label {
   display: none;
 }
@@ -1188,14 +1200,6 @@
   display: none;
 }
 
-/* Compact: the toolbar is icons. A 360px row cannot carry "Package as chip..."
-   and still reach Analyze, and the name is one press-and-hold away in the
-   tooltip. Same guard presentation mode uses: a button with no icon keeps its
-   text rather than becoming a blank square. */
-.app-shell--compact .circuit-toolbar .tool-btn:has(.tool-icon) .tool-btn__label {
-  display: none;
-}
-
 /* --- Landscape phone: the chrome moves to the edges -------------------------
    Rotated, the shell is short of height and has width to spare, which is the
    opposite of what the portrait rules assume. Stacking a toolbar, a palette
@@ -1321,4 +1325,67 @@
   min-height: var(--touch-h);
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* Blocked-gesture feedback. The toast sits over the canvas rather than in the
+   layout, so it cannot reflow the board mid-lecture; it is a singleton by
+   construction (one `notice` string), so repeats can never stack. */
+.circuit-notice {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--space-unit) * 3);
+  transform: translateX(-50%);
+  z-index: 12;
+  max-width: min(90%, 42ch);
+  padding: calc(var(--space-unit) * 0.75) calc(var(--space-unit) * 1.5);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--warn);
+  font: var(--text-secondary) / 1.3 var(--font-sans, inherit);
+  text-align: center;
+  pointer-events: none;
+  animation: circuit-notice-in 120ms ease-out;
+}
+
+@keyframes circuit-notice-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+}
+
+/* A param that needs a recompile, while the board is powered. Greyed and inert,
+   deliberately with no explanatory text: the state is the message. */
+.circuit-param-edit input:disabled,
+.circuit-param-edit select:disabled,
+.circuit-param-edit textarea:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.circuit-param-edit--shake {
+  animation: circuit-shake 200ms ease-in-out;
+}
+
+@keyframes circuit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+/* Motion is feedback here, never decoration, so it degrades to no motion --
+   the colour change and the toast still carry it. */
+@media (prefers-reduced-motion: reduce) {
+  .circuit-notice,
+  .circuit-param-edit--shake {
+    animation: none;
+  }
 }

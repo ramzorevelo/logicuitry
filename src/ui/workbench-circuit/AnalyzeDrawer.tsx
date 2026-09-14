@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
 import { componentPaths } from '../../core/model/compile';
 import { analysisTablesOf, type OutputAnalysis } from '../../core/gates/verify';
+import { SEGMENT_NAMES } from '../../core/sim/primitives/display';
 import { permuteTableInputs, type TruthTable } from '../../core/boolean/truthTable';
 import {
   buildKmap,
@@ -14,6 +15,8 @@ import {
   type KmapAxisLayout,
 } from '../../core/boolean/kmap';
 import { compressTable, type CompressedRow } from '../../core/boolean/compress';
+import { printExpr } from '../../core/boolean/expr';
+import { exprOfCover } from '../../core/boolean/synthesize';
 import {
   drawKmap,
   kmapCellAt,
@@ -88,6 +91,13 @@ function layoutOptions(n: number): KmapAxisLayout[] {
   ];
 }
 
+/** Both halves: removal is what a user wants the moment a circle exists. */
+function groupHint(coarse: boolean): string {
+  return coarse
+    ? 'Long-press a cell, then drag, to circle a group. Long-press a circle to remove it.'
+    : 'Ctrl+click or Ctrl+drag cells to circle a group. Shift+click a circle to remove it.';
+}
+
 const lowestUnusedColor = (circles: readonly Circle[]): number => {
   let c = 0;
   while (circles.some((g) => g.color === c)) c++;
@@ -116,7 +126,13 @@ function Term({
   );
 }
 
-export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
+export function AnalyzeDrawer({
+  onClose,
+  onBuild,
+}: {
+  onClose: () => void;
+  onBuild?: (expression: string) => void;
+}) {
   const rev = useCircuitStore((s) => s.rev);
   const board = useCircuitStore((s) => s.board);
   const chipLib = useCircuitStore((s) => s.chipLib);
@@ -152,15 +168,40 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
     return byPath;
   }, [board]);
 
-  /** Bare terminal name for a column header. */
-  const nameOfPath = (path: string): string => shown.get(basePath(path))?.name ?? displayName(path);
+  /** Terminal path -> the segment pin it addresses, for a 7-segment display.
+   *
+   *  Read from the board rather than matched off the path, because `.a` alone
+   *  is ambiguous: an out port's data pin is called `a` too, and stripping it
+   *  as one turned every segment of a display into the display's own name. */
+  const segments = useMemo(() => {
+    const paths = componentPaths(board, 'main/');
+    const bySeg = new Map<string, string>();
+    for (const c of board.components) {
+      if (c.kind !== 'sevenseg') continue;
+      for (const s of SEGMENT_NAMES) bySeg.set(`${paths.get(c.id)!}.${s}`, s);
+    }
+    return bySeg;
+  }, [board]);
+
+  const baseOf = (path: string): string => {
+    const seg = segments.get(path);
+    return seg ? path.slice(0, -(seg.length + 1)) : basePath(path);
+  };
+
+  /** Bare terminal name for a column header. A display's segments are their
+   *  own boolean functions, so each column is the segment, not the part. */
+  const nameOfPath = (path: string): string =>
+    segments.get(path) ?? shown.get(baseOf(path))?.name ?? displayName(path);
 
   /** `<group>: <name>` for an output tab, and just the one where the group is
    *  named after the very expression the output is labelled with -- repeating
-   *  it says nothing twice. */
+   *  it says nothing twice. A segment tab carries the display it belongs to,
+   *  since seven bare letters would not say which part they are on. */
   const tabLabel = (path: string): string => {
-    const at = shown.get(basePath(path));
-    const name = at?.name ?? displayName(path);
+    const at = shown.get(baseOf(path));
+    const seg = segments.get(path);
+    const own = at?.name ?? displayName(baseOf(path));
+    const name = seg ? `${own} ${seg}` : own;
     const group = at?.group ?? groupOfPath(path);
     return !group || group === name ? name || group : `${group}: ${name}`;
   };
@@ -548,7 +589,7 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
     }
-    if (e.pointerType === 'touch' && userGroupAt(p.x, p.y) === undefined) {
+    if (e.pointerType === 'touch') {
       // Armed, not started: a press that turns into a drag or lifts early is
       // still a pan or a plain tap, and must not circle anything.
       pressOriginRef.current = p;
@@ -557,6 +598,12 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
       longPressRef.current = window.setTimeout(() => {
         const origin = pressOriginRef.current;
         if (!origin) return;
+        // Touch has no Shift and a tap only selects, so this is the one way off.
+        const onCircle = userGroupAt(origin.x, origin.y);
+        if (onCircle !== undefined) {
+          deleteGroup(onCircle);
+          return;
+        }
         const m = kmapCellAt(layout, origin.x, origin.y);
         if (m === undefined) return;
         gestureRef.current = { mode: 'group', cells: new Set([m]), touch: true };
@@ -796,11 +843,7 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
         />
         <div className="analyze-sop">
           {myCircles.length === 0 ? (
-            <span className="analyze-muted">
-              {coarse
-                ? 'Long-press a cell, then drag, to circle a group.'
-                : 'Ctrl+click or Ctrl+drag cells to circle a group.'}
-            </span>
+            <span className="analyze-muted">{groupHint(coarse)}</span>
           ) : (
             <span>
               {nameOfPath(outPath)} ={' '}
@@ -813,6 +856,7 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
             </span>
           )}
         </div>
+        {myCircles.length > 0 && <div className="analyze-muted">{groupHint(coarse)}</div>}
         <div className="analyze-status">
           {uncovered > 0
             ? `${uncovered} one${uncovered === 1 ? '' : 's'} still uncovered`
@@ -829,6 +873,17 @@ export function AnalyzeDrawer({ onClose }: { onClose: () => void }) {
           >
             {reveal ? 'Hide minimal cover' : 'Reveal minimal cover'}
           </button>
+          {onBuild && (
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() =>
+                onBuild(printExpr(exprOfCover(table, 0, myDcs, table.inputPaths.map(nameOfPath))))
+              }
+            >
+              Build this
+            </button>
+          )}
           {reveal && (
             <span className="analyze-sop">
               {revealGroups.length === 0 ? (

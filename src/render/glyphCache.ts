@@ -54,6 +54,12 @@ export function clearGlyphCache(): void {
   cache.clear();
 }
 
+// A tile's key describes the component and the theme, never the code that
+// painted it, so an edit to a glyph module leaves every cached tile drawing
+// the old shape beside freshly routed wires. Dev only: a production page load
+// starts with an empty cache anyway.
+if (import.meta.hot) import.meta.hot.on('vite:beforeUpdate', clearGlyphCache);
+
 export function glyphCacheSize(): number {
   return cache.size;
 }

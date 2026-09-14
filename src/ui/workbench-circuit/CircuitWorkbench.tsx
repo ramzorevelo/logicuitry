@@ -1,15 +1,38 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './circuit.css';
-import { schematicTheme, type Theme } from '../../render/theme';
+import {
+  isLedColor,
+  isLedShape,
+  LED_COLORS,
+  schematicTheme,
+  type LedColor,
+  type LedShape,
+  type Theme,
+} from '../../render/theme';
 import { screenToWorld, worldToScreen, type Vec2, type Viewport } from '../../render/scene';
-import { useCircuitStore, VARIABLE_ARITY_GATES, type Tab } from './circuitStore';
+import {
+  useCircuitStore,
+  VARIABLE_ARITY_GATES,
+  type ComponentPins,
+  type Tab,
+} from './circuitStore';
 
 /** Gate kinds a wired gate can be swapped between: one shared pin vocabulary
  *  (a0..an, y), so no wire is disturbed by the change. */
 const SWAPPABLE_GATE_KINDS = ['and', 'or', 'nand', 'nor', 'xor', 'xnor'] as const;
 import { MAX_WIDTH } from '../../core/value/busValue';
 import { clampInt, clampPopupToCanvas, parseConstantValue } from './paramEdit';
+import { renderPreviewParams } from './paramPreview';
 import { clampParamValue, clampWidth, isWidthCapable, paramKeysFor } from './paramSpecs';
+import { warnPulse } from '../../render/anim';
+import { liveParamsOnly, paramLiveness } from './paramLiveness';
+import {
+  NOTICE_LINGER_MS,
+  NoticePolicy,
+  blockedText,
+  makeHaptic,
+  type BlockedReason,
+} from './blockedNotice';
 import type { Params } from '../../core/sim/primitives/types';
 import {
   collectPinTargets,
@@ -18,7 +41,8 @@ import {
   smartConnectTargets,
   type PinTarget,
 } from './pinTargets';
-import { renderBoard } from './editorScene';
+import { groupRects, renderBoard } from './editorScene';
+import { groupContaining, groupHandleAt, groupMemberIds } from './groupHit';
 import { useCompact } from '../compact';
 import { useCoarsePointer } from '../pointerKind';
 import { SelectionActionBar } from './SelectionActionBar';
@@ -31,6 +55,7 @@ import {
   buildLocalGeometry,
   resolveComponentPins,
   captionAwareBounds,
+  oneLine,
   symbolBounds,
   worldToLocal,
 } from '../../render/glyphs/symbol';
@@ -51,23 +76,32 @@ import type {
   Junction,
   ParamValue,
   PinDir,
+  Point,
   Wire,
   WireEnd,
 } from '../../core/model/types';
 import {
   alignDeltas,
   computeWireRoutes,
+  cornerBeatsSegment,
   distributeDeltas,
   dragCorner,
   groupRotate,
   halfSnap,
   normalizeBends,
+  orthogonalPolyline,
+  routeAvoiding,
+  pinExitSide,
+  PIN_STUB,
+  type Side,
   packDeltas,
+  pointInPolygon,
+  polylineIntersectsPolygon,
   polylineIntersectsRect,
   projectOntoSegment,
+  rectIntersectsPolygon,
   rotatePointAround,
   rotatePointSnapped,
-  routeOrthogonal,
   stretchWirePoints,
   tAlongPolyline,
   wiresCrossedBy,
@@ -89,9 +123,10 @@ import {
 } from '../../render/hitTest';
 import { PreviewController } from '../../render/ghostPreview';
 import { PackageDialog } from './PackageDialog';
+import { BuildCircuitDialog } from './BuildCircuitDialog';
+import { circuitFromNetlist } from './buildCircuit';
 import { LabelConflictDialog } from './LabelConflictDialog';
 import { CloseTabDialog } from './CloseTabDialog';
-import { SmartConnectPicker } from './SmartConnectPicker';
 import {
   alignSplicePos,
   canHealSelection,
@@ -100,7 +135,8 @@ import {
   type SplicePins,
 } from './spliceOnWire';
 import { extractInternalSelection } from './duplicate';
-import { usePrefsStore } from '../prefs';
+import { getPrefs, usePrefsStore } from '../prefs';
+import { sevenSegCommon } from '../../core/sim/primitives/display';
 import { busLabelHitPoints, wireBusWidth } from './busBadge';
 import { useContributeMenus, useMenuCommand } from '../menu/MenuProvider';
 import type { Menu } from '../menu/menuModel';
@@ -145,6 +181,7 @@ import { analysisTablesOf, OUTPUT_TERMINAL_KINDS } from '../../core/gates/verify
 
 import { PaletteRail } from './PaletteRail';
 import { ToolIcon, type IconName } from '../components/ToolIcon';
+import { modalKeysHeld } from '../modalKeys';
 
 interface DragState {
   ids: Set<string>;
@@ -165,11 +202,13 @@ interface LassoState {
   current: Vec2;
   // Pre-existing selection to union with (Ctrl-drag adds to selection).
   base: Set<string>;
+  /** Points collected in freehand mode; empty means the rectangle marquee. */
+  path: Vec2[];
 }
 
 interface CutState {
-  start: Vec2;
-  current: Vec2;
+  /** The stroke as drawn, so a curved sweep cuts what it passes through. */
+  path: Vec2[];
   flagged: Set<string>;
 }
 
@@ -326,6 +365,20 @@ const TRACK_PIN: Record<string, string> = {
 /** Palette floor, matching `.circuit-palette`'s CSS default width. */
 const PALETTE_MIN_W = 116;
 
+/** Fixed order: the preference picks which is armed, never where it sits. */
+const SELECT_SHAPES: readonly [freehand: boolean, label: string][] = [
+  [true, 'Lasso'],
+  [false, 'Marquee'],
+];
+
+/** One offscreen context, reused: creating a canvas per measurement pass runs
+ *  on every pointer move of a palette drag. */
+let measureCtx: CanvasRenderingContext2D | null = null;
+function textMeasureContext(): CanvasRenderingContext2D | null {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  return measureCtx;
+}
+
 const WIDTH_LABEL_KINDS = new Set(['inport', 'outport', 'probe', 'busdisplay', 'led']);
 // Distinctive-shape gate kinds get a shape-accurate click hit-test instead
 // of bbox; lasso/routing stay bbox, via GATE_SHAPE_KINDS being scoped to
@@ -360,13 +413,34 @@ export function CircuitWorkbench() {
   viewportRef.current = viewport;
   const panRef = useRef<PanState | null>(null);
   const lassoRef = useRef<LassoState | null>(null);
+  // Session-only, like the palette width: which shape the lasso draws.
+  const [lassoFreehand, setLassoFreehand] = useState(
+    () => getPrefs().defaultSelectShape === 'lasso',
+  );
+  const [lassoMenuOpen, setLassoMenuOpen] = useState(false);
+  const lassoMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!lassoMenuOpen) return;
+    const dismiss = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      if (e.type === 'pointerdown' && lassoMenuRef.current?.contains(e.target as Node)) return;
+      setLassoMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', dismiss, true);
+    window.addEventListener('keydown', dismiss, true);
+    return () => {
+      window.removeEventListener('pointerdown', dismiss, true);
+      window.removeEventListener('keydown', dismiss, true);
+    };
+  }, [lassoMenuOpen]);
+  const lassoFreehandRef = useRef(lassoFreehand);
+  lassoFreehandRef.current = lassoFreehand;
   const cutRef = useRef<CutState | null>(null);
   // P1.6: bend points committed so far on the in-progress wire (empty-grid
   // clicks push here and keep drawing instead of ending the wire); reset
   // whenever a new wire starts or the pending one completes/cancels.
   const wireBendsRef = useRef<Vec2[]>([]);
   const smartConnectRef = useRef<SmartConnectState | null>(null);
-  const [precisePicker, setPrecisePicker] = useState<{ targetId: string } | null>(null);
   // Duplicate ghost: `base` keeps the source's own ids/positions (fresh ids
   // are only minted on commit, via commitDuplicate). `offset` is recomputed
   // on every cursor move (M4.5) as `snap(cursorWorld) - groupTopLeft(base)`
@@ -406,7 +480,28 @@ export function CircuitWorkbench() {
     flash?: boolean;
   } | null>(null);
 
+  // Blocked-gesture feedback. The flash lives in a ref + rAF (it must not
+  // re-render the tree 60 times for a 400ms pulse); only the words are state.
+  const blockedRef = useRef<{ ids: Set<string>; start: number } | null>(null);
+  const blockedRafRef = useRef<number | null>(null);
+  const noticePolicyRef = useRef(new NoticePolicy());
+  const hapticRef = useRef(
+    makeHaptic((ms) => {
+      // Android Chrome only; a silent no-op everywhere else, which is why it
+      // never carries the feedback on its own.
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function')
+        navigator.vibrate(ms);
+    }),
+  );
+  // Shake on the param overlay when a greyed field is pressed: the flash lands
+  // on the board, but the finger is on the popup, so the popup answers too.
+  const [paramShake, setParamShake] = useState(false);
+  const paramShakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [packaging, setPackaging] = useState(false);
+  const [building, setBuilding] = useState<{ expression?: string } | null>(null);
   /** How many wires the pending smart-connect proposal would add; 0 = none. */
   const [connectPairs, setConnectPairs] = useState(0);
   // Component's own screen-space bounds at popup-open time, kept alongside
@@ -448,6 +543,11 @@ export function CircuitWorkbench() {
      *  every wire survives the change. */
     swapKind?: string;
     selSide?: 'bottom' | 'top';
+    /** LED and 7-segment: physical properties, so they belong to the instance. */
+    color?: LedColor;
+    shape?: LedShape;
+    /** 7-segment only: which rail the tied commons expect. */
+    common?: 'cathode' | 'anode';
     // Per-pin-group bus expand/collapse. Keys and eligibility come from
     // pinViewUI.ts's pinViewGroupsFor. Serialized into the `pinView` param
     // string on commit.
@@ -464,6 +564,9 @@ export function CircuitWorkbench() {
     focusedField: string | null;
   } | null>(null);
   const paramEditBoxRef = useRef<HTMLDivElement | null>(null);
+  // Pending render-only param values: drawn, never written, so Esc reverts by
+  // dropping the overlay. Filled below, where the helpers it reuses exist.
+  const paramPreviewRef = useRef<Map<string, Record<string, ParamValue>> | null>(null);
   // Momentary buttons currently held down (onPointerDown -> onPointerUp);
   // pointer capture keeps the up event firing on this canvas even if the
   // cursor drags off the button (or off the canvas) before release.
@@ -525,21 +628,28 @@ export function CircuitWorkbench() {
   const [paletteW, setPaletteW] = useState<number | null>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
-  /** Width at which the longest item name stops being ellipsised. A label's
-   *  own `scrollWidth` reports its untruncated text even while clipped, so the
-   *  fit is measured off what is really rendered rather than re-measured font
-   *  metrics. */
+  const paletteDragW = useRef<number | null>(null);
+  const paletteDragFrame = useRef<number | null>(null);
+  /** Width at which the longest item name stops being ellipsised. Measured
+   *  against the font, not the rendered label: once nothing is ellipsised a
+   *  label's `scrollWidth` is just its `clientWidth`, which pinned the cap to
+   *  the pane's current width and stopped the drag dead. */
   const paletteFitWidth = useCallback((): number => {
     const el = paletteRef.current;
-    if (!el) return PALETTE_MIN_W;
+    const ctx = textMeasureContext();
+    if (!el || !ctx) return PALETTE_MIN_W;
     let widest = 0;
+    let chrome = 0;
     for (const item of el.querySelectorAll<HTMLElement>('.palette-item')) {
       const label = item.querySelector<HTMLElement>('.palette-item__label');
       if (!label) continue;
-      widest = Math.max(widest, item.clientWidth - label.clientWidth + label.scrollWidth);
+      ctx.font = getComputedStyle(label).font;
+      widest = Math.max(widest, ctx.measureText(label.textContent ?? '').width);
+      chrome = Math.max(chrome, item.clientWidth - label.clientWidth);
     }
     const pad = el.offsetWidth - el.clientWidth; // scrollbar + borders
-    return Math.max(PALETTE_MIN_W, Math.ceil(widest + pad) + 2);
+    // Two characters of slack, so the longest name never sits flush to the edge.
+    return Math.max(PALETTE_MIN_W, Math.ceil(widest + chrome + pad + ctx.measureText('MM').width));
   }, []);
 
   // Import starts in the boards folder: it merges a circuit, not a part.
@@ -555,6 +665,17 @@ export function CircuitWorkbench() {
     if (!sel || sel.size === 0) return;
     const slice = extractInternalSelection(s.activeCircuit(), sel);
     if (slice.components.length > 0 || slice.junctions.length > 0) clipboardRef.current = slice;
+  };
+
+  /** Cut is copy plus delete-and-heal, never a plain delete: taking a NOT out
+   *  of a chain has to leave the chain joined whether or not it also went to
+   *  the clipboard. Wires alone have nothing to copy and just heal. */
+  const cutSelection = (hoverIds?: Set<string>) => {
+    const s = store.getState();
+    const sel = s.selection.size > 0 ? s.selection : hoverIds;
+    if (!sel || sel.size === 0) return;
+    copySelection(sel);
+    s.deleteWithHeal(sel, resolveWireEnd);
   };
 
   const pasteClipboard = () => {
@@ -614,6 +735,7 @@ export function CircuitWorkbench() {
     document.documentElement.classList.toggle('powered', powered);
     return () => document.documentElement.classList.remove('powered');
   }, [powered]);
+
   const timing = useCircuitStore((s) => s.timing);
   const error = useCircuitStore((s) => s.error);
   const simTime = useCircuitStore((s) => (s.rev >= 0 ? s.simTimePs() : null));
@@ -622,6 +744,21 @@ export function CircuitWorkbench() {
   const chipLib = useCircuitStore((s) => s.chipLib);
   const selection = useCircuitStore((s) => s.selection);
   const mode = useCircuitStore((s) => s.mode);
+  // Powering on/off, or entering/leaving bubble mode, is a new context: what
+  // the previous one already explained should not be held against this one.
+  useEffect(() => {
+    noticePolicyRef.current.reset();
+    setNotice(null);
+  }, [powered, mode]);
+
+  useEffect(
+    () => () => {
+      if (noticeTimerRef.current !== null) clearTimeout(noticeTimerRef.current);
+      if (paramShakeTimerRef.current !== null) clearTimeout(paramShakeTimerRef.current);
+      if (blockedRafRef.current !== null) cancelAnimationFrame(blockedRafRef.current);
+    },
+    [],
+  );
   const replayTimePs = useCircuitStore((s) => s.replayTimePs);
   const hoverTrackPath = useCircuitStore((s) => s.hoverTrackPath);
   const staReport = useCircuitStore((s) => s.staReport);
@@ -643,7 +780,17 @@ export function CircuitWorkbench() {
   useReferenceDrawer(
     useMemo(
       () =>
-        analyzeOpen ? { label: 'Analyze', body: <AnalyzeDrawer onClose={closeAnalyze} /> } : null,
+        analyzeOpen
+          ? {
+              label: 'Analyze',
+              body: (
+                <AnalyzeDrawer
+                  onClose={closeAnalyze}
+                  onBuild={(expression) => setBuilding({ expression })}
+                />
+              ),
+            }
+          : null,
       [analyzeOpen, closeAnalyze],
     ),
   );
@@ -785,6 +932,15 @@ export function CircuitWorkbench() {
         wires,
       };
     }
+    const preview = paramPreviewRef.current;
+    if (preview)
+      board = {
+        ...board,
+        components: board.components.map((c) => {
+          const pending = preview.get(c.id);
+          return pending ? { ...c, params: { ...c.params, ...pending } } : c;
+        }),
+      };
     const wd = wireDragRef.current;
     if (wd)
       board = {
@@ -811,6 +967,12 @@ export function CircuitWorkbench() {
         pinSignal: (id, pin) => st.pinSignal(id, pin, prefix),
         highlightWires: combinedHighlightWires(),
         mismatchWires: st.mismatchWires,
+        blockedFlash: (() => {
+          const b = blockedRef.current;
+          if (!b) return undefined;
+          const alpha = warnPulse(performance.now() - b.start);
+          return alpha > 0 ? { ids: b.ids, alpha } : undefined;
+        })(),
         paramHighlight:
           paramEdit && paramEdit.ids.length > 1 && paramEdit.focusedField
             ? new Set(paramEdit.ids)
@@ -828,27 +990,39 @@ export function CircuitWorkbench() {
           return data ?? undefined;
         })(),
         hoverPin,
-        // P1.6: the preview is the full polyline through every committed bend
-        // so far, then a live orthogonal route from the last bend to the
-        // cursor -- not just a single elbow from the wire's start.
+        // The committed wire is elbowed by orthogonalPolyline on the way in, so
+        // the ghost is built by the same function: assembling it by hand left
+        // the leg from the start pin to the first bend as a bare diagonal.
+        // It leads with the start pin's own axis for the same reason the
+        // committed route does, so the ghost is not showing a different wire
+        // from the one the click is about to make.
         wiringPreview:
           from && hoverPin
-            ? (() => {
-                const bends = wireBendsRef.current;
-                const lastFixed = bends.length ? bends[bends.length - 1]! : from.worldPos;
-                return [from.worldPos, ...bends, ...routeOrthogonal(lastFixed, hoverPin).slice(1)];
-              })()
+            ? wireBendsRef.current.length
+              ? orthogonalPolyline(from.worldPos, wireBendsRef.current, hoverPin)
+              : routeAvoiding(
+                  from.worldPos,
+                  hoverPin,
+                  [...componentBoundsMap().values()],
+                  [],
+                  theme.gridSchematic,
+                  {
+                    from: startPinSide(from),
+                    to: sideAtPin(hoverPin),
+                    stub: PIN_STUB * theme.gridSchematic,
+                  },
+                )
             : undefined,
         grid: theme.gridSchematic,
         dpr: window.devicePixelRatio || 1,
         ghost: ghostRef.current.current?.proposal,
-        lasso: lassoRef.current
-          ? rectFromPoints(lassoRef.current.start, lassoRef.current.current)
-          : undefined,
+        lasso:
+          lassoRef.current && lassoRef.current.path.length === 0
+            ? rectFromPoints(lassoRef.current.start, lassoRef.current.current)
+            : undefined,
+        lassoPath: lassoRef.current?.path.length ? lassoRef.current.path : undefined,
         cutFlags: cutRef.current?.flagged,
-        cutSlash: cutRef.current
-          ? { from: cutRef.current.start, to: cutRef.current.current }
-          : undefined,
+        cutStroke: cutRef.current?.path,
         smartConnectPreview: smartConnectRef.current?.pairs.map(({ source, target }) => ({
           from: source.worldPos,
           to: target.worldPos,
@@ -1023,6 +1197,30 @@ export function CircuitWorkbench() {
     return () => canvas.removeEventListener('wheel', onWheel);
   }, []);
 
+  /** Pin geometry for the store, which has no theme of its own. */
+  const componentPins: ComponentPins = (c) => {
+    const theme = themeRef.current;
+    if (!theme) return [];
+    const def = c.defId ? store.getState().chipLib.get(c.defId) : undefined;
+    const dirs = new Map(resolveComponentPins(c, def).map((p) => [p.name, p]));
+    return [...symbolBounds(c, theme, def).pins].flatMap(([name, pos]) => {
+      const meta = dirs.get(name);
+      return meta ? [{ name, pos, width: meta.width, dir: meta.dir }] : [];
+    });
+  };
+
+  /** Right of everything already placed, so a build never lands on top of the
+   *  board the instructor is mid-way through. */
+  const freeSpot = (): Point => {
+    const components = store.getState().activeCircuit().components;
+    if (components.length === 0) return { x: 0, y: 0 };
+    const gap = 24 * (themeRef.current?.gridSchematic ?? 8);
+    return {
+      x: Math.max(...components.map((c) => c.pos.x)) + gap,
+      y: Math.min(...components.map((c) => c.pos.y)),
+    };
+  };
+
   const fitView = () => {
     const canvas = canvasRef.current;
     const theme = themeRef.current;
@@ -1145,6 +1343,8 @@ export function CircuitWorkbench() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A dialog is up: it owns the keyboard, buttons and all.
+      if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const s = store.getState();
       s.clearTransientError();
@@ -1191,7 +1391,7 @@ export function CircuitWorkbench() {
         hoverItemRef.current = null;
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
         e.preventDefault();
-        s.deleteWithHeal(hoverIds, resolveWireEnd);
+        cutSelection(hoverIds);
         hoverItemRef.current = null;
       } else if (e.key === 'r' || e.key === 'R') {
         if (s.tool.kind === 'place') {
@@ -1256,9 +1456,7 @@ export function CircuitWorkbench() {
       } else if (e.key === 'f' || e.key === 'F') {
         const targetId = hoverItemRef.current;
         const isComponent = targetId && s.activeCircuit().components.some((c) => c.id === targetId);
-        if (isComponent && e.shiftKey) {
-          setPrecisePicker({ targetId });
-        } else if (isComponent && s.selection.size > 0) {
+        if (isComponent && s.selection.size > 0) {
           const pairs = computeSmartConnect(targetId, 0);
           if (pairs.length > 0) {
             setSmartConnect({ targetId, rotation: 0, pairs });
@@ -1444,6 +1642,32 @@ export function CircuitWorkbench() {
     return end.pos; // 'free' and 'tap' both carry their own click point
   };
 
+  /** Which way a wiring gesture's start pin leaves its body, for the ghost. A
+   *  free or on-wire start has no body and so no direction to honour. */
+  const startPinSide = (from: WiringStart): Side | undefined => {
+    if (!('componentId' in from)) return undefined;
+    const st = store.getState();
+    const comp = st.activeCircuit().components.find((c) => c.id === from.componentId);
+    if (!comp) return undefined;
+    const def = comp.defId ? st.chipLib.get(comp.defId) : undefined;
+    return pinExitSide(from.worldPos, symbolBounds(comp, themeRef.current!, def).bounds);
+  };
+
+  /** Same, for the pin under the cursor, which the scene only knows as a
+   *  point. Walked rather than threaded through hover state because it is
+   *  only ever asked while a wire is actually in flight. */
+  const sideAtPin = (pt: Vec2): Side | undefined => {
+    const st = store.getState();
+    const theme = themeRef.current!;
+    for (const c of st.activeCircuit().components) {
+      const def = c.defId ? st.chipLib.get(c.defId) : undefined;
+      const geo = symbolBounds(c, theme, def);
+      for (const q of geo.pins.values())
+        if (q.x === pt.x && q.y === pt.y) return pinExitSide(pt, geo.bounds);
+    }
+    return undefined;
+  };
+
   // --- Bubble-push mode (M5 fold-in) ---
 
   // Live pin geometry for the transform core (A4: spliced markers land on
@@ -1534,6 +1758,38 @@ export function CircuitWorkbench() {
     return gateAnchorsWorld(c).filter((a) =>
       a.side === 'output' ? getOutputBubble(c) : inputs.has(a.pin),
     );
+  };
+
+  /** Announces a gesture the current mode refuses. Always flashes the thing
+   *  that was refused and always buzzes (throttled); says why only when the
+   *  policy allows, so hammering the gesture cannot stack or nag. */
+  const reportBlocked = (reason: BlockedReason, ids: Iterable<string> = []) => {
+    const idSet = new Set(ids);
+    if (idSet.size > 0) {
+      blockedRef.current = { ids: idSet, start: performance.now() };
+      if (blockedRafRef.current === null) {
+        const tick = () => {
+          const b = blockedRef.current;
+          if (!b || warnPulse(performance.now() - b.start) <= 0) {
+            blockedRef.current = null;
+            blockedRafRef.current = null;
+            draw();
+            return;
+          }
+          draw();
+          blockedRafRef.current = requestAnimationFrame(tick);
+        };
+        blockedRafRef.current = requestAnimationFrame(tick);
+      }
+    }
+    hapticRef.current();
+    if (!noticePolicyRef.current.shouldAnnounce(reason, Date.now())) return;
+    setNotice(blockedText(reason));
+    if (noticeTimerRef.current !== null) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => {
+      setNotice(null);
+      noticeTimerRef.current = null;
+    }, NOTICE_LINGER_MS);
   };
 
   const bubbleFocusOverlay = ():
@@ -1706,6 +1962,23 @@ export function CircuitWorkbench() {
     return resolveWireEnd(isAt(w.a) ? w.b : w.a);
   };
 
+  /** Nearest bubble anchor to `world` within a fat 12px screen-space target,
+   *  shared by the press that starts a bubble drag and the hover that decides
+   *  whether the cursor should offer one at all. */
+  const nearestBubbleAnchor = (
+    world: Vec2,
+  ): { comp: Component; a: WorldAnchor; d: number } | undefined => {
+    const radius = MIN_HIT_RADIUS / viewportRef.current.zoom;
+    let best: { comp: Component; a: WorldAnchor; d: number } | undefined;
+    for (const c of store.getState().activeCircuit().components) {
+      for (const a of bubbledAnchors(c)) {
+        const d = Math.hypot(a.center.x - world.x, a.center.y - world.y);
+        if (d <= Math.max(radius, a.r * 2) && (!best || d < best.d)) best = { comp: c, a, d };
+      }
+    }
+    return best;
+  };
+
   const onBubblePointerDown = (e: React.PointerEvent) => {
     if (e.shiftKey) {
       beginPan(e);
@@ -1721,15 +1994,7 @@ export function CircuitWorkbench() {
         st.commitBubbleMove({ kind: 'pairInsert', wireId: wh.wire.id, pos: world }, bubbleGeom());
       return;
     }
-    // Fat 12px screen-space target on every bubble currently drawn.
-    const radius = MIN_HIT_RADIUS / viewportRef.current.zoom;
-    let best: { comp: Component; a: WorldAnchor; d: number } | undefined;
-    for (const c of st.activeCircuit().components) {
-      for (const a of bubbledAnchors(c)) {
-        const d = Math.hypot(a.center.x - world.x, a.center.y - world.y);
-        if (d <= Math.max(radius, a.r * 2) && (!best || d < best.d)) best = { comp: c, a, d };
-      }
-    }
+    const best = nearestBubbleAnchor(world);
     if (best) {
       bubbleDragRef.current = {
         gateId: best.comp.id,
@@ -1781,6 +2046,11 @@ export function CircuitWorkbench() {
       return;
     }
     st.setBubbleFocus(null);
+    // Nothing bubble-shaped was hit, and bubble mode swallows every other
+    // editing gesture at the top of onPointerDown -- so a press on a real
+    // component here is a refused edit, which used to do nothing at all.
+    const pressed = topComponentAt(world);
+    if (pressed) reportBlocked('bubble-edit', [pressed.id]);
   };
 
   // Upstream gate-family driver's body center for a standalone inverter --
@@ -1969,20 +2239,35 @@ export function CircuitWorkbench() {
   // editorScene.ts's draw loop rendered from the exact same inputs (the
   // M4.2 follow-up "route-consistency bug": a private per-call route here
   // used to check a different, invisible path than the one on screen).
+  const componentBoundsMap = (): Map<string, Rect> => {
+    const st = store.getState();
+    const theme = themeRef.current!;
+    return new Map(
+      st
+        .activeCircuit()
+        .components.map((c) => [
+          c.id,
+          symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds,
+        ]),
+    );
+  };
+
   const computeRoutes = (): Map<string, Vec2[]> => {
     const st = store.getState();
     const theme = themeRef.current!;
-    const circuit = st.activeCircuit();
-    const boundsById = new Map(
-      circuit.components.map((c) => [
-        c.id,
-        symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds,
-      ]),
+    return computeWireRoutes(
+      st.activeCircuit().wires,
+      resolveWireEnd,
+      componentBoundsMap(),
+      theme.gridSchematic,
     );
-    return computeWireRoutes(circuit.wires, resolveWireEnd, boundsById, theme.gridSchematic);
   };
 
-  const wireAt = (world: Vec2): { wire: Wire; seg: number } | undefined => {
+  /** Hit -> the shape cornerBeatsSegment arbitrates on. */
+  const asHit = (h: { wire: Wire; d: number } | undefined) =>
+    h ? { wireId: h.wire.id, d: h.d } : undefined;
+
+  const wireAt = (world: Vec2): { wire: Wire; seg: number; d: number } | undefined => {
     const st = store.getState();
     // Tight (not a fat point-target): must not swallow a parallel wire one
     // grid unit over.
@@ -2038,7 +2323,9 @@ export function CircuitWorkbench() {
   // Interior-vertex hit-test for a true corner drag (M4.3), checked before
   // the segment case in select mode -- clicking near a bend should grab the
   // corner itself, not the nearer of its two adjacent segments.
-  const cornerAt = (world: Vec2): { wire: Wire; idx: number; displayPts: Vec2[] } | undefined => {
+  const cornerAt = (
+    world: Vec2,
+  ): { wire: Wire; idx: number; displayPts: Vec2[]; d: number } | undefined => {
     const st = store.getState();
     const radius = MIN_HIT_RADIUS / viewportRef.current.zoom;
     const routes = computeRoutes();
@@ -2070,7 +2357,8 @@ export function CircuitWorkbench() {
    *  then the bus label, then a bend vertex, then a plain segment. Touch needs
    *  it in two more places than the mouse does -- a tap selects with it, and
    *  the pan rule asks whether the press landed on something already selected
-   *  -- and all three have to agree on what "the thing under here" means. */
+   *  -- and all three have to agree on what "the thing under here" means.
+   *  Corner-vs-segment goes through cornerBeatsSegment for the same reason. */
   const handleIdAt = (world: Vec2): string | undefined => {
     const hit = topComponentAt(world);
     if (hit) return hit.id;
@@ -2081,8 +2369,65 @@ export function CircuitWorkbench() {
     const bl = busLabelAt(world);
     if (bl) return bl.id;
     const corner = cornerAt(world);
-    if (corner) return corner.wire.id;
-    return wireAt(world)?.wire.id;
+    const seg = wireAt(world);
+    if (corner && cornerBeatsSegment(asHit(corner), asHit(seg))) return corner.wire.id;
+    return seg?.wire.id;
+  };
+
+  /** The drawn border rects, or undefined when the board has no groups. */
+  const currentGroupRects = (): { circuit: Circuit; rects: Map<string, Rect> } | undefined => {
+    const st = store.getState();
+    const theme = themeRef.current;
+    const circuit = st.activeCircuit();
+    if (!theme || !circuit.groups?.length) return undefined;
+    const rects = groupRects(
+      circuit,
+      (id) => {
+        const c = circuit.components.find((c) => c.id === id);
+        if (!c) return undefined;
+        return symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds;
+      },
+      theme.gridSchematic,
+    );
+    return { circuit, rects };
+  };
+
+  /** Group a part dropped here should join: whatever border encloses the
+   *  point. A part placed after the group was made is otherwise a stray
+   *  inside its own border, moving with nothing. */
+  const groupForDropAt = (world: Vec2): string | undefined => {
+    const g = currentGroupRects();
+    return g && g.circuit.groups ? groupContaining(g.circuit.groups, g.rects, world) : undefined;
+  };
+
+  /** The border stroke and the name only. The interior belongs to whatever is
+   *  drawn there, and to the lasso where nothing is. */
+  const groupHandleHitAt = (world: Vec2): { id: string; rect: Rect } | undefined => {
+    const theme = themeRef.current;
+    const found = currentGroupRects();
+    if (!theme || !found) return undefined;
+    const { circuit, rects } = found;
+    if (!circuit.groups) return undefined;
+    const ctx = canvasRef.current?.getContext('2d');
+    const id = groupHandleAt(
+      {
+        groups: circuit.groups,
+        rects,
+        tol: MIN_HIT_RADIUS / viewportRef.current.zoom,
+        nameHeight: theme.glyphText,
+        measureName: (name) => {
+          if (!ctx) return oneLine(name).length * theme.glyphText * 0.6;
+          ctx.save();
+          ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
+          const w = ctx.measureText(oneLine(name)).width;
+          ctx.restore();
+          return w;
+        },
+      },
+      world,
+    );
+    const rect = id ? rects.get(id) : undefined;
+    return id && rect ? { id, rect } : undefined;
   };
 
   const topComponentAt = (world: Vec2): Component | undefined => {
@@ -2349,7 +2694,7 @@ export function CircuitWorkbench() {
           t.free ||
           labelSources ||
           (singleSourceId !== undefined &&
-            labelExempt(circuit.components, circuit.wires, singleSourceId, t)),
+            labelExempt(circuit.components, circuit.wires, targets, singleSourceId, t)),
       )
       .map((t) => (t.free ? t : { ...t, free: true }));
     const hoveredFreeOuts = freeOutPins(availTargets, targetId);
@@ -2415,7 +2760,9 @@ export function CircuitWorkbench() {
       // `from` side regardless of how many target components are selected.
       const targetPins = selectionComps
         .flatMap((c) => freeInPins(targets, c.id))
-        .filter((t) => t.free || labelExempt(circuit.components, circuit.wires, targetId, t))
+        .filter(
+          (t) => t.free || labelExempt(circuit.components, circuit.wires, targets, targetId, t),
+        )
         .map((t) => (t.free ? t : { ...t, free: true }));
       return connect(sources, targetPins);
     }
@@ -2496,6 +2843,26 @@ export function CircuitWorkbench() {
     return ids;
   };
 
+  /** Same touching containment as the rectangle: crossed by the path counts,
+   *  not only fully enclosed. */
+  const idsInPolygon = (poly: readonly Vec2[]): Set<string> => {
+    const st = store.getState();
+    const theme = themeRef.current!;
+    const circuit = st.activeCircuit();
+    const ids = new Set<string>();
+    for (const c of circuit.components) {
+      const def = c.defId ? st.chipLib.get(c.defId) : undefined;
+      if (rectIntersectsPolygon(symbolBounds(c, theme, def).bounds, poly)) ids.add(c.id);
+    }
+    const routes = computeRoutes();
+    for (const w of circuit.wires) {
+      const pts = routes.get(w.id);
+      if (pts && polylineIntersectsPolygon(pts, poly)) ids.add(w.id);
+    }
+    for (const j of circuit.junctions) if (pointInPolygon(j.pos, poly)) ids.add(j.id);
+    return ids;
+  };
+
   // Insert-on-wire detection (Item 2, Bug B): shared by the place tool, a
   // component drag, and a duplicate/paste commit -- any component landing on
   // a wire splices, regardless of how it got there. Cursor-based hit-test
@@ -2571,6 +2938,13 @@ export function CircuitWorkbench() {
   // component's own orientation, never auto-rotating something the user
   // already posed. `componentId` present = move-and-splice an existing
   // component instead of minting a new one.
+  /** Optional-property spread for insertOnWire's `group` under
+   *  exactOptionalPropertyTypes: the key is absent, never undefined. */
+  const spliceGroup = (pos: Vec2): { group?: string } => {
+    const group = groupForDropAt(pos);
+    return group ? { group } : {};
+  };
+
   const commitSplice = (
     hit: { wire: Wire; seg: number; dropPos: Vec2; segA: Vec2; segB: Vec2 },
     spec: SplicePins,
@@ -2631,6 +3005,7 @@ export function CircuitWorkbench() {
       ...(mirror ? { mirror } : {}),
       ...(label ? { label } : {}),
       ...(componentId ? { componentId } : {}),
+      ...(componentId ? {} : spliceGroup(pos)),
     });
   };
 
@@ -3180,6 +3555,7 @@ export function CircuitWorkbench() {
         start: world,
         current: world,
         base: e.ctrlKey ? new Set(st.selection) : new Set(),
+        path: lassoFreehandRef.current ? [world] : [],
       };
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
@@ -3209,7 +3585,9 @@ export function CircuitWorkbench() {
       // at the same spot.
       const handleId = handleIdAt(world);
       const selected = store.getState().selection;
-      if (!handleId || !selected.has(handleId)) {
+      // A group border is not in `selection` (the members are), so it needs
+      // asking for separately or a finger on the border would always pan.
+      if ((!handleId || !selected.has(handleId)) && !groupHandleHitAt(world)) {
         beginPan(e);
         return;
       }
@@ -3301,7 +3679,7 @@ export function CircuitWorkbench() {
 
     if (tool.kind === 'place') {
       // Placing into a running sim would edit the board out from under it.
-      if (powered) return;
+      if (powered) return reportBlocked('powered-place');
       // Insert-on-wire: dropping a 1-in/1-out primitive onto a wire splices it
       // in (Alt suppresses). Multi-pin/chip placements never auto-splice.
       // `rot: 'auto'` picks the nearest cardinal direction along the wire's
@@ -3329,18 +3707,27 @@ export function CircuitWorkbench() {
         endPlacement(e);
         return;
       }
-      st.place(tool.componentKind, world, grid, tool.params, ghostPoseRef.current, tool.defId);
+      st.place(
+        tool.componentKind,
+        world,
+        grid,
+        tool.params,
+        ghostPoseRef.current,
+        tool.defId,
+        componentPins,
+        groupForDropAt(world),
+      );
       endPlacement(e);
       return;
     }
     if (tool.kind === 'junction') {
-      if (powered) return;
+      if (powered) return reportBlocked('powered-wire');
       st.addJunction(world, grid, resolveWireEnd);
       return;
     }
     if (tool.kind === 'cut') {
-      if (powered) return;
-      cutRef.current = { start: world, current: world, flagged: new Set() };
+      if (powered) return reportBlocked('powered-wire');
+      cutRef.current = { path: [world], flagged: new Set() };
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
     }
@@ -3367,7 +3754,7 @@ export function CircuitWorkbench() {
               world,
               { width: from.width, dir: from.dir },
               hitScale(theme),
-              (t) => labelExempt(circuit.components, circuit.wires, from.componentId, t),
+              (t) => labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
             );
       // A pin's loose (2x) snap radius otherwise makes any junction sitting
       // close to it practically unreachable -- whichever is actually nearer
@@ -3495,7 +3882,7 @@ export function CircuitWorkbench() {
       // Belt and braces with the tool reset in powerOn: a wire started while
       // the sim owns the board could never commit, and would strand a ghost
       // that only Esc clears, which a phone has not got.
-      if (powered) return;
+      if (powered) return reportBlocked('powered-wire');
       const pin = nearestFree(targets, world, hitScale(theme));
       if (pin) {
         setWiringStart(pin);
@@ -3578,16 +3965,20 @@ export function CircuitWorkbench() {
     // B3a: junction and free-end (the NODES) win before any wire geometry --
     // a junction sits on every route it joins, and an avoidance elbow can land
     // within a corner's fat radius of a node, so corner-before-node grabbed
-    // the wire and left the node behind. Corner still beats a plain segment
-    // hit (clicking near a bend grabs the vertex, not the nearer leg).
+    // the wire and left the node behind. Corner vs plain segment is no longer
+    // a fixed order: cornerBeatsSegment keeps the bend winning on its own
+    // wire and compares distance across wires.
     const jh = hit ? undefined : junctionAt(world);
     const fh = hit || jh ? undefined : freeEndAt(world);
     // The badge sits offset off the wire, so it rarely competes with the line
     // itself -- but where it does, grabbing the label must beat reshaping the
     // wire under it.
     const bl = hit || jh || fh ? undefined : busLabelAt(world);
-    const corner = hit || jh || fh || bl ? undefined : cornerAt(world);
-    const wh = hit || corner || jh || fh || bl ? undefined : wireAt(world);
+    const cornerCand = hit || jh || fh || bl ? undefined : cornerAt(world);
+    const segCand = hit || jh || fh || bl ? undefined : wireAt(world);
+    const takeCorner = cornerBeatsSegment(asHit(cornerCand), asHit(segCand));
+    const corner = takeCorner ? cornerCand : undefined;
+    const wh = takeCorner ? undefined : segCand;
     const hitId = hit?.id ?? corner?.wire.id ?? jh?.id ?? fh?.wire.id ?? wh?.wire.id ?? bl?.id;
     if (hitId) {
       if (e.ctrlKey) {
@@ -3622,6 +4013,11 @@ export function CircuitWorkbench() {
         dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: false };
         (e.target as Element).setPointerCapture(e.pointerId);
       } else if (fh) {
+        // Dragging a wire end is the one wiring gesture still reachable while
+        // powered, and releasing it on a pin would re-attach the wire: a real
+        // topology change, which used to drop power without warning. Refuse the
+        // gesture instead, so wiring never powers the board off behind you.
+        if (powered) return reportBlocked('powered-wire', [fh.wire.id]);
         const endPos = fh.wire[fh.end];
         freeEndDragRef.current = {
           wireId: fh.wire.id,
@@ -3639,6 +4035,21 @@ export function CircuitWorkbench() {
       }
       return;
     }
+    // Grabbing a group's border or its name takes the whole group: its own
+    // components, its descendants', and the junctions the border encloses.
+    // Tested after the components, so a part sitting on the border still wins.
+    const gh = groupHandleHitAt(world);
+    if (gh) {
+      const members = groupMemberIds(st.activeCircuit(), gh.id, gh.rect);
+      if (members.size > 0) {
+        const sel = e.ctrlKey ? new Set([...st.selection, ...members]) : members;
+        st.setSelection(sel);
+        dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: e.altKey };
+        (e.target as Element).setPointerCapture(e.pointerId);
+        draw();
+        return;
+      }
+    }
     // Empty canvas in Select mode: empty-drag lasso-selects (decision-8).
     // Shift+left-drag is an alternate pan binding (P2.4) alongside middle-drag
     // -- trackpad users get a pan gesture with no middle button. Shift is
@@ -3653,6 +4064,7 @@ export function CircuitWorkbench() {
       start: world,
       current: world,
       base: e.ctrlKey ? new Set(st.selection) : new Set(),
+      path: lassoFreehandRef.current ? [world] : [],
     };
     (e.target as Element).setPointerCapture(e.pointerId);
   };
@@ -3698,10 +4110,10 @@ export function CircuitWorkbench() {
     }
     const cut = cutRef.current;
     if (cut) {
-      cut.current = world;
+      cut.path.push(world);
       const st = store.getState();
       cut.flagged = wiresCrossedBy(
-        [cut.start, cut.current],
+        cut.path,
         st.activeCircuit().wires.filter((w) => resolveWireEnd(w.a) && resolveWireEnd(w.b)),
         (end) => resolveWireEnd(end)!,
       );
@@ -3711,6 +4123,7 @@ export function CircuitWorkbench() {
     const lasso = lassoRef.current;
     if (lasso) {
       lasso.current = world;
+      if (lassoFreehandRef.current) lasso.path.push(world);
       draw();
       return;
     }
@@ -3817,10 +4230,19 @@ export function CircuitWorkbench() {
               world,
               { width: from.width, dir: from.dir },
               hitScale(theme),
-              (t) => labelExempt(circuit.components, circuit.wires, from.componentId, t),
+              (t) => labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
             )
         : nearestFree(targets, world, hitScale(theme));
-      setHoverPin(snap ? snap.worldPos : from ? world : undefined);
+      // A free end lands on the grid, the way a placed bend already does, so
+      // the ghost does not trail half a step off the route it will commit to.
+      const g = theme.gridSchematic;
+      setHoverPin(
+        snap
+          ? snap.worldPos
+          : from
+            ? { x: Math.round(world.x / g) * g, y: Math.round(world.y / g) * g }
+            : undefined,
+      );
       return;
     }
     if (tool.kind === 'select') {
@@ -3905,7 +4327,10 @@ export function CircuitWorkbench() {
     const lasso = lassoRef.current;
     if (lasso) {
       lassoRef.current = null;
-      const ids = idsInRect(rectFromPoints(lasso.start, lasso.current));
+      const ids =
+        lasso.path.length > 2
+          ? idsInPolygon(lasso.path)
+          : idsInRect(rectFromPoints(lasso.start, lasso.current));
       const st = store.getState();
       st.setSelection(new Set([...lasso.base, ...ids]));
       // What you do with a selection is move it, and under the lasso tool that
@@ -3989,7 +4414,7 @@ export function CircuitWorkbench() {
         } else if (!trySpliceOnDrag(sel, dx, dy)) {
           // Bug B: dragging an existing unwired 1-in/1-out component onto a
           // wire splices it in, one undo step, in place of a plain move.
-          store.getState().moveSelection(dx, dy, resolveWireEnd);
+          store.getState().moveSelection(dx, dy, resolveWireEnd, componentPins);
         }
       } else draw();
     }
@@ -4085,7 +4510,13 @@ export function CircuitWorkbench() {
     if (!c) return;
     // Parameter edits are topology-affecting board edits -- never pop up
     // while powered (the live sim would be edited out from under itself).
-    if (c.kind === 'clock' && !powered) {
+    if (c.kind === 'clock' && powered) {
+      // Every field the clock overlay offers is timing, which the kernel
+      // self-schedules from: retiming mid-cycle is not a live edit.
+      reportBlocked('powered-param', [c.id]);
+      return;
+    }
+    if (c.kind === 'clock') {
       // Clock param editor (closes the deferred M6 clock-rate item): shown in
       // ns, stored as integer ps; commits as a board edit (one undo step).
       const theme = themeRef.current!;
@@ -4116,17 +4547,21 @@ export function CircuitWorkbench() {
       st.openDefTab(c.defId, nextPrefix, `${parentLabel} ▸ ${label}: ${def.name}`);
       return;
     }
+    // The overlay opens while powered too: its render-only fields (an LED's
+    // colour) are editable live, and every structural field greys itself out
+    // (paramEditFocusHandlers), so power no longer has to drop just to recolour
+    // a lamp -- which also cost the instructor every switch position.
     if (
-      !powered &&
-      (c.kind === 'chip' ||
-        c.kind === 'toggle' ||
-        c.kind === 'constant' ||
-        c.kind === 'decoder' ||
-        c.kind === 'encoder' ||
-        c.kind === 'mux' ||
-        c.kind === 'demux' ||
-        VARIABLE_ARITY_GATES.has(c.kind) ||
-        WIDTH_LABEL_KINDS.has(c.kind))
+      c.kind === 'chip' ||
+      c.kind === 'toggle' ||
+      c.kind === 'constant' ||
+      c.kind === 'decoder' ||
+      c.kind === 'encoder' ||
+      c.kind === 'sevenseg' ||
+      c.kind === 'mux' ||
+      c.kind === 'demux' ||
+      VARIABLE_ARITY_GATES.has(c.kind) ||
+      WIDTH_LABEL_KINDS.has(c.kind)
     ) {
       const theme = themeRef.current!;
       const bounds = symbolBounds(c, theme).bounds;
@@ -4136,7 +4571,8 @@ export function CircuitWorkbench() {
       // own condition list above is the actual gate on which kinds get an
       // overlay at all.
       const labelable = true;
-      const noWidthField = c.kind === 'decoder' || c.kind === 'encoder' || c.kind === 'chip';
+      const noWidthField =
+        c.kind === 'decoder' || c.kind === 'encoder' || c.kind === 'chip' || c.kind === 'sevenseg';
       // Task 6: a multi-selection containing the double-clicked component
       // batches -- the shown/applied fields are the intersection of every
       // selected component's own descriptor-key set (paramSpecs.ts), empty
@@ -4171,6 +4607,26 @@ export function CircuitWorkbench() {
           : {}),
         ...(noWidthField ? {} : { width }),
         ...(c.kind === 'toggle' ? { initial: Number(c.params?.['initial'] ?? 0) } : {}),
+        ...(c.kind === 'led'
+          ? {
+              color: isLedColor(c.params?.['color'])
+                ? c.params['color']
+                : getPrefs().defaultLedColor,
+              shape: isLedShape(c.params?.['shape'])
+                ? c.params['shape']
+                : getPrefs().defaultLedShape,
+            }
+          : {}),
+        // A fresh display follows the same colour preference a fresh LED does,
+        // so the instructor sets one and both parts obey it.
+        ...(c.kind === 'sevenseg'
+          ? {
+              color: isLedColor(c.params?.['color'])
+                ? c.params['color']
+                : getPrefs().defaultLedColor,
+              common: sevenSegCommon(c.params ?? {}),
+            }
+          : {}),
         ...(c.kind === 'constant' ? { valueText: String(Number(c.params?.['value'] ?? 0)) } : {}),
         ...(c.kind === 'decoder'
           ? {
@@ -4209,7 +4665,14 @@ export function CircuitWorkbench() {
     // netlabel joins the plain-rename set: its name IS its function (same
     // text joins nets), and it has no width of its own to edit.
     const renameKinds = new Set(['button', 'netlabel']);
-    if (!powered && renameKinds.has(c.kind)) {
+    if (powered && renameKinds.has(c.kind)) {
+      // A netlabel's name IS its connectivity, and any label feeds the compiled
+      // net paths the value readouts resolve through, so a rename needs the
+      // recompile a power cycle brings.
+      reportBlocked('powered-rename', [c.id]);
+      return;
+    }
+    if (renameKinds.has(c.kind)) {
       // Ports aren't chip instances, so double-click is free for an
       // inline rename here (chip instances keep "open internals" below).
       // button has no width param, so it keeps the plain rename overlay;
@@ -4248,6 +4711,14 @@ export function CircuitWorkbench() {
   // Task 6: a field renders (and applies to the batch) only when this isn't
   // a batch at all (`batchKeys` undefined -- today's single-component shape)
   // or when the shared descriptor-key intersection actually contains it.
+  // Rendered by BOTH layouts (the view-only branch and the editor), because a
+  // refusal has to answer wherever the board is shown.
+  const blockedNotice = notice ? (
+    <div className="circuit-notice" role="status">
+      {notice}
+    </div>
+  ) : null;
+
   const paramEditFieldVisible = (pe: NonNullable<typeof paramEdit>, key: string): boolean =>
     !pe.batchKeys || pe.batchKeys.has(key);
 
@@ -4256,9 +4727,13 @@ export function CircuitWorkbench() {
   const paramEditFocusHandlers = (
     set: typeof setParamEdit,
     key: string,
-  ): { onFocus: () => void; onBlur: () => void } => ({
+    kind?: string,
+  ): { onFocus: () => void; onBlur: () => void; disabled?: boolean } => ({
     onFocus: () => set((cur) => (cur ? { ...cur, focusedField: key } : cur)),
     onBlur: () => set((cur) => (cur ? { ...cur, focusedField: null } : cur)),
+    // A structural param cannot be honoured without a recompile, so while the
+    // board is powered its field is inert: greyed, with no explanatory text.
+    ...(kind && powered && paramLiveness(kind, key) === 'structural' ? { disabled: true } : {}),
   });
 
   // Maps a batchable param key back to the overlay's own flat field that
@@ -4284,6 +4759,10 @@ export function CircuitWorkbench() {
         return pe.selSide;
       case 'initial':
         return pe.initial;
+      case 'color':
+        return pe.color;
+      case 'shape':
+        return pe.shape;
       case 'value':
         return parseConstantValue(pe.valueText ?? '0') ?? undefined;
       default:
@@ -4314,10 +4793,39 @@ export function CircuitWorkbench() {
         const v = clampParamValue(otherComp.kind, key, raw);
         if (v !== null) otherParams[key] = v;
       }
-      if (Object.keys(otherParams).length > 0) specs.push({ id: otherId, params: otherParams });
+      const otherLive = liveParamsOnly(otherComp.kind, otherParams, powered);
+      if (Object.keys(otherLive).length > 0) specs.push({ id: otherId, params: otherLive });
     }
     return specs;
   };
+
+  const buildParamPreview = (
+    pe: NonNullable<typeof paramEdit>,
+  ): Map<string, Record<string, ParamValue>> | null => {
+    const circuit = store.getState().activeCircuit();
+    const targets = pe.ids.flatMap((id) => {
+      const kind = id === pe.id ? pe.kind : circuit.components.find((c) => c.id === id)?.kind;
+      return kind ? [{ id, kind }] : [];
+    });
+    const preview = renderPreviewParams(
+      targets,
+      // A batched edit only offers the keys every selection member shares, so
+      // an unoffered field has no pending value to preview on the others.
+      (id, key) => (id === pe.id ? paramEditFieldVisible(pe, key) : !!pe.batchKeys?.has(key)),
+      (key) => paramEditRawFieldValue(pe, key),
+    );
+    return preview.size > 0 ? preview : null;
+  };
+
+  paramPreviewRef.current = paramEdit ? buildParamPreview(paramEdit) : null;
+
+  // Outside the store, so no store subscription redraws for it.
+  const paramPreviewKey = paramPreviewRef.current
+    ? JSON.stringify(Array.from(paramPreviewRef.current))
+    : '';
+  useEffect(() => {
+    drawRef.current();
+  }, [paramPreviewKey]);
 
   // Width/param overlay commit (clock precedent): clamps width 1..32,
   // decoder/encoder addressBits and mux/demux selectBits 1..4, validates
@@ -4326,6 +4834,10 @@ export function CircuitWorkbench() {
   const commitParamEdit = () => {
     if (!paramEdit) return;
     const flash = () => setParamEdit({ ...paramEdit, flash: true });
+    // Nothing in a wholly structural overlay can be applied to a live board, so
+    // committing it would only risk a diff that drops power for no gain.
+    if (powered && paramEdit.kind === 'chip') return setParamEdit(null);
+    if (powered && VARIABLE_ARITY_GATES.has(paramEdit.kind)) return setParamEdit(null);
     if (paramEdit.kind === 'chip') {
       // A chip instance has no primitive registration (getPrimitive('chip')
       // throws), so it can never go through setComponentParamsBatch's
@@ -4381,6 +4893,10 @@ export function CircuitWorkbench() {
       params['hasEnable'] = !!paramEdit.hasEnable;
       params['selSide'] = paramEdit.selSide === 'top' ? 'top' : 'bottom';
       params['pinView'] = serializePinView(paramEdit.pinView);
+    } else if (paramEdit.kind === 'sevenseg') {
+      // No width and no pinView: the package is fixed at its real ten pins.
+      if (paramEdit.color !== undefined) params['color'] = paramEdit.color;
+      if (paramEdit.common !== undefined) params['common'] = paramEdit.common;
     } else if (paramEdit.kind === 'constant') {
       const parsed = parseConstantValue(paramEdit.valueText ?? '0');
       if (parsed === null) return flash();
@@ -4397,14 +4913,24 @@ export function CircuitWorkbench() {
         if (!Number.isFinite(initial)) return flash();
         params['initial'] = clampInt(initial, 0, width >= 32 ? 0xffffffff : (1 << width) - 1);
       }
+      if (paramEdit.kind === 'led') {
+        if (paramEdit.color !== undefined) params['color'] = paramEdit.color;
+        if (paramEdit.shape !== undefined) params['shape'] = paramEdit.shape;
+      }
     }
+    const live = liveParamsOnly(paramEdit.kind, params, powered);
+    const specs = paramEditBatchSpecs(paramEdit);
+    // A powered commit that has nothing live left to say is simply closed: a
+    // no-op write would still diff (a component with no explicit width gaining
+    // `width: 1`) and drop the power the greying exists to protect.
+    if (powered && Object.keys(live).length === 0 && specs.length === 0) return setParamEdit(null);
     const ok = store.getState().setComponentParamsBatch([
       {
         id: paramEdit.id,
-        params,
-        ...(paramEdit.name !== undefined ? { label: paramEdit.name } : {}),
+        params: live,
+        ...(paramEdit.name !== undefined && !powered ? { label: paramEdit.name } : {}),
       },
-      ...paramEditBatchSpecs(paramEdit),
+      ...specs,
     ]);
     if (ok) setParamEdit(null);
     else flash();
@@ -4495,6 +5021,7 @@ export function CircuitWorkbench() {
             run: () => void fileImport(),
           },
           { id: 'package', label: 'Package as chip...', run: () => setPackaging(true) },
+          { id: 'build', label: 'Build circuit...', run: () => setBuilding({}) },
         ],
       },
       {
@@ -4526,9 +5053,15 @@ export function CircuitWorkbench() {
             run: () => st().deleteSelection(undefined, resolveWireEnd),
           },
           {
+            id: 'cut',
+            label: 'Cut',
+            shortcut: SHORTCUTS.cutClipboard,
+            disabled: selection.size === 0,
+            run: () => cutSelection(),
+          },
+          {
             id: 'deleteHeal',
             label: 'Delete and reconnect',
-            shortcut: SHORTCUTS.deleteHeal,
             // Offered only where healing is possible: everywhere else it was
             // a plain Delete wearing a second name, which on the touch action
             // bar meant two identical-looking buttons.
@@ -4780,6 +5313,7 @@ export function CircuitWorkbench() {
               onClick={onCanvasClick}
             />
             {error && <div className="circuit-error">{error}</div>}
+            {blockedNotice}
           </div>
         </div>
         {selectedComponent && (
@@ -4896,14 +5430,46 @@ export function CircuitWorkbench() {
                 Select
               </ToolBtn>
 
-              <ToolBtn
-                icon="lasso"
-                active={tool.kind === 'lasso'}
-                title={`Lasso: drag a marquee to select${key('L')}`}
-                onClick={() => store.getState().setTool({ kind: 'lasso' })}
-              >
-                Lasso
-              </ToolBtn>
+              <div className="tool-split" ref={lassoMenuRef}>
+                <ToolBtn
+                  className="tool-split__btn"
+                  icon={lassoFreehand ? 'lasso' : 'marquee'}
+                  menu
+                  expanded={lassoMenuOpen}
+                  active={tool.kind === 'lasso'}
+                  title={
+                    lassoFreehand
+                      ? `Lasso: draw a shape around what to select${key('L')}`
+                      : `Marquee: drag a box around what to select${key('L')}`
+                  }
+                  onClick={() => setLassoMenuOpen((v) => !v)}
+                >
+                  {lassoFreehand ? 'Lasso' : 'Marquee'}
+                </ToolBtn>
+                {lassoMenuOpen && (
+                  <div className="menubar__popup tool-split__popup" role="menu">
+                    {SELECT_SHAPES.map(([freehand, label]) => (
+                      <button
+                        type="button"
+                        key={label}
+                        className="menubar__item"
+                        role="menuitemradio"
+                        aria-checked={lassoFreehand === freehand}
+                        onClick={() => {
+                          setLassoFreehand(freehand);
+                          setLassoMenuOpen(false);
+                          store.getState().setTool({ kind: 'lasso' });
+                        }}
+                      >
+                        <span className="menubar__check" aria-hidden="true">
+                          {lassoFreehand === freehand ? '✓' : ''}
+                        </span>
+                        <span className="menubar__label">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* A wire in flight leaves a ghost that only Esc or a press
                   outside the canvas clears, and a phone has neither to hand.
                   The wire button becomes that wire's own cancel while it is
@@ -4961,6 +5527,13 @@ export function CircuitWorkbench() {
                 Bubble push
               </ToolBtn>
               <ToolBtn
+                icon="build"
+                title="Build a circuit from a Boolean expression or a truth table"
+                onClick={() => setBuilding({})}
+              >
+                Build circuit…
+              </ToolBtn>
+              <ToolBtn
                 icon="analyze"
                 active={analyzeOpen}
                 title="Truth table + K-map drawer for the board"
@@ -5007,7 +5580,9 @@ export function CircuitWorkbench() {
             <div className="tool-group">
               <ToolBtn
                 icon="timing"
+                labelled
                 active={timing.mode === 'datasheet'}
+                title="Switch between unit delays and the parts DB's min/typ/max"
                 onClick={() =>
                   store
                     .getState()
@@ -5101,7 +5676,17 @@ export function CircuitWorkbench() {
             const r = paletteResizeRef.current;
             if (!r) return;
             const max = Math.max(PALETTE_MIN_W, paletteFitWidth());
-            setPaletteW(Math.min(max, Math.max(PALETTE_MIN_W, r.startW + (e.clientX - r.startX))));
+            paletteDragW.current = Math.min(
+              max,
+              Math.max(PALETTE_MIN_W, r.startW + (e.clientX - r.startX)),
+            );
+            // Through a frame rather than straight to state, so the pane
+            // tracks the pointer instead of waiting on React.
+            if (paletteDragFrame.current === null)
+              paletteDragFrame.current = requestAnimationFrame(() => {
+                paletteDragFrame.current = null;
+                setPaletteW(paletteDragW.current);
+              });
           }}
           onPointerUp={() => {
             paletteResizeRef.current = null;
@@ -5119,6 +5704,7 @@ export function CircuitWorkbench() {
             onClick={onCanvasClick}
             onDoubleClick={onCanvasDoubleClick}
           />
+          {blockedNotice}
           {renaming && (
             <input
               key={renaming.id}
@@ -5329,8 +5915,24 @@ export function CircuitWorkbench() {
           {paramEdit && (
             <div
               ref={paramEditBoxRef}
-              className="circuit-param-edit"
+              className={`circuit-param-edit${paramShake ? ' circuit-param-edit--shake' : ''}`}
               style={{ left: paramEdit.screen.x, top: paramEdit.screen.y }}
+              // A disabled control fires no events of its own, so the box
+              // catches the press and answers for whichever greyed field the
+              // pointer actually landed on.
+              onPointerDownCapture={(e) => {
+                const el = (e.target as HTMLElement).closest(
+                  'input, select, textarea',
+                ) as HTMLInputElement | null;
+                if (!el?.disabled) return;
+                reportBlocked('powered-param', [paramEdit.id]);
+                setParamShake(true);
+                if (paramShakeTimerRef.current !== null) clearTimeout(paramShakeTimerRef.current);
+                paramShakeTimerRef.current = setTimeout(() => {
+                  setParamShake(false);
+                  paramShakeTimerRef.current = null;
+                }, 240);
+              }}
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === 'Enter') commitParamEdit();
@@ -5341,6 +5943,7 @@ export function CircuitWorkbench() {
                 <label>
                   name
                   <textarea
+                    disabled={powered}
                     autoFocus
                     rows={paramEdit.name.split('\n').length}
                     className={`circuit-param-edit__name${
@@ -5377,7 +5980,7 @@ export function CircuitWorkbench() {
                       const width = Number(e.target.value);
                       setParamEdit((cur) => (cur ? { ...cur, width, flash: false } : cur));
                     }}
-                    {...paramEditFocusHandlers(setParamEdit, 'width')}
+                    {...paramEditFocusHandlers(setParamEdit, 'width', paramEdit.kind)}
                   />
                   bits
                 </label>
@@ -5393,7 +5996,7 @@ export function CircuitWorkbench() {
                       const initial = Number(e.target.value);
                       setParamEdit((cur) => (cur ? { ...cur, initial, flash: false } : cur));
                     }}
-                    {...paramEditFocusHandlers(setParamEdit, 'initial')}
+                    {...paramEditFocusHandlers(setParamEdit, 'initial', paramEdit.kind)}
                   />
                 </label>
               )}
@@ -5409,7 +6012,7 @@ export function CircuitWorkbench() {
                       const valueText = e.target.value;
                       setParamEdit((cur) => (cur ? { ...cur, valueText, flash: false } : cur));
                     }}
-                    {...paramEditFocusHandlers(setParamEdit, 'value')}
+                    {...paramEditFocusHandlers(setParamEdit, 'value', paramEdit.kind)}
                   />
                 </label>
               )}
@@ -5429,7 +6032,7 @@ export function CircuitWorkbench() {
                           const inputs = Number(e.target.value);
                           setParamEdit((cur) => (cur ? { ...cur, inputs, flash: false } : cur));
                         }}
-                        {...paramEditFocusHandlers(setParamEdit, 'addressBits')}
+                        {...paramEditFocusHandlers(setParamEdit, 'addressBits', paramEdit.kind)}
                       />
                     </label>
                   )}
@@ -5443,7 +6046,7 @@ export function CircuitWorkbench() {
                           const hasEnable = e.target.checked;
                           setParamEdit((cur) => (cur ? { ...cur, hasEnable } : cur));
                         }}
-                        {...paramEditFocusHandlers(setParamEdit, 'hasEnable')}
+                        {...paramEditFocusHandlers(setParamEdit, 'hasEnable', paramEdit.kind)}
                       />
                     </label>
                   )}
@@ -5463,7 +6066,7 @@ export function CircuitWorkbench() {
                       const inputs = Number(e.target.value);
                       setParamEdit((cur) => (cur ? { ...cur, inputs, flash: false } : cur));
                     }}
-                    {...paramEditFocusHandlers(setParamEdit, 'addressBits')}
+                    {...paramEditFocusHandlers(setParamEdit, 'addressBits', paramEdit.kind)}
                   />
                 </label>
               )}
@@ -5483,7 +6086,7 @@ export function CircuitWorkbench() {
                           const inputs = Number(e.target.value);
                           setParamEdit((cur) => (cur ? { ...cur, inputs, flash: false } : cur));
                         }}
-                        {...paramEditFocusHandlers(setParamEdit, 'selectBits')}
+                        {...paramEditFocusHandlers(setParamEdit, 'selectBits', paramEdit.kind)}
                       />
                     </label>
                   )}
@@ -5497,7 +6100,7 @@ export function CircuitWorkbench() {
                           const hasEnable = e.target.checked;
                           setParamEdit((cur) => (cur ? { ...cur, hasEnable } : cur));
                         }}
-                        {...paramEditFocusHandlers(setParamEdit, 'hasEnable')}
+                        {...paramEditFocusHandlers(setParamEdit, 'hasEnable', paramEdit.kind)}
                       />
                     </label>
                   )}
@@ -5510,10 +6113,92 @@ export function CircuitWorkbench() {
                           const selSide = e.target.value === 'top' ? 'top' : 'bottom';
                           setParamEdit((cur) => (cur ? { ...cur, selSide } : cur));
                         }}
-                        {...paramEditFocusHandlers(setParamEdit, 'selSide')}
+                        {...paramEditFocusHandlers(setParamEdit, 'selSide', paramEdit.kind)}
                       >
                         <option value="bottom">bottom</option>
                         <option value="top">top</option>
+                      </select>
+                    </label>
+                  )}
+                </>
+              )}
+              {paramEdit.kind === 'led' && (
+                <>
+                  {paramEditFieldVisible(paramEdit, 'color') && (
+                    <label>
+                      colour
+                      <select
+                        className="select"
+                        value={paramEdit.color ?? 'red'}
+                        onChange={(e) => {
+                          const color = e.target.value as LedColor;
+                          setParamEdit((cur) => (cur ? { ...cur, color, flash: false } : cur));
+                        }}
+                        {...paramEditFocusHandlers(setParamEdit, 'color', paramEdit.kind)}
+                      >
+                        {LED_COLORS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {paramEditFieldVisible(paramEdit, 'shape') && (
+                    <label>
+                      shape
+                      <select
+                        className="select"
+                        value={paramEdit.shape ?? 'symbol'}
+                        onChange={(e) => {
+                          const shape = e.target.value as LedShape;
+                          setParamEdit((cur) => (cur ? { ...cur, shape, flash: false } : cur));
+                        }}
+                        {...paramEditFocusHandlers(setParamEdit, 'shape', paramEdit.kind)}
+                      >
+                        <option value="symbol">diode</option>
+                        <option value="round">round</option>
+                      </select>
+                    </label>
+                  )}
+                </>
+              )}
+              {paramEdit.kind === 'sevenseg' && (
+                <>
+                  {paramEditFieldVisible(paramEdit, 'color') && (
+                    <label>
+                      colour
+                      <select
+                        className="select"
+                        value={paramEdit.color ?? 'red'}
+                        onChange={(e) => {
+                          const color = e.target.value as LedColor;
+                          setParamEdit((cur) => (cur ? { ...cur, color, flash: false } : cur));
+                        }}
+                        {...paramEditFocusHandlers(setParamEdit, 'color', paramEdit.kind)}
+                      >
+                        {LED_COLORS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {paramEditFieldVisible(paramEdit, 'common') && (
+                    <label>
+                      common
+                      <select
+                        className="select"
+                        value={paramEdit.common ?? 'cathode'}
+                        onChange={(e) => {
+                          const common = e.target.value === 'anode' ? 'anode' : 'cathode';
+                          setParamEdit((cur) => (cur ? { ...cur, common, flash: false } : cur));
+                        }}
+                        {...paramEditFocusHandlers(setParamEdit, 'common', paramEdit.kind)}
+                      >
+                        <option value="cathode">cathode</option>
+                        <option value="anode">anode</option>
                       </select>
                     </label>
                   )}
@@ -5553,7 +6238,7 @@ export function CircuitWorkbench() {
                         const inputs = Number(e.target.value);
                         setParamEdit((cur) => (cur ? { ...cur, inputs, flash: false } : cur));
                       }}
-                      {...paramEditFocusHandlers(setParamEdit, 'inputs')}
+                      {...paramEditFocusHandlers(setParamEdit, 'inputs', paramEdit.kind)}
                     />
                   </label>
                 )}
@@ -5576,6 +6261,7 @@ export function CircuitWorkbench() {
                         {grp.label}: single bus pin
                         <input
                           type="checkbox"
+                          disabled={powered}
                           checked={(paramEdit.pinView ?? {})[grp.key] === 'collapsed'}
                           onChange={(e) => {
                             const state = e.target.checked ? 'collapsed' : 'expanded';
@@ -5597,6 +6283,21 @@ export function CircuitWorkbench() {
 
       <WaveformPanel />
 
+      {building && (
+        <BuildCircuitDialog
+          {...(building.expression ? { initialExpression: building.expression } : {})}
+          onBuild={(netlist, name) => {
+            const group = store
+              .getState()
+              .commitSynthesis(circuitFromNetlist(netlist, freeSpot()), name);
+            // The new circuit lands on a free spot, which is off screen as soon
+            // as the board has anything on it.
+            if (group) store.getState().requestFit();
+            setBuilding(null);
+          }}
+          onClose={() => setBuilding(null)}
+        />
+      )}
       {packaging && (
         <PackageDialog
           source={store.getState().activeCircuit()}
@@ -5607,12 +6308,6 @@ export function CircuitWorkbench() {
       )}
       <LabelConflictDialog />
       <CloseTabDialog />
-      {precisePicker && (
-        <SmartConnectPicker
-          targetId={precisePicker.targetId}
-          onClose={() => setPrecisePicker(null)}
-        />
-      )}
     </div>
   );
 }
@@ -5625,21 +6320,38 @@ function ToolBtn(props: {
   /** Also carried by the mobile quick panel; CSS hides this copy on compact
    *  so the same control is not offered twice. */
   quick?: boolean;
+  /** Opens a popup rather than acting, so `active` is styling, not a toggle. */
+  menu?: boolean;
+  /** Keeps the text beside the icon on a toolbar that is otherwise icon-only:
+   *  for a button whose text is a current value, not its own name. */
+  labelled?: boolean;
+  expanded?: boolean;
+  className?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      className="tool-btn"
+      className={['tool-btn', props.labelled ? 'tool-btn--labelled' : '', props.className ?? '']
+        .filter(Boolean)
+        .join(' ')}
       data-quick={props.quick ? '' : undefined}
-      aria-pressed={props.active}
+      data-active={props.menu && props.active ? '' : undefined}
+      aria-pressed={props.menu ? undefined : props.active}
+      aria-haspopup={props.menu ? 'menu' : undefined}
+      aria-expanded={props.menu ? props.expanded : undefined}
       disabled={props.disabled}
       title={props.title}
       onClick={props.onClick}
     >
       {props.icon && <ToolIcon name={props.icon} />}
       <span className="tool-btn__label">{props.children}</span>
+      {props.menu && (
+        <span className="tool-btn__caret" aria-hidden="true">
+          ▾
+        </span>
+      )}
     </button>
   );
 }

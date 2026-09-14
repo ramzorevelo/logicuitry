@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "d-latch",
   "name": "D latch",
   "components": [
@@ -180,7 +180,7 @@
       },
       "points": [
         {
-          "x": 144,
+          "x": 136,
           "y": 272
         }
       ]
@@ -322,7 +322,7 @@
     {
       "id": "j1",
       "pos": {
-        "x": 144,
+        "x": 136,
         "y": 128
       }
     },

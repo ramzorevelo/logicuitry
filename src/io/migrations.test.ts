@@ -110,6 +110,27 @@ describe('board v3 -> v4, chip v2 -> v3 (bus label position)', () => {
     expect((out['wires'] as { busLabelT: number }[])[0]!.busLabelT).toBe(0.25);
   });
 
+  it('retires an amber LED to yellow, leaving other colours alone', () => {
+    const out = migrate({
+      ...structuredClone(boardV1),
+      formatVersion: 5,
+      components: [
+        { id: 'd1', kind: 'led', pos: { x: 0, y: 0 }, params: { color: 'amber', shape: 'round' } },
+        { id: 'd2', kind: 'led', pos: { x: 8, y: 0 }, params: { color: 'green' } },
+        { id: 'd3', kind: 'led', pos: { x: 16, y: 0 } },
+      ],
+    });
+    const colours = (out['components'] as { params?: { color?: string } }[]).map(
+      (c) => c.params?.color,
+    );
+    expect(colours).toEqual(['yellow', 'green', undefined]);
+    // The rest of the params ride through untouched.
+    expect((out['components'] as { params?: { shape?: string } }[])[0]!.params?.shape).toBe(
+      'round',
+    );
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
   it('rejects a label position outside the wire', () => {
     const bad = {
       ...structuredClone(boardV1),
@@ -124,7 +145,7 @@ describe('pre-rename format token', () => {
   it('loads a file written before the app was renamed', () => {
     const doc = migrate({ format: 'logiclab.board', formatVersion: 4, components: [], wires: [] });
     expect(doc['format']).toBe('lcir.board');
-    expect(doc['formatVersion']).toBe(5);
+    expect(doc['formatVersion']).toBe(CURRENT_VERSION['lcir.board']);
   });
 
   it('loads a file written under the ldw token too', () => {
@@ -132,7 +153,7 @@ describe('pre-rename format token', () => {
     // a semester of saved work keeps opening whatever it was written under.
     const doc = migrate({ format: 'ldw.board', formatVersion: 4, components: [], wires: [] });
     expect(doc['format']).toBe('lcir.board');
-    expect(doc['formatVersion']).toBe(5);
+    expect(doc['formatVersion']).toBe(CURRENT_VERSION['lcir.board']);
   });
 
   it('rewrites the token before running the version migrations', () => {
@@ -142,7 +163,7 @@ describe('pre-rename format token', () => {
       components: [{ id: 'i1', kind: 'input', pos: { x: 0, y: 0 } }],
     });
     expect(doc['format']).toBe('lcir.chip');
-    expect(doc['formatVersion']).toBe(3);
+    expect(doc['formatVersion']).toBe(CURRENT_VERSION['lcir.chip']);
     // The v1 -> v2 port rename still ran, so the token rewrite did not skip it.
     expect((doc['components'] as { kind: string }[])[0]!.kind).toBe('inport');
   });

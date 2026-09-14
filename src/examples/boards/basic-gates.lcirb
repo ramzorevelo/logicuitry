@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "basic-gates",
   "name": "Basic gates",
   "components": [
@@ -59,7 +59,7 @@
       "kind": "not",
       "pos": {
         "x": 160,
-        "y": -24
+        "y": -16
       }
     },
     {
@@ -484,7 +484,7 @@
       "points": []
     },
     {
-      "id": "w6",
+      "id": "w5",
       "a": {
         "kind": "pin",
         "component": "g_or",
@@ -498,7 +498,7 @@
       "points": []
     },
     {
-      "id": "w7",
+      "id": "w6",
       "a": {
         "kind": "pin",
         "component": "g_xor",
@@ -526,7 +526,7 @@
       "points": []
     },
     {
-      "id": "w5",
+      "id": "w7",
       "a": {
         "kind": "pin",
         "component": "g_not",

@@ -58,3 +58,16 @@ export function cardFlip(progress: number): Flip {
   const p = progress <= 0 ? 0 : progress >= 1 ? 1 : progress;
   return { scaleX: Math.abs(1 - 2 * p), face: p < 0.5 ? 'front' : 'back' };
 }
+
+/** Opacity of a two-beat warn pulse, for feedback on a refused gesture.
+ *  Returns 0 once `duration` has elapsed, which is also the caller's signal to
+ *  stop repainting. Pure, so the pulse shape is testable without a canvas. */
+export function warnPulse(elapsedMs: number, duration = 420, beats = 2): number {
+  if (elapsedMs < 0 || elapsedMs >= duration) return 0;
+  const phase = (elapsedMs / duration) * beats;
+  // Each beat rises and falls; the envelope fades so the last beat is softer
+  // than the first and the pulse reads as settling rather than stopping dead.
+  const withinBeat = phase - Math.floor(phase);
+  const envelope = 1 - elapsedMs / duration;
+  return Math.sin(withinBeat * Math.PI) * envelope;
+}
