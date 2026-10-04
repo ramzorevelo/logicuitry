@@ -101,32 +101,9 @@ h3 {
   border-color: var(--accent);
 }
 
-/* Theme picker: same chrome as a mode button, opening the app's own popup so
-   the highlight is --accent-fill like every other menu. */
 .theme-picker {
-  position: relative;
-  display: inline-flex;
-}
-
-.theme-picker__button {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-unit);
-  padding: calc(var(--space-unit) + 1px) calc(var(--space-unit) * 2 + 1px);
-  font-family: inherit;
-  font-size: var(--text-secondary);
-  color: var(--ink);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-/* Right-aligned: the picker sits at the end of the bar, so a popup hung from
-   its left edge would run off the window. */
-.theme-picker__popup {
-  left: auto;
-  right: 0;
-  min-width: 160px;
 }
 
 /* Workbench switcher */

@@ -32,7 +32,7 @@ type Status = 'idle' | 'sent' | 'copied' | 'failed' | 'opened' | 'openFailed' | 
  *  the chrome is not a workbench, and "I do not know" is a real answer that
  *  must not be forced into a wrong one. */
 const WHERE_OPTIONS = [
-  { id: 'numbers', label: 'Numbers' },
+  { id: 'numbers', label: 'Numbers & Logic' },
   { id: 'circuit', label: 'Circuit' },
   { id: 'devicelab', label: 'Device Lab' },
   { id: 'chrome', label: 'Menus, dialogs or the app itself' },

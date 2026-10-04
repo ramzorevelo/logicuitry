@@ -3,11 +3,12 @@
 
 import { useState } from 'react';
 import { useModalKeys } from '../modalKeys';
+import { Toggle } from '../components/Toggle';
 import {
   LED_COLORS,
   LED_SHAPES,
-  SELECTABLE_THEMES,
   applyTheme,
+  themeInfo,
   type LedColor,
   type LedShape,
   type ThemeName,
@@ -58,25 +59,17 @@ export function SettingsDialog({ onClose }: Props) {
         )}
         {check('waveformArrows', 'Show cause arrows in the waveform panel')}
         {check('hideToolbarNames', 'Hide tool names on the toolbar')}
-        <label className="settings-row">
-          <select
-            value={prefs.defaultTheme}
-            onChange={(e) => {
-              const next = e.target.value as ThemeName;
+        <div className="settings-row">
+          <Toggle
+            checked={themeInfo(prefs.defaultTheme).appearance === 'dark'}
+            label="Dark theme"
+            onChange={(dark) => {
+              const next: ThemeName = dark ? 'dark' : 'light';
               setPref('defaultTheme', next);
               applyTheme(next);
             }}
-          >
-            {SELECTABLE_THEMES.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <span className="settings-row__text">
-            <span>Theme</span>
-          </span>
-        </label>
+          />
+        </div>
         <label className="settings-row">
           <input
             type="number"
@@ -153,6 +146,19 @@ export function SettingsDialog({ onClose }: Props) {
             <span>Shape the selection tool starts with</span>
           </span>
         </label>
+        <label className="settings-row">
+          <select
+            value={prefs.kmapMsbSide}
+            onChange={(e) => setPref('kmapMsbSide', e.target.value as Prefs['kmapMsbSide'])}
+          >
+            <option value="top">Across the top</option>
+            <option value="side">Down the side</option>
+          </select>
+          <span className="settings-row__text">
+            <span>Where a K-map puts the first input</span>
+          </span>
+        </label>
+        {check('kmapCellNumbers', 'Number the cells of a K-map')}
         {check('keepSwitchesAcrossPower', 'Keep switch positions across a power cycle')}
         {check('autosave', 'Autosave the board as you work')}
         {check('restoreLastBoard', 'Reopen the last board at launch')}

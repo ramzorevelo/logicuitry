@@ -1,7 +1,9 @@
 import type { ConvertDir, Interpretation, Operator } from '../../core/numkit/types';
 import './numbers.css';
+import { Toggle } from '../components/Toggle';
 import { ConvertTab, FAMILIES } from './ConvertTab';
 import { ComputeTab, OPS } from './ComputeTab';
+import { AlgebraTab } from './AlgebraTab';
 import {
   offersHideAnswers,
   useNumbersStore,
@@ -14,6 +16,7 @@ import { useCompact } from '../compact';
 const TABS: { id: NumbersTab; label: string }[] = [
   { id: 'convert', label: 'Convert' },
   { id: 'compute', label: 'Compute' },
+  { id: 'algebra', label: 'Algebra' },
 ];
 
 export function NumbersWorkbench() {
@@ -67,50 +70,53 @@ export function NumbersWorkbench() {
             </div>
           )}
 
-          <label className="field">
-            width
-            <select
-              className="select"
-              value={width}
-              onChange={(e) => setWidth(Number(e.target.value) as BitWidth)}
-            >
-              {WIDTHS.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {compact ? (
+          {tab !== 'algebra' && (
             <label className="field">
-              sign
+              width
               <select
                 className="select"
-                value={interp}
-                onChange={(e) => setInterp(e.target.value as Interpretation)}
+                value={width}
+                onChange={(e) => setWidth(Number(e.target.value) as BitWidth)}
               >
-                <option value="unsigned">unsigned</option>
-                <option value="twos">two&apos;s</option>
+                {WIDTHS.map((w) => (
+                  <option key={w} value={w}>
+                    {w}
+                  </option>
+                ))}
               </select>
             </label>
-          ) : (
-            <div className="segmented">
-              {(['unsigned', 'twos'] as Interpretation[]).map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-pressed={interp === i}
-                  onClick={() => setInterp(i)}
-                >
-                  {i === 'twos' ? "two's" : 'unsigned'}
-                </button>
-              ))}
-            </div>
           )}
+
+          {tab !== 'algebra' &&
+            (compact ? (
+              <label className="field">
+                sign
+                <select
+                  className="select"
+                  value={interp}
+                  onChange={(e) => setInterp(e.target.value as Interpretation)}
+                >
+                  <option value="unsigned">unsigned</option>
+                  <option value="twos">two&apos;s</option>
+                </select>
+              </label>
+            ) : (
+              <div className="segmented">
+                {(['unsigned', 'twos'] as Interpretation[]).map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-pressed={interp === i}
+                    onClick={() => setInterp(i)}
+                  >
+                    {i === 'twos' ? "two's" : 'unsigned'}
+                  </button>
+                ))}
+              </div>
+            ))}
         </div>
 
-        {tab === 'convert' ? (
+        {tab === 'algebra' ? null : tab === 'convert' ? (
           <>
             <label className="field">
               direction
@@ -131,9 +137,7 @@ export function NumbersWorkbench() {
               </select>
             </label>
             {offersHideAnswers({ hideAnswers, stepIndex, answersShown }) ? (
-              <button type="button" aria-pressed={hideAnswers} onClick={toggleHideAnswers}>
-                Hide answers
-              </button>
+              <Toggle checked={hideAnswers} onChange={toggleHideAnswers} label="Hide answers" />
             ) : null}
             {/* Keys, so only where there is a keyboard: on a phone this named
                 three shortcuts that do not exist, and the Convert tab shows
@@ -159,7 +163,7 @@ export function NumbersWorkbench() {
       </div>
 
       <div className="numbers-workbench__body">
-        {tab === 'convert' ? <ConvertTab /> : <ComputeTab />}
+        {tab === 'convert' ? <ConvertTab /> : tab === 'compute' ? <ComputeTab /> : <AlgebraTab />}
       </div>
     </div>
   );

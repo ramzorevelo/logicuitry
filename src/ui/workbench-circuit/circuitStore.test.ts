@@ -2359,6 +2359,55 @@ describe('moveFreeEnd drop materialization (M5.1)', () => {
   });
 });
 
+describe('undo inside bubble mode', () => {
+  it('keeps the board normalized, so bubbles stay draggable after undoing the entry step', () => {
+    useCircuitStore.setState((st) => ({
+      mode: 'edit' as const,
+      powered: false,
+      board: {
+        ...st.board,
+        components: [
+          { id: 'in1', kind: 'inport', pos: { x: 0, y: 0 }, label: 'in1' },
+          { id: 'in2', kind: 'inport', pos: { x: 0, y: 8 }, label: 'in2' },
+          { id: 'g1', kind: 'nand', pos: { x: 8, y: 0 } },
+          { id: 'out1', kind: 'outport', pos: { x: 24, y: 0 }, label: 'out1' },
+        ],
+        wires: [
+          {
+            id: 'w1',
+            a: { kind: 'pin' as const, component: 'in1', pin: 'y' },
+            b: { kind: 'pin' as const, component: 'g1', pin: 'a' },
+            points: [],
+          },
+          {
+            id: 'w2',
+            a: { kind: 'pin' as const, component: 'in2', pin: 'y' },
+            b: { kind: 'pin' as const, component: 'g1', pin: 'b' },
+            points: [],
+          },
+          {
+            id: 'w3',
+            a: { kind: 'pin' as const, component: 'g1', pin: 'y' },
+            b: { kind: 'pin' as const, component: 'out1', pin: 'a' },
+            points: [],
+          },
+        ],
+        junctions: [],
+      },
+    }));
+    useCircuitStore.getState().enterBubbleMode();
+    expect(useCircuitStore.getState().board.components.find((c) => c.id === 'g1')!.kind).toBe(
+      'and',
+    );
+    useCircuitStore.getState().undo();
+    const g1 = useCircuitStore.getState().board.components.find((c) => c.id === 'g1')!;
+    expect(useCircuitStore.getState().mode).toBe('bubble');
+    expect(g1.kind).toBe('and');
+    expect(g1.params?.['outputBubble']).toBe(true);
+    useCircuitStore.getState().exitBubbleMode();
+  });
+});
+
 describe('bubble absorb via store actions (keyboard parity)', () => {
   it('previews and commits absorbInverter with no pointer events', () => {
     useCircuitStore.setState((st) => ({

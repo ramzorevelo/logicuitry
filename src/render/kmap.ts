@@ -64,6 +64,8 @@ export interface KmapGroupDraw {
   color: number;
   /** Stable index used to inset nested outlines so they stay distinguishable. */
   inset?: number;
+  /** A reveal outline drawn solid (an essential prime) instead of dashed. */
+  solid?: boolean;
 }
 
 export interface KmapDrawOpts {
@@ -80,6 +82,32 @@ export interface KmapDrawOpts {
   cursor?: number | null;
   /** Indices into `groups` drawn emphasized (hovered/selected). */
   emphasis?: ReadonlySet<number>;
+  /** Indices into `groups` drawn in the warn colour (a Check finding). */
+  flagged?: ReadonlySet<number>;
+  /** Minterm index in each cell corner. */
+  cellNumbers?: boolean;
+  /** Which value the map is grouping; its cells read as the answer. */
+  polarity?: 'ones' | 'zeros';
+}
+
+export interface CornerPlan {
+  nameY: number | null;
+  colVarsY: number;
+}
+
+/** Corner-cell text placement. The output name gets its own line above the
+ *  column variables, and is dropped when it would not fit the map's width, so
+ *  the two never share a band. */
+export function cornerPlan(
+  m: KmapMetrics,
+  labelPx: number,
+  nameWidth: number | null,
+  mapWidth: number,
+): CornerPlan {
+  const restingY = m.labelH * 0.35;
+  if (nameWidth === null || nameWidth > mapWidth - 4) return { nameY: null, colVarsY: restingY };
+  const nameY = labelPx * 0.5;
+  return { nameY, colVarsY: Math.max(restingY, nameY + labelPx * 1.1) };
 }
 
 function codeLabel(code: number, bits: number): string {
@@ -262,14 +290,20 @@ export function drawKmap(
   ctx.stroke();
   ctx.font = `${labelPx}px ${theme.fonts.mono}`;
   ctx.textBaseline = 'middle';
-  if (opts.outName) {
+  const plan = cornerPlan(
+    m,
+    labelPx,
+    opts.outName ? ctx.measureText(opts.outName).width : null,
+    layout.width,
+  );
+  if (opts.outName && plan.nameY !== null) {
     ctx.fillStyle = theme.colors.ink;
     ctx.textAlign = 'left';
-    ctx.fillText(opts.outName, layout.x0 + 2, layout.y0 + m.labelH * 0.15);
+    ctx.fillText(opts.outName, layout.x0 + 2, layout.y0 + plan.nameY);
   }
   ctx.fillStyle = theme.colors.muted;
   ctx.textAlign = 'right';
-  ctx.fillText(g.colVars.map(name).join(''), gx - 4, layout.y0 + m.labelH * 0.35);
+  ctx.fillText(g.colVars.map(name).join(''), gx - 4, layout.y0 + plan.colVarsY);
   ctx.textAlign = 'left';
   ctx.fillText(g.rowVars.map(name).join(''), layout.x0 + 2, layout.y0 + m.labelH * 0.82);
 
@@ -321,12 +355,21 @@ export function drawKmap(
       ctx.strokeStyle = theme.colors.line;
       ctx.lineWidth = theme.strokes.min;
       ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-      ctx.fillStyle = cell.value === 1 ? theme.colors.ink : theme.colors.muted;
+      const answer = opts.polarity === 'zeros' ? 0 : 1;
+      ctx.fillStyle = cell.value === answer ? theme.colors.ink : theme.colors.muted;
       ctx.font = `${fontPx}px ${theme.fonts.mono}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const glyph = cell.value === 'x' ? 'X' : cell.value === null ? '–' : String(cell.value);
       ctx.fillText(glyph, rect.x + rect.w / 2, rect.y + rect.h / 2);
+      if (opts.cellNumbers) {
+        ctx.fillStyle = theme.colors.muted;
+        ctx.font = `${Math.max(theme.canvasTextMin, Math.round(m.cell * 0.2))}px ${theme.fonts.mono}`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(String(cell.minterm), rect.x + 3, rect.y + 2);
+        ctx.textBaseline = 'middle';
+      }
     }
   }
 
@@ -347,7 +390,10 @@ export function drawKmap(
   // selected groups get a heavier stroke plus a fill tint.
   (opts.groups ?? []).forEach((grp, i) => {
     const inset = 4 + ((grp.inset ?? i) % 3) * 3;
-    const color = theme.colors.kmapGroups[grp.color % 8] ?? theme.colors.accent;
+    const flagged = opts.flagged?.has(i) ?? false;
+    const color = flagged
+      ? theme.colors.warn
+      : (theme.colors.kmapGroups[grp.color % 8] ?? theme.colors.accent);
     const emphasized = opts.emphasis?.has(i) ?? false;
     const blocks = groupBlocks(layout, grp.minterms, inset);
     if (emphasized) {
@@ -359,7 +405,7 @@ export function drawKmap(
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = emphasized ? theme.strokes.wire * 1.75 : theme.strokes.wire;
-    ctx.setLineDash(grp.style === 'reveal' ? [6, 4] : []);
+    ctx.setLineDash(grp.style === 'reveal' && !grp.solid ? [6, 4] : []);
     for (const block of blocks)
       strokeBlock(ctx, block.rect, theme.strokes.cornerRadius * 2, block.open);
     ctx.setLineDash([]);

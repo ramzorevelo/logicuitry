@@ -487,6 +487,36 @@
 .analyze-table__x {
   color: var(--muted);
 }
+.analyze-asbuilt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.analyze-asbuilt .boolexpr {
+  font-size: inherit;
+}
+.analyze-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.analyze-compare__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.analyze-compare p {
+  margin: 0;
+  font-size: 12px;
+}
+/* The verdict column carries the words; the token only reinforces them. */
+.analyze-compare__differs {
+  color: var(--warn);
+}
 .analyze-heatstrip {
   display: flex;
   flex-wrap: wrap;
@@ -528,6 +558,53 @@
   gap: 8px;
 }
 
+.analyze-reveal {
+  flex-wrap: wrap;
+}
+.analyze-refusal {
+  color: var(--warn);
+  font-size: 13px;
+}
+.analyze-check,
+.analyze-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.analyze-rules {
+  font-size: 12px;
+  color: var(--muted);
+}
+.analyze-rules summary {
+  cursor: pointer;
+}
+.analyze-rules ol {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+.analyze-typed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.analyze-typed__input {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.analyze-typed__error {
+  margin: 0;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+.analyze-cell {
+  font-family: var(--font-mono);
+  min-width: 1.6em;
+  cursor: pointer;
+}
 /* Label-conflict dialog (label sharing): one radio group per conflicting
    net, picked locally and committed together via Apply. */
 .label-conflict-dialog {

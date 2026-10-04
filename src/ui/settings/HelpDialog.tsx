@@ -48,11 +48,18 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'Numbers',
+    title: 'Numbers & Logic',
     rows: [
       { what: 'Next step', keys: 'Space or .', touch: 'Step' },
       { what: 'Reveal every step', keys: 'Enter', touch: 'Reveal' },
       { what: 'Start over', keys: 'R', touch: 'Reset' },
+      { what: 'Algebra: reveal the next hidden law', keys: 'Enter', touch: 'Reveal next' },
+      {
+        what: 'Algebra: list the laws for a term of the last line',
+        keys: 'Click it, click again for a smaller part',
+        touch: 'Tap it, tap again for a smaller part',
+      },
+      { what: 'Algebra: take back the last line', keys: 'Ctrl+Z', touch: 'Undo' },
     ],
   },
   {
@@ -129,6 +136,17 @@ const SECTIONS: Section[] = [
         keys: 'Ctrl+click on the drop',
         touch: 'Long press in the palette',
       },
+    ],
+  },
+  {
+    title: 'Circuit: Analyze',
+    rows: [
+      { what: 'Move the map cursor', keys: 'Arrow keys' },
+      { what: 'Grow a group of cells', keys: 'Shift+arrows' },
+      { what: 'Commit the group, or reveal the next stage', keys: 'Enter', touch: 'Reveal' },
+      { what: 'Mark a cell as a don’t-care', keys: 'X, or Alt+drag' },
+      { what: 'Remove a group', keys: 'Delete', touch: 'Long press the group' },
+      { what: 'Clear the group in progress, then close', keys: 'Esc' },
     ],
   },
   {

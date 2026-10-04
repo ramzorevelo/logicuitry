@@ -5,6 +5,44 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.4.0] - 2026-10-04
+
+### Added
+
+- An Algebra tab in Numbers & Logic: the table of Boolean laws with hide
+  drills, canonical forms (minterms, maxterms, Σm and ΠM), and Simplify, by
+  hand or as a worked derivation that cites a law on every line.
+- Analyze takes a typed function (Σ notation, an expression or a truth
+  table) as well as the board.
+- K-maps in product-of-sums as well as sum-of-products form.
+- A stepped reveal on the K-map (primes, essentials, minimum cover) and a
+  Check button that judges your circles without showing the answer.
+- A refused K-map circle now says which grouping rule it broke, and a
+  collapsible Grouping rules tip sits under the map.
+- Analyze shows each output's expression as built, and can compare two
+  outputs row by row.
+- View > Sub-expressions labels every gate output with the expression it
+  computes.
+- Build circuit can build NOR-only as well as NAND-only, and can minimise an
+  expression before building it.
+
+### Changed
+
+- The Numbers workbench is now called Numbers & Logic.
+- Laws are cited as a row and a name, the way the lesson writes them.
+- Theme is a light/dark switch in the top bar and in Settings.
+- Help lists the Algebra and Analyze gestures.
+
+### Fixed
+
+- Text fields and selects no longer show a grey widget fill in the dark
+  theme.
+- A NAND-only or NOR-only build of a three-input gate now builds the right
+  function.
+- Bubble push no longer refuses a board whose independent groups add up to
+  more than eight inputs.
+- Bubbles can be dragged again after an undo in bubble mode.
+
 ## [0.3.0] - 2026-09-12
 
 ### Added

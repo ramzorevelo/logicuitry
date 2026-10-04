@@ -6,17 +6,28 @@ import { SEGMENT_NAMES } from '../../core/sim/primitives/display';
 import { permuteTableInputs, type TruthTable } from '../../core/boolean/truthTable';
 import {
   buildKmap,
-  implicantTerm,
+  checkGroups,
+  diagnoseGroup,
+  essentialPrimes,
+  groupTerm,
   isLegalGroup,
-  minimalCover,
+  minimumCovers,
+  primeImplicants,
   MAX_KMAP_INPUTS,
   MIN_KMAP_INPUTS,
+  type GroupCheck,
   type ImplicantLiteral,
   type KmapAxisLayout,
+  type KmapPolarity,
 } from '../../core/boolean/kmap';
+import { sigmaOf } from '../../core/boolean/canonical';
 import { compressTable, type CompressedRow } from '../../core/boolean/compress';
 import { printExpr } from '../../core/boolean/expr';
-import { exprOfCover } from '../../core/boolean/synthesize';
+import { exprOfCover, exprOfPosCover } from '../../core/boolean/synthesize';
+import { compareOutputs } from '../../core/boolean/compare';
+import { gateExpressions } from '../../core/gates/subexpr';
+import { BoolExpr } from '../components/BoolExpr';
+import { Toggle } from '../components/Toggle';
 import {
   drawKmap,
   kmapCellAt,
@@ -30,6 +41,18 @@ import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { isFullyKnown } from '../../core/value/busValue';
 import { LONG_PRESS_MS, TAP_SLOP } from './touchGestures';
 import { useCoarsePointer } from '../pointerKind';
+import { usePrefsStore } from '../prefs';
+import { ToolIcon } from '../components/ToolIcon';
+import { cellKeyAction, nextCell } from './buildGrid';
+import { dontCaresOf, tableOfFunction, TYPED_OUTPUT_PATH, useTypedFunction } from './typedFunction';
+import { TypedEntry } from './TypedEntry';
+import {
+  dontCareDisagreements,
+  functionLine,
+  groupingRules,
+  refusalMessage,
+  summarizeForm,
+} from './kmapText';
 
 // Analyze drawer: per-output truth tables (reachable,
 // net-deduped inputs) plus an interactive K-map for 2-4 inputs. Circles and
@@ -109,22 +132,33 @@ const groupVar = (color: number): string => `var(--kmap-g${(color % 8) + 1})`;
 function Term({
   term,
   nameOf,
+  sum,
 }: {
   term: readonly ImplicantLiteral[];
   /** Board-backed display name; a path may carry a disambiguating id. */
   nameOf: (path: string) => string;
+  /** A POS factor: literals joined by +, parenthesised when there are several. */
+  sum?: boolean;
 }) {
-  if (term.length === 0) return <span>1</span>;
-  return (
-    <span>
-      {term.map((l, i) => (
-        <span key={i} style={l.negated ? { textDecoration: 'overline' } : undefined}>
-          {nameOf(l.var)}
-        </span>
-      ))}
+  if (term.length === 0) return <span>{sum ? '0' : '1'}</span>;
+  const lits = term.map((l, i) => (
+    <span key={i}>
+      {sum && i > 0 && ' + '}
+      <span style={l.negated ? { textDecoration: 'overline' } : undefined}>{nameOf(l.var)}</span>
     </span>
-  );
+  ));
+  return <span>{sum && term.length > 1 ? <>({lits})</> : lits}</span>;
 }
+
+const circleKey = (path: string, polarity: KmapPolarity): string =>
+  polarity === 'zeros' ? `${path}#0` : path;
+
+interface RevealGroup {
+  minterms: number[];
+  solid: boolean;
+}
+
+const REVEAL_LABELS = ['Reveal primes', 'Mark essentials', 'Show minimum cover', 'Hide reveal'];
 
 export function AnalyzeDrawer({
   onClose,
@@ -137,7 +171,9 @@ export function AnalyzeDrawer({
   const board = useCircuitStore((s) => s.board);
   const chipLib = useCircuitStore((s) => s.chipLib);
 
-  const analyses: {
+  const typed = useTypedFunction();
+  const usingTyped = typed.source === 'typed';
+  const boardAnalyses: {
     outputs: OutputAnalysis[];
     error: string | null;
   } = useMemo(() => {
@@ -150,7 +186,21 @@ export function AnalyzeDrawer({
     }
     // rev is the store's mutation counter; board identity may be stable.
   }, [rev, board, chipLib]);
+  // Each output's function as wired, before any simplification.
+  const asBuilt = useMemo(() => {
+    try {
+      return gateExpressions(board, chipLib).outputs;
+    } catch {
+      return new Map<string, never>();
+    }
+  }, [rev, board, chipLib]);
+  const typedOutputs = useMemo<OutputAnalysis[]>(
+    () => [{ outputPath: TYPED_OUTPUT_PATH, table: tableOfFunction(typed.fn), error: null }],
+    [typed.fn],
+  );
+  const analyses = usingTyped ? { outputs: typedOutputs, error: null } : boardAnalyses;
   const outputs = analyses.outputs;
+  const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   /** Terminal path -> what to call it on screen.
    *
@@ -208,6 +258,8 @@ export function AnalyzeDrawer({
 
   const [outputIndex, setOutputIndex] = useState(0);
   const outIdx = Math.max(0, Math.min(outputIndex, outputs.length - 1));
+  /** Compare panel: the two outputs lined up, or null while closed. */
+  const [comparing, setComparing] = useState<{ a: number; b: number } | null>(null);
   const current = outputs[outIdx];
   const outPath = current?.outputPath ?? '';
 
@@ -216,7 +268,13 @@ export function AnalyzeDrawer({
   const [circles, setCircles] = useState<Record<string, Circle[]>>({});
   // Don't-care minterms per output, drawer-local like circles (owner decision
   // 1): never persisted, dropped exactly when that output's circles drop.
-  const [dcSets, setDcSets] = useState<Record<string, Set<number>>>({});
+  const [boardDcSets, setDcSets] = useState<Record<string, Set<number>>>({});
+  // A typed function keeps its don't-cares in its own cells, so the Alt sweep
+  // and the typed entry edit one set.
+  const dcSets = useMemo(
+    () => (usingTyped ? { [TYPED_OUTPUT_PATH]: dontCaresOf(typed.fn) } : boardDcSets),
+    [usingTyped, typed.fn, boardDcSets],
+  );
   const [layoutSel, setLayoutSel] = useState<Record<string, number>>({});
   /** Drawer-local input column order per output (reorder buttons). */
   const [inputOrder, setInputOrder] = useState<Record<string, string[]>>({});
@@ -242,7 +300,21 @@ export function AnalyzeDrawer({
     [orderedPaths],
   );
   const table = useMemo(() => (current ? viewTableOf(current) : null), [current, viewTableOf]);
-  const [reveal, setReveal] = useState(false);
+  const kmapCellNumbers = usePrefsStore((st) => st.prefs.kmapCellNumbers);
+  const kmapRulesOpen = usePrefsStore((st) => st.prefs.kmapRulesOpen);
+  const setPref = usePrefsStore((st) => st.setPref);
+  const [polarity, setPolarity] = useState<KmapPolarity>('ones');
+  const otherPolarity: KmapPolarity = polarity === 'ones' ? 'zeros' : 'ones';
+  const myKey = circleKey(outPath, polarity);
+  /** Reveal stage per polarity: 0 off, 1 primes, 2 essentials, 3 minimum cover. */
+  const [revealStage, setRevealStage] = useState<Record<KmapPolarity, number>>({
+    ones: 0,
+    zeros: 0,
+  });
+  const [coverIdx, setCoverIdx] = useState(0);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [checkResult, setCheckResult] = useState<GroupCheck | null>(null);
+  const stage = revealStage[polarity];
   const [cursor, setCursor] = useState<number | null>(null);
   const [candidate, setCandidate] = useState<Set<number> | null>(null);
   const [illegalFlash, setIllegalFlash] = useState(false);
@@ -266,13 +338,15 @@ export function AnalyzeDrawer({
     sigsRef.current = sigs;
     setCircles((prev) => {
       const next: Record<string, Circle[]> = {};
-      for (const [path, groups] of Object.entries(prev)) {
+      for (const [key, groups] of Object.entries(prev)) {
+        const path = key.replace(/#0$/, '');
+        const pol: KmapPolarity = key.endsWith('#0') ? 'zeros' : 'ones';
         const o = outputs.find((x) => x.outputPath === path);
         const view = o ? viewTableOf(o) : null;
         if (!view) continue;
         if (changed.includes(path)) continue; // input set/order shifted: drop all
         // Same input indexing: silently drop only the now-illegal circles.
-        next[path] = groups.filter((g) => isLegalGroup(view, 0, g.minterms, dcSets[path]));
+        next[key] = groups.filter((g) => isLegalGroup(view, 0, g.minterms, dcSets[path], pol));
       }
       return next;
     });
@@ -299,15 +373,25 @@ export function AnalyzeDrawer({
       setCursor(null);
       setSelectedGroup(null);
       setHoverGroup(null);
+      setRefusal(null);
     }
   }, [outputs, viewTableOf]);
 
   const n = table?.inputPaths.length ?? 0;
   const kmapEligible = table !== null && n >= MIN_KMAP_INPUTS && n <= MAX_KMAP_INPUTS;
-  const myCircles = useMemo(() => circles[outPath] ?? [], [circles, outPath]);
+  const myCircles = useMemo(() => circles[myKey] ?? [], [circles, myKey]);
   const myDcs = useMemo(() => dcSets[outPath] ?? new Set<number>(), [dcSets, outPath]);
   const layouts = useMemo(() => (kmapEligible ? layoutOptions(n) : []), [kmapEligible, n]);
-  const layoutIdx = Math.min(layoutSel[outPath] ?? 0, Math.max(0, layouts.length - 1));
+  const msbSide = usePrefsStore((st) => st.prefs.kmapMsbSide);
+  // 'side' picks the option whose rows hold the first (most significant) input.
+  const defaultLayoutIdx = Math.max(
+    0,
+    msbSide === 'side' ? layouts.findIndex((l) => l.rows.includes(0)) : 0,
+  );
+  const layoutIdx = Math.min(
+    layoutSel[outPath] ?? defaultLayoutIdx,
+    Math.max(0, layouts.length - 1),
+  );
 
   const layout: KmapLayout | null = useMemo(() => {
     if (!kmapEligible || !table) return null;
@@ -322,10 +406,37 @@ export function AnalyzeDrawer({
     return layoutKmap(buildKmap(table, 0, layouts[layoutIdx], myDcs), 0, 0, metrics);
   }, [kmapEligible, table, layouts, layoutIdx, maximized, myDcs]);
 
-  const revealGroups: number[][] = useMemo(() => {
-    if (!reveal || !kmapEligible || !table) return [];
-    return minimalCover(table, 0, myDcs);
-  }, [reveal, kmapEligible, table, myDcs]);
+  const primeGroups = useMemo(
+    () => (stage >= 1 && kmapEligible && table ? primeImplicants(table, 0, myDcs, polarity) : []),
+    [stage, kmapEligible, table, myDcs, polarity],
+  );
+  const essentialKeys = useMemo(
+    () =>
+      new Set(
+        (stage === 2 && kmapEligible && table
+          ? essentialPrimes(table, 0, myDcs, polarity)
+          : []
+        ).map((g) => g.join(',')),
+      ),
+    [stage, kmapEligible, table, myDcs, polarity],
+  );
+  const covers = useMemo(
+    () => (stage >= 3 && kmapEligible && table ? minimumCovers(table, 0, myDcs, polarity) : []),
+    [stage, kmapEligible, table, myDcs, polarity],
+  );
+  const cover = covers.length > 0 ? covers[coverIdx % covers.length]! : [];
+  const revealGroups: RevealGroup[] = useMemo(() => {
+    if (stage === 3) return cover.map((g) => ({ minterms: g, solid: false }));
+    return primeGroups.map((g) => ({ minterms: g, solid: essentialKeys.has(g.join(',')) }));
+  }, [stage, cover, primeGroups, essentialKeys]);
+  /** The other polarity's first minimum cover, for the comparison line. */
+  const otherCover = useMemo(
+    () =>
+      revealStage.ones === 3 && revealStage.zeros === 3 && kmapEligible && table
+        ? (minimumCovers(table, 0, myDcs, otherPolarity, 1)[0] ?? [])
+        : null,
+    [revealStage, kmapEligible, table, myDcs, otherPolarity],
+  );
 
   const compressedRows: readonly CompressedRow[] = useMemo(() => {
     if (!table || n > 4) return [];
@@ -339,12 +450,13 @@ export function AnalyzeDrawer({
   }, [table]);
 
   const ones = useMemo(() => {
-    // Real 1s only -- a DC-marked minterm is never "uncovered" (owner rule).
+    // Real targets only -- a DC-marked minterm is never "uncovered" (owner rule).
     if (!table) return new Set<number>();
+    const want = polarity === 'ones' ? '1' : '0';
     const s = new Set<number>();
-    for (let r = 0; r < table.rows.length; r++) if (bitChar(table, r, 0, myDcs) === '1') s.add(r);
+    for (let r = 0; r < table.rows.length; r++) if (bitChar(table, r, 0, myDcs) === want) s.add(r);
     return s;
-  }, [table, myDcs]);
+  }, [table, myDcs, polarity]);
   const uncovered = useMemo(() => {
     const covered = new Set(myCircles.flatMap((g) => g.minterms));
     let c = 0;
@@ -358,13 +470,20 @@ export function AnalyzeDrawer({
   useEffect(() => {
     if (!table) return;
     setCircles((prev) => {
-      const groups = prev[outPath];
-      if (!groups) return prev;
-      const kept = groups.filter((g) => isLegalGroup(table, 0, g.minterms, myDcs));
-      if (kept.length === groups.length) return prev;
-      return { ...prev, [outPath]: kept };
+      let next = prev;
+      for (const pol of ['ones', 'zeros'] as const) {
+        const key = circleKey(outPath, pol);
+        const groups = prev[key];
+        if (!groups) continue;
+        const kept = groups.filter((g) => isLegalGroup(table, 0, g.minterms, myDcs, pol));
+        if (kept.length !== groups.length) next = { ...next, [key]: kept };
+      }
+      return next;
     });
   }, [myDcs, table, outPath]);
+
+  // A Check result describes the circles as they were when it ran.
+  useEffect(() => setCheckResult(null), [myCircles, myDcs, polarity, outPath]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const maxPanelRef = useRef<HTMLDivElement | null>(null);
@@ -387,7 +506,8 @@ export function AnalyzeDrawer({
       ...(() => {
         const userColors = new Set(myCircles.map((c) => c.color));
         let nextColor = 0;
-        return revealGroups.map((g, i) => {
+        return revealGroups.map((rg, i) => {
+          const g = rg.minterms;
           const key = g.join(',');
           const match = myCircles.findIndex((c) => c.minterms.join(',') === key);
           if (match !== -1)
@@ -396,6 +516,7 @@ export function AnalyzeDrawer({
               style: 'reveal' as const,
               color: myCircles[match]!.color,
               inset: match + 1,
+              solid: rg.solid,
             };
           while (userColors.has(nextColor)) nextColor++;
           return {
@@ -403,6 +524,7 @@ export function AnalyzeDrawer({
             style: 'reveal' as const,
             color: nextColor++,
             inset: myCircles.length + i,
+            solid: rg.solid,
           };
         });
       })(),
@@ -415,6 +537,14 @@ export function AnalyzeDrawer({
     if (selectedGroup && selectedGroup.outPath === outPath) s.add(selectedGroup.index);
     return s;
   }, [hoverGroup, selectedGroup, outPath]);
+
+  const flagged = useMemo(() => {
+    const s = new Set<number>();
+    checkResult?.circles.forEach((c, i) => {
+      if (c.notPrime || c.redundant) s.add(i);
+    });
+    return s;
+  }, [checkResult]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -433,8 +563,23 @@ export function AnalyzeDrawer({
       candidateIllegal: illegalFlash,
       cursor,
       emphasis,
+      flagged,
+      cellNumbers: kmapCellNumbers,
+      polarity,
     });
-  }, [layout, names, outPath, drawGroups, candidate, illegalFlash, cursor, emphasis]);
+  }, [
+    layout,
+    names,
+    outPath,
+    drawGroups,
+    candidate,
+    illegalFlash,
+    cursor,
+    emphasis,
+    flagged,
+    kmapCellNumbers,
+    polarity,
+  ]);
 
   useEffect(() => {
     draw();
@@ -458,17 +603,21 @@ export function AnalyzeDrawer({
     (cells: Set<number>) => {
       if (!table || cells.size === 0) return;
       const minterms = [...cells].sort((a, b) => a - b);
-      if (isLegalGroup(table, 0, minterms, myDcs)) {
+      const diagnosis = diagnoseGroup(table, 0, minterms, myDcs, polarity);
+      if (diagnosis === 'ok') {
         setCircles((prev) => {
-          const mine = prev[outPath] ?? [];
+          const mine = prev[myKey] ?? [];
           return {
             ...prev,
-            [outPath]: [...mine, { minterms, color: lowestUnusedColor(mine) }],
+            [myKey]: [...mine, { minterms, color: lowestUnusedColor(mine) }],
           };
         });
         setCandidate(null);
         setIllegalFlash(false);
+        setRefusal(null);
       } else {
+        // Outlives the flash: 600 ms is too short to read across a room.
+        setRefusal(refusalMessage(diagnosis, polarity));
         setIllegalFlash(true);
         if (flashTimer.current) clearTimeout(flashTimer.current);
         flashTimer.current = setTimeout(() => {
@@ -477,7 +626,7 @@ export function AnalyzeDrawer({
         }, 600);
       }
     },
-    [table, outPath, myDcs],
+    [table, myKey, myDcs, polarity],
   );
 
   // Ctrl-release commits the candidate; window blur too so a candidate never
@@ -530,6 +679,7 @@ export function AnalyzeDrawer({
   // cursor square behind read as a stuck selection.
   const toggleCell = (m: number) => {
     setIllegalFlash(false);
+    setRefusal(null);
     setCandidate((prev) => {
       const next = new Set(prev ?? []);
       if (next.has(m)) next.delete(m);
@@ -541,6 +691,10 @@ export function AnalyzeDrawer({
   // Don't-care marking commits immediately per cell (no staging/candidate --
   // it's authoring, not a circled answer), and is never gated by hideAnswers.
   const toggleDc = (m: number) => {
+    if (usingTyped) {
+      typed.toggleDontCare(m);
+      return;
+    }
     setDcSets((prev) => {
       const mine = new Set(prev[outPath] ?? []);
       if (mine.has(m)) mine.delete(m);
@@ -559,7 +713,7 @@ export function AnalyzeDrawer({
   const deleteGroup = (index: number) => {
     setCircles((prev) => ({
       ...prev,
-      [outPath]: (prev[outPath] ?? []).filter((_, i) => i !== index),
+      [myKey]: (prev[myKey] ?? []).filter((_, i) => i !== index),
     }));
     setSelectedGroup(null);
     setHoverGroup(null);
@@ -689,6 +843,11 @@ export function AnalyzeDrawer({
     }
   };
 
+  const advanceReveal = () => {
+    setCoverIdx(0);
+    setRevealStage((prev) => ({ ...prev, [polarity]: (prev[polarity] + 1) % 4 }));
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!layout) {
       if (e.key === 'Escape') onClose();
@@ -707,6 +866,8 @@ export function AnalyzeDrawer({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (candidate) commitCandidate(candidate);
+      else if (!['BUTTON', 'SELECT', 'INPUT', 'SUMMARY'].includes((e.target as Element).tagName))
+        advanceReveal();
       anchorRef.current = null;
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
@@ -716,10 +877,10 @@ export function AnalyzeDrawer({
       }
       if (cursor === null) return;
       setCircles((prev) => {
-        const groups = prev[outPath] ?? [];
+        const groups = prev[myKey] ?? [];
         const idx = groups.findIndex((grp) => grp.minterms.includes(cursor));
         if (idx === -1) return prev;
-        return { ...prev, [outPath]: groups.filter((_, i) => i !== idx) };
+        return { ...prev, [myKey]: groups.filter((_, i) => i !== idx) };
       });
     } else if (e.key.toLowerCase() === 'x') {
       // Keyboard equivalent of the Alt sweep: toggle don't-care at the cursor.
@@ -730,6 +891,7 @@ export function AnalyzeDrawer({
       if (candidate) {
         setCandidate(null);
         setIllegalFlash(false);
+        setRefusal(null);
         anchorRef.current = null;
       } else if (selectedGroup) {
         setSelectedGroup(null);
@@ -739,25 +901,89 @@ export function AnalyzeDrawer({
     }
   };
 
+  const switchSource = (next: 'board' | 'typed') => {
+    if (next === typed.source) return;
+    typed.setSource(next);
+    setOutputIndex(0);
+    setCandidate(null);
+    setCursor(null);
+    setRevealStage({ ones: 0, zeros: 0 });
+    setCoverIdx(0);
+    setRefusal(null);
+    setSelectedGroup(null);
+    setHoverGroup(null);
+  };
+  const sourcePicker = (
+    <>
+      <select
+        aria-label="Source"
+        value={typed.source}
+        onChange={(e) => switchSource(e.target.value as 'board' | 'typed')}
+      >
+        <option value="board">This board</option>
+        <option value="typed">Typed function</option>
+      </select>
+      {boardAnalyses.error && (
+        <div className="analyze-muted">{`This board: ${boardAnalyses.error}`}</div>
+      )}
+    </>
+  );
+  const typedEntry = usingTyped && <TypedEntry typed={typed} />;
+
+  const selectOutput = (i: number) => {
+    if (i < 0 || i >= outputs.length) return;
+    setOutputIndex(i);
+    setCandidate(null);
+    setRevealStage({ ones: 0, zeros: 0 });
+    setCoverIdx(0);
+    setRefusal(null);
+    setSelectedGroup(null);
+    setHoverGroup(null);
+  };
+  const outputPicker = outputs.length > 1 && (
+    <div className="analyze-outputs">
+      <select
+        aria-label="Output"
+        value={outIdx}
+        onChange={(e) => selectOutput(Number(e.target.value))}
+      >
+        {outputs.map((o, i) => (
+          <option key={o.outputPath} value={i}>
+            {tabLabel(o.outputPath)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const asBuiltExpr = usingTyped ? undefined : asBuilt.get(outPath);
+  const asBuiltLine = asBuiltExpr && (
+    <div className="analyze-asbuilt">
+      <span className="analyze-muted">As built:</span>
+      <span>{nameOfPath(outPath)} =</span>
+      <BoolExpr expr={asBuiltExpr} />
+    </div>
+  );
+
+  const canCompare = !usingTyped && outputs.length >= 2;
+  const comparePanel = canCompare && comparing && (
+    <ComparePanel
+      outputs={outputs}
+      picked={comparing}
+      onPick={setComparing}
+      nameOf={nameOfPath}
+      tabLabel={tabLabel}
+    />
+  );
+
   if (!current || !table) {
     return (
       <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown}>
         <h3>Analyze</h3>
-        {outputs.length > 1 && (
-          <div className="analyze-outputs" role="tablist">
-            {outputs.map((o, i) => (
-              <button
-                key={o.outputPath}
-                type="button"
-                className={`tool-btn${i === outIdx ? ' tool-btn--active' : ''}`}
-                onClick={() => setOutputIndex(i)}
-              >
-                {tabLabel(o.outputPath)}
-              </button>
-            ))}
-          </div>
-        )}
+        {sourcePicker}
+        {outputPicker}
         <p className="analyze-error">analyze: {current?.error ?? analyses.error}</p>
+        {comparePanel}
       </div>
     );
   }
@@ -777,52 +1003,74 @@ export function AnalyzeDrawer({
 
   const layoutLabel = (l: KmapAxisLayout): string => {
     const nameOf = (i: number) => names.get(table.inputPaths[i]!) ?? table.inputPaths[i]!;
-    return `${l.cols.map(nameOf).join('')}×${l.rows.map(nameOf).join('')}`;
+    return `${l.cols.map(nameOf).join('')} top, ${l.rows.map(nameOf).join('')} side`;
   };
 
   const fullTable = n <= 4;
-  const outputTabs = outputs.length > 1 && (
-    <div className="analyze-outputs" role="tablist">
-      {outputs.map((o, i) => (
-        <button
-          key={o.outputPath}
-          type="button"
-          className={`tool-btn${i === outIdx ? ' tool-btn--active' : ''}`}
-          onClick={() => {
-            setOutputIndex(i);
-            setCandidate(null);
-            setReveal(false);
-            setSelectedGroup(null);
-            setHoverGroup(null);
-          }}
-        >
-          {tabLabel(o.outputPath)}
-        </button>
-      ))}
-    </div>
+  const posMode = polarity === 'zeros';
+  const targetWord = posMode ? 'zero' : 'one';
+  const selectPolarity = (next: KmapPolarity) => {
+    if (next === polarity) return;
+    setPolarity(next);
+    setCandidate(null);
+    setIllegalFlash(false);
+    setSelectedGroup(null);
+    setHoverGroup(null);
+    setRefusal(null);
+    setCoverIdx(0);
+  };
+  const termOf = (minterms: readonly number[]) => (
+    <Term term={groupTerm(table, minterms, polarity)} nameOf={nameOfPath} sum={posMode} />
   );
+  const dcList = [...myDcs].sort((a, b) => a - b);
+  const compare = (() => {
+    if (otherCover === null || stage !== 3) return null;
+    const sop = posMode ? otherCover : cover;
+    const pos = posMode ? cover : otherCover;
+    return {
+      sop: summarizeForm(sop.map((g) => groupTerm(table, g, 'ones').length)),
+      pos: summarizeForm(pos.map((g) => groupTerm(table, g, 'zeros').length)),
+      cells: dontCareDisagreements(dcList, sop, pos),
+    };
+  })();
   const kmapSection =
     kmapEligible && layout ? (
       <>
         <div className="analyze-kmap-bar">
+          <select
+            aria-label="Group"
+            value={polarity}
+            onChange={(e) => selectPolarity(e.target.value as KmapPolarity)}
+          >
+            <option value="ones">Group 1s (SOP)</option>
+            <option value="zeros">Group 0s (POS)</option>
+          </select>
           {layouts.length > 1 && (
-            <div className="analyze-layouts" role="radiogroup">
+            <select
+              aria-label="Map layout"
+              value={layoutIdx}
+              onChange={(e) =>
+                setLayoutSel((prev) => ({ ...prev, [outPath]: Number(e.target.value) }))
+              }
+            >
               {layouts.map((l, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={`tool-btn${i === layoutIdx ? ' tool-btn--active' : ''}`}
-                  onClick={() => setLayoutSel((prev) => ({ ...prev, [outPath]: i }))}
-                >
+                <option key={i} value={i}>
                   {layoutLabel(l)}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
           )}
+          <Toggle
+            checked={kmapCellNumbers}
+            onChange={(on) => setPref('kmapCellNumbers', on)}
+            label="Cell numbers"
+            title="Number the cells"
+          />
           <button
             type="button"
             className="tool-btn"
             aria-pressed={maximized}
+            aria-label={maximized ? 'Restore' : 'Maximize'}
             title={
               maximized
                 ? `Back to the drawer${coarse ? '' : ' (Esc)'}`
@@ -830,8 +1078,11 @@ export function AnalyzeDrawer({
             }
             onClick={() => setMaximized((v) => !v)}
           >
-            {maximized ? 'Restore' : 'Maximize'}
+            <ToolIcon name={maximized ? 'restore' : 'maximize'} />
           </button>
+        </div>
+        <div className="analyze-sop">
+          {functionLine(nameOfPath(outPath), sigmaOf(table, myDcs), polarity)}
         </div>
         <canvas
           ref={canvasRef}
@@ -841,6 +1092,11 @@ export function AnalyzeDrawer({
           onPointerUp={onPointerUp}
           onPointerLeave={onPointerLeave}
         />
+        {refusal && (
+          <div className="analyze-refusal" role="status">
+            {refusal}
+          </div>
+        )}
         <div className="analyze-sop">
           {myCircles.length === 0 ? (
             <span className="analyze-muted">{groupHint(coarse)}</span>
@@ -849,8 +1105,10 @@ export function AnalyzeDrawer({
               {nameOfPath(outPath)} ={' '}
               {myCircles.map((g, i) => (
                 <span key={i} style={termStyle(i, g.color)}>
-                  {i > 0 && <span style={{ color: 'inherit', fontWeight: 400 }}> + </span>}
-                  <Term term={implicantTerm(table, g.minterms)} nameOf={nameOfPath} />
+                  {i > 0 && !posMode && (
+                    <span style={{ color: 'inherit', fontWeight: 400 }}> + </span>
+                  )}
+                  {termOf(g.minterms)}
                 </span>
               ))}
             </span>
@@ -859,51 +1117,136 @@ export function AnalyzeDrawer({
         {myCircles.length > 0 && <div className="analyze-muted">{groupHint(coarse)}</div>}
         <div className="analyze-status">
           {uncovered > 0
-            ? `${uncovered} one${uncovered === 1 ? '' : 's'} still uncovered`
+            ? `${uncovered} ${targetWord}${uncovered === 1 ? '' : 's'} still uncovered`
             : ones.size > 0
-              ? 'all ones covered'
-              : 'constant 0'}
+              ? `all ${targetWord}s covered`
+              : posMode
+                ? 'constant 1'
+                : 'constant 0'}
         </div>
+        <details
+          className="analyze-rules"
+          open={kmapRulesOpen}
+          onToggle={(e) => setPref('kmapRulesOpen', e.currentTarget.open)}
+        >
+          <summary>Grouping rules</summary>
+          <ol>
+            {groupingRules(polarity).map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ol>
+        </details>
         <div className="analyze-reveal">
           <button
             type="button"
             className="tool-btn"
-            aria-pressed={reveal}
-            onClick={() => setReveal((v) => !v)}
+            aria-pressed={stage > 0}
+            onClick={advanceReveal}
           >
-            {reveal ? 'Hide minimal cover' : 'Reveal minimal cover'}
+            {REVEAL_LABELS[stage]}
+          </button>
+          {stage === 3 && covers.length > 1 && (
+            <button type="button" className="tool-btn" onClick={() => setCoverIdx((i) => i + 1)}>
+              {`Next minimum (${(coverIdx % covers.length) + 1} of ${covers.length})`}
+            </button>
+          )}
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() =>
+              setCheckResult(
+                checkGroups(
+                  table,
+                  0,
+                  myCircles.map((c) => c.minterms),
+                  myDcs,
+                  polarity,
+                ),
+              )
+            }
+          >
+            Check
           </button>
           {onBuild && (
             <button
               type="button"
               className="tool-btn"
-              onClick={() =>
-                onBuild(printExpr(exprOfCover(table, 0, myDcs, table.inputPaths.map(nameOfPath))))
-              }
+              onClick={() => {
+                const varNames = table.inputPaths.map(nameOfPath);
+                onBuild(
+                  printExpr(
+                    posMode
+                      ? exprOfPosCover(table, 0, myDcs, varNames)
+                      : exprOfCover(table, 0, myDcs, varNames),
+                  ),
+                );
+              }}
             >
               Build this
             </button>
           )}
-          {reveal && (
+          {stage === 3 && (
             <span className="analyze-sop">
-              {revealGroups.length === 0 ? (
-                '0'
+              {cover.length === 0 ? (
+                posMode ? (
+                  '1'
+                ) : (
+                  '0'
+                )
               ) : (
                 <span>
-                  {revealGroups.map((g, i) => (
+                  {cover.map((g, i) => (
                     <span
                       key={i}
                       style={{ color: groupVar(drawGroups[myCircles.length + i]?.color ?? i) }}
                     >
-                      {i > 0 && ' + '}
-                      <Term term={implicantTerm(table, g)} nameOf={nameOfPath} />
+                      {i > 0 && !posMode && ' + '}
+                      {termOf(g)}
                     </span>
                   ))}
                 </span>
               )}
             </span>
           )}
+          {(stage === 1 || stage === 2) && (
+            <span className="analyze-muted">
+              {`${primeGroups.length} prime${primeGroups.length === 1 ? '' : 's'}`}
+              {stage === 2 ? `, ${essentialKeys.size} essential (solid)` : ''}
+            </span>
+          )}
         </div>
+        {checkResult && (
+          <div className="analyze-check" role="status">
+            {checkResult.circles.map(
+              (c, i) =>
+                (c.notPrime || c.redundant) && (
+                  <div key={i} style={{ color: groupVar(myCircles[i]!.color) }}>
+                    {termOf(myCircles[i]!.minterms)}
+                    {c.notPrime && ': Rule 4, this group can grow.'}
+                    {c.redundant && ': Rule 1, this group is not needed.'}
+                  </div>
+                ),
+            )}
+            <div>
+              {checkResult.coversAll
+                ? `Every ${targetWord} is covered.`
+                : `Some ${targetWord}s are not covered.`}
+            </div>
+            <div>{checkResult.isMinimum ? 'A minimum cover.' : 'Not a minimum cover.'}</div>
+          </div>
+        )}
+        {compare && (
+          <div className="analyze-compare">
+            <div>
+              {`SOP: ${compare.sop.terms} terms, ${compare.sop.literals} literals, ${compare.sop.gates} gates. POS: ${compare.pos.terms} terms, ${compare.pos.literals} literals, ${compare.pos.gates} gates.`}
+            </div>
+            {compare.cells.length > 0 && (
+              <div className="analyze-muted">
+                {`The two forms disagree on don't-care cells ${compare.cells.join(', ')}.`}
+              </div>
+            )}
+          </div>
+        )}
       </>
     ) : (
       <p className="analyze-muted">K-map view supports up to 4 inputs.</p>
@@ -912,19 +1255,27 @@ export function AnalyzeDrawer({
   return (
     <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown}>
       <h3>Analyze</h3>
-      {outputTabs}
-      {fullTable && (
+      {sourcePicker}
+      {typedEntry}
+      {outputPicker}
+      {asBuiltLine}
+      {(fullTable || canCompare) && (
         <div className="analyze-table-bar">
-          <button
-            type="button"
-            className="tool-btn"
-            aria-pressed={compressed}
-            onClick={() => setCompressed((v) => !v)}
-          >
-            {compressed ? 'Full rows' : 'Compress rows'}
-          </button>
+          {fullTable && (
+            <Toggle checked={compressed} onChange={setCompressed} label="Compress rows" />
+          )}
+          {canCompare && (
+            <Toggle
+              checked={comparing !== null}
+              onChange={(on) =>
+                setComparing(on ? { a: outIdx, b: (outIdx + 1) % outputs.length } : null)
+              }
+              label="Compare outputs"
+            />
+          )}
         </div>
       )}
+      {comparePanel}
       {fullTable ? (
         <table className="analyze-table">
           <thead>
@@ -974,7 +1325,31 @@ export function AnalyzeDrawer({
                     {table.inputPaths.map((p, i) => (
                       <td key={p}>{(r >> (n - 1 - i)) & 1}</td>
                     ))}
-                    <td className="analyze-table__out">{bitChar(table, r, 0, myDcs)}</td>
+                    <td className="analyze-table__out">
+                      {usingTyped && typed.mode === 'table' ? (
+                        <button
+                          type="button"
+                          className="analyze-cell"
+                          ref={(el) => {
+                            cellRefs.current[r] = el;
+                          }}
+                          onClick={() => typed.setCell(r, nextCell(typed.fn.cells[r]!))}
+                          onKeyDown={(e) => {
+                            const action = cellKeyAction(e.key);
+                            if (!action) return;
+                            // Digits and X select tools and marks in the drawer behind.
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (action.write !== undefined) typed.setCell(r, action.write);
+                            cellRefs.current[r + action.step]?.focus();
+                          }}
+                        >
+                          {bitChar(table, r, 0, myDcs)}
+                        </button>
+                      ) : (
+                        bitChar(table, r, 0, myDcs)
+                      )}
+                    </td>
                   </tr>
                 ))}
           </tbody>
@@ -1000,11 +1375,125 @@ export function AnalyzeDrawer({
       {maximized && (
         <div className="analyze-max-overlay">
           <div className="analyze-max-panel" ref={maxPanelRef} tabIndex={-1}>
-            {outputTabs}
+            {outputPicker}
             {kmapSection}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** Two outputs' tables side by side, inputs lined up by name, with a verdict
+ *  per row in words as well as colour. */
+function ComparePanel({
+  outputs,
+  picked,
+  onPick,
+  nameOf,
+  tabLabel,
+}: {
+  outputs: readonly OutputAnalysis[];
+  picked: { a: number; b: number };
+  onPick: (next: { a: number; b: number }) => void;
+  nameOf: (path: string) => string;
+  tabLabel: (path: string) => string;
+}) {
+  const a = outputs[Math.min(picked.a, outputs.length - 1)]!;
+  const b = outputs[Math.min(picked.b, outputs.length - 1)]!;
+  const aName = nameOf(a.outputPath);
+  const bName = nameOf(b.outputPath);
+  const picker = (which: 'a' | 'b', label: string) => (
+    <select
+      aria-label={label}
+      value={picked[which]}
+      onChange={(e) => onPick({ ...picked, [which]: Number(e.target.value) })}
+    >
+      {outputs.map((o, i) => (
+        <option key={o.outputPath} value={i}>
+          {tabLabel(o.outputPath)}
+        </option>
+      ))}
+    </select>
+  );
+
+  const verdict = (): React.ReactNode => {
+    if (a === b) return <p className="analyze-muted">Pick two different outputs.</p>;
+    if (!a.table || !b.table) {
+      const broken = !a.table ? a : b;
+      return <p className="analyze-error">{`${nameOf(broken.outputPath)}: ${broken.error}`}</p>;
+    }
+    const r = compareOutputs(
+      a.table,
+      a.table.inputPaths.map(nameOf),
+      b.table,
+      b.table.inputPaths.map(nameOf),
+    );
+    if (r.kind === 'duplicate')
+      return (
+        <p className="analyze-muted">
+          {`Two inputs on one side are both called ${r.name}. Rename one to compare by name.`}
+        </p>
+      );
+    if (r.kind === 'mismatch')
+      return (
+        <p className="analyze-muted">
+          {`The inputs do not line up by name: only ${aName} reads ${r.onlyA.join(', ')}, ` +
+            `only ${bName} reads ${r.onlyB.join(', ')}.`}
+        </p>
+      );
+    const n = r.names.length;
+    const unread = [
+      ...(r.unreadByA.length ? [`${aName} does not read ${r.unreadByA.join(', ')}.`] : []),
+      ...(r.unreadByB.length ? [`${bName} does not read ${r.unreadByB.join(', ')}.`] : []),
+    ];
+    return (
+      <>
+        <p className={r.differ.length ? 'analyze-compare__differs' : undefined}>
+          {r.differ.length === 0
+            ? `${aName} and ${bName} are equal on all ${r.a.rows.length} rows.`
+            : `${aName} and ${bName} differ on rows ${r.differ.join(', ')}.`}
+        </p>
+        {unread.length > 0 && <p className="analyze-muted">{unread.join(' ')}</p>}
+        <table className="analyze-table">
+          <thead>
+            <tr>
+              {r.names.map((name) => (
+                <th key={name}>{name}</th>
+              ))}
+              <th className="analyze-table__out">{aName}</th>
+              <th className="analyze-table__out">{bName}</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.a.rows.map((_, row) => {
+              const differs = r.differ.includes(row);
+              return (
+                <tr key={row} className={differs ? 'analyze-compare__differs' : undefined}>
+                  {r.names.map((name, i) => (
+                    <td key={name}>{(row >> (n - 1 - i)) & 1}</td>
+                  ))}
+                  <td className="analyze-table__out">{bitChar(r.a, row, 0)}</td>
+                  <td className="analyze-table__out">{bitChar(r.b, row, 0)}</td>
+                  <td>{differs ? 'differs' : 'same'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </>
+    );
+  };
+
+  return (
+    <section className="analyze-compare" aria-label="Compare outputs">
+      <div className="analyze-compare__bar">
+        {picker('a', 'First output')}
+        <span className="analyze-muted">against</span>
+        {picker('b', 'Second output')}
+      </div>
+      {verdict()}
+    </section>
   );
 }

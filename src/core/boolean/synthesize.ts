@@ -5,7 +5,7 @@
 
 import type { Expr } from './expr';
 import { ExprError, exprVars, printExpr } from './expr';
-import { implicantTerm, minimalCover } from './kmap';
+import { groupTerm, implicantTerm, minimalCover, minimumCovers } from './kmap';
 import type { TruthTable } from './truthTable';
 
 /** `kind` is a ComponentKind name held as a plain string, so core/boolean
@@ -34,10 +34,13 @@ export interface SynthNetlist {
 export interface SynthOptions {
   /** Fold every wider gate into a chain of two-input ones. */
   twoInputGatesOnly?: boolean;
-  /** Realize the whole function with NAND gates only. */
+  /** Realize the whole function with NAND gates only. Exclusive with `norOnly`. */
   nandOnly?: boolean;
+  /** Realize the whole function with NOR gates only. Exclusive with `nandOnly`. */
+  norOnly?: boolean;
   /** Drop the inverter pairs the De Morgan substitution leaves behind, giving
-   *  the canonical two-level NAND form. Only meaningful with `nandOnly`. */
+   *  the canonical two-level NAND or NOR form. Only meaningful with `nandOnly`
+   *  or `norOnly`. */
   cancelNotPairs?: boolean;
   /** Text on the output LED; defaults to the printed expression. */
   outputLabel?: string;
@@ -54,7 +57,13 @@ class Builder {
   /** Inverter id -> the signal it inverts, so a second inversion can undo it. */
   private inverted = new Map<string, string>();
 
-  constructor(private readonly opts: SynthOptions) {}
+  /** The one gate kind a universal-gate build is restricted to. */
+  private readonly universal: 'nand' | 'nor' | null;
+
+  constructor(private readonly opts: SynthOptions) {
+    if (opts.nandOnly && opts.norOnly) throw new Error('nandOnly and norOnly are exclusive');
+    this.universal = opts.nandOnly ? 'nand' : opts.norOnly ? 'nor' : null;
+  }
 
   id(kind: string): string {
     const n = (this.counts.get(kind) ?? 0) + 1;
@@ -81,14 +90,12 @@ class Builder {
     return sources.slice(1).reduce((acc, src) => this.gate(kind, [acc, src]), sources[0]!);
   }
 
-  nand(sources: readonly string[]): string {
-    return this.wide('nand', sources);
-  }
-
-  /** Both inputs tied together is the inverter, which is why a NAND-only
-   *  build needs no other kind. */
-  nandNot(source: string): string {
-    return this.gate('nand', [source, source]);
+  /** NAND and NOR are not associative, so a two-input chain re-inverts each
+   *  partial result before feeding it on: (abc)' = (((ab)')' c)'. */
+  negatedWide(kind: 'nand' | 'nor', sources: readonly string[]): string {
+    if (!this.opts.twoInputGatesOnly || sources.length <= 2) return this.gate(kind, sources);
+    const first = this.gate(kind, [sources[0]!, sources[1]!]);
+    return sources.slice(2).reduce((acc, src) => this.gate(kind, [this.not(acc), src]), first);
   }
 
   not(source: string, literal?: string): string {
@@ -102,7 +109,11 @@ class Builder {
       const undone = this.inverted.get(source);
       if (undone !== undefined) return undone;
     }
-    const id = this.opts.nandOnly ? this.nandNot(source) : this.gate('not', [source]);
+    // Both inputs tied together is the inverter, which is why a universal-gate
+    // build needs no other kind.
+    const id = this.universal
+      ? this.gate(this.universal, [source, source])
+      : this.gate('not', [source]);
     this.inverted.set(id, source);
     if (literal !== undefined) this.inverters.set(literal, id);
     return id;
@@ -110,27 +121,53 @@ class Builder {
 
   and(sources: readonly string[]): string {
     if (sources.length === 1) return sources[0]!;
-    return this.opts.nandOnly ? this.not(this.nand(sources)) : this.wide('and', sources);
+    if (this.universal === 'nand') return this.not(this.negatedWide('nand', sources));
+    // De Morgan: ab = (a' + b')'.
+    if (this.universal === 'nor')
+      return this.negatedWide(
+        'nor',
+        sources.map((s) => this.not(s)),
+      );
+    return this.wide('and', sources);
   }
 
   or(sources: readonly string[]): string {
     if (sources.length === 1) return sources[0]!;
     // De Morgan: a + b = (a'b')'.
-    return this.opts.nandOnly
-      ? this.nand(sources.map((s) => this.not(s)))
-      : this.wide('or', sources);
+    if (this.universal === 'nand')
+      return this.negatedWide(
+        'nand',
+        sources.map((s) => this.not(s)),
+      );
+    if (this.universal === 'nor') return this.not(this.negatedWide('nor', sources));
+    return this.wide('or', sources);
   }
 
   xor(sources: readonly string[]): string {
-    if (!this.opts.nandOnly) return this.wide('xor', sources);
-    // XOR is associative, so the chain is the function, not an approximation.
-    return sources.slice(1).reduce((acc, src) => this.xor2(acc, src), sources[0]!);
+    if (this.universal === 'nand') {
+      // XOR is associative, so the chain is the function, not an approximation.
+      return sources.slice(1).reduce((acc, src) => this.nandXor2(acc, src), sources[0]!);
+    }
+    if (this.universal === 'nor') {
+      // Each XNOR link adds a complement, so an odd number of links leaves one
+      // to undo: (a ^ b)'' = a ^ b, and three sources chain back to a ^ b ^ c.
+      const chain = sources.slice(1).reduce((acc, src) => this.norXnor2(acc, src), sources[0]!);
+      return sources.length % 2 === 0 ? this.not(chain) : chain;
+    }
+    return this.wide('xor', sources);
   }
 
   /** The four-NAND XOR: with s = (ab)', a^b = a.s + b.s. */
-  private xor2(a: string, b: string): string {
+  private nandXor2(a: string, b: string): string {
     const shared = this.gate('nand', [a, b]);
     return this.gate('nand', [this.gate('nand', [a, shared]), this.gate('nand', [b, shared])]);
+  }
+
+  /** The dual of the four-NAND XOR is an XNOR: with s = (a + b)',
+   *  (a ^ b)' = (a + s)(b + s). */
+  private norXnor2(a: string, b: string): string {
+    const shared = this.gate('nor', [a, b]);
+    return this.gate('nor', [this.gate('nor', [a, shared]), this.gate('nor', [b, shared])]);
   }
 }
 
@@ -239,6 +276,35 @@ export function exprOfCover(
   return terms.length === 1 ? terms[0]! : { kind: 'or', args: terms };
 }
 
+/** Minimum product-of-sums: each 0-group is a sum term, complemented where the
+ *  group fixes the variable at 1. Constant 1 when there is no 0 to group. */
+export function exprOfPosCover(
+  table: TruthTable,
+  outputIndex = 0,
+  dontCares?: ReadonlySet<number>,
+  varNames?: readonly string[],
+): Expr {
+  const name = (path: string): string => {
+    const i = table.inputPaths.indexOf(path);
+    return varNames?.[i] ?? path;
+  };
+  const cover = minimumCovers(table, outputIndex, dontCares, 'zeros')[0] ?? [];
+  if (cover.length === 0) return { kind: 'const', value: 1 };
+  const factors: Expr[] = cover.map((group) => {
+    const literals = groupTerm(table, group, 'zeros');
+    // No fixed variable: the 0-group is the whole map, so the output is 0.
+    if (literals.length === 0) return { kind: 'const', value: 0 };
+    const sum: Expr[] = literals.map((lit) =>
+      lit.negated
+        ? { kind: 'not', a: { kind: 'var', name: name(lit.var) } }
+        : { kind: 'var', name: name(lit.var) },
+    );
+    return sum.length === 1 ? sum[0]! : { kind: 'or', args: sum };
+  });
+  if (factors.some((t) => t.kind === 'const' && t.value === 0)) return { kind: 'const', value: 0 };
+  return factors.length === 1 ? factors[0]! : { kind: 'and', args: factors };
+}
+
 export function synthesizeTable(
   table: TruthTable,
   opts: SynthOptions & {
@@ -247,6 +313,9 @@ export function synthesizeTable(
     varNames?: readonly string[];
   } = {},
 ): SynthNetlist {
-  const e = exprOfCover(table, opts.outputIndex ?? 0, opts.dontCares, opts.varNames);
+  // SPEC: NOR-only minimises to the product of sums, the form whose NOR-NOR
+  // realization is two-level, as SOP is for NAND-NAND.
+  const cover = opts.norOnly ? exprOfPosCover : exprOfCover;
+  const e = cover(table, opts.outputIndex ?? 0, opts.dontCares, opts.varNames);
   return synthesizeExpr(e, opts);
 }

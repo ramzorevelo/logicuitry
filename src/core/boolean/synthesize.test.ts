@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parseExpr, printExpr, truthTableOfExpr } from './expr';
-import { exprOfCover, synthesizeExpr, synthesizeTable, type SynthNetlist } from './synthesize';
+import { evalExpr, parseExpr, printExpr, truthTableOfExpr } from './expr';
+import {
+  exprOfCover,
+  exprOfPosCover,
+  synthesizeExpr,
+  synthesizeTable,
+  type SynthNetlist,
+} from './synthesize';
 
 /** Evaluates a netlist directly, so a test proves the gates compute the
  *  function rather than only that the right parts were emitted. */
@@ -38,6 +44,9 @@ function evaluate(net: SynthNetlist, assignment: ReadonlyMap<string, 0 | 1>): 0 
         break;
       case 'or':
         out = ins.some((v) => v === 1) ? 1 : 0;
+        break;
+      case 'nor':
+        out = ins.some((v) => v === 1) ? 0 : 1;
         break;
       case 'xor':
         out = ins.reduce((acc: 0 | 1, v) => (acc ^ v) as 0 | 1, 0);
@@ -139,10 +148,73 @@ describe('synthesizeExpr', () => {
     }
   });
 
+  it('chains a wide NAND into two-input gates without changing the function', () => {
+    for (const src of ['ABCD', 'A + B + C', "A'BC + AB'D"]) {
+      const net = synthesizeExpr(parseExpr(src), { nandOnly: true, twoInputGatesOnly: true });
+      expect(net.parts.filter((p) => p.kind === 'nand').every((g) => g.inputs === 2)).toBe(true);
+      expect(agreesWith(net, src)).toBe(true);
+    }
+  });
+
   it('builds a constant expression from a constant source', () => {
     const net = synthesizeExpr(parseExpr('1'));
     expect(net.parts.map((p) => p.kind)).toEqual(['constant', 'led']);
     expect(net.inputIds).toEqual([]);
+  });
+});
+
+describe('synthesizeExpr, NOR only', () => {
+  const norOnly = (net: SynthNetlist): boolean =>
+    net.parts.every((p) => ['toggle', 'led', 'nor'].includes(p.kind));
+  const nors = (net: SynthNetlist): number => net.parts.filter((p) => p.kind === 'nor').length;
+
+  it('realizes the same function with NOR gates only', () => {
+    for (const src of ["A'B + BC", '(A + B)(A + C)', "(AB)' + C", 'A B C + D']) {
+      for (const cancelNotPairs of [false, true]) {
+        const net = synthesizeExpr(parseExpr(src), { norOnly: true, cancelNotPairs });
+        expect(norOnly(net)).toBe(true);
+        expect(agreesWith(net, src)).toBe(true);
+      }
+    }
+  });
+
+  it('gives the two-level NOR-NOR form of a product of sums when pairs cancel', () => {
+    const net = synthesizeExpr(parseExpr("(A + B)(A' + C)"), {
+      norOnly: true,
+      cancelNotPairs: true,
+    });
+    // One inverter for A', one NOR per sum term, one to combine them.
+    expect(nors(net)).toBe(4);
+    expect(agreesWith(net, "(A + B)(A' + C)")).toBe(true);
+  });
+
+  it('builds XOR from five NOR gates and XNOR from four', () => {
+    const xor = synthesizeExpr(parseExpr('A ^ B'), { norOnly: true });
+    expect(nors(xor)).toBe(5);
+    expect(agreesWith(xor, 'A ^ B')).toBe(true);
+    const xnor = synthesizeExpr(parseExpr("(A ^ B)'"), { norOnly: true, cancelNotPairs: true });
+    expect(nors(xnor)).toBe(4);
+    expect(agreesWith(xnor, "(A ^ B)'")).toBe(true);
+  });
+
+  it('builds wide XOR chains of either parity', () => {
+    for (const src of ['A ^ B ^ C', 'A ^ B ^ C ^ D', "A'B + (A ^ C)"]) {
+      const net = synthesizeExpr(parseExpr(src), { norOnly: true, cancelNotPairs: true });
+      expect(norOnly(net)).toBe(true);
+      expect(agreesWith(net, src)).toBe(true);
+    }
+  });
+
+  it('chains a wide NOR into two-input gates without changing the function', () => {
+    for (const src of ['A + B + C + D', 'ABC', "(A + B' + C)(B + D)"]) {
+      const net = synthesizeExpr(parseExpr(src), { norOnly: true, twoInputGatesOnly: true });
+      expect(net.parts.filter((p) => p.kind === 'nor').every((g) => g.inputs === 2)).toBe(true);
+      expect(agreesWith(net, src)).toBe(true);
+    }
+  });
+
+  it('refuses NAND-only and NOR-only together', () => {
+    expect(() => synthesizeExpr(parseExpr('AB'), { nandOnly: true, norOnly: true })).toThrow();
   });
 });
 
@@ -161,6 +233,23 @@ describe('synthesizeTable', () => {
     expect(agreesWith(net, "A'B + BC")).toBe(true);
   });
 
+  it('minimises to a product of sums for a NOR-only build, giving NOR-NOR', () => {
+    // A + BC = (A + B)(A + C): two sum terms and one combining NOR, no inverters.
+    const net = synthesizeTable(table('A + BC'), { norOnly: true, cancelNotPairs: true });
+    expect(net.parts.find((p) => p.id === net.outputId)!.label).toBe('(A + B)(A + C)');
+    expect(net.parts.filter((p) => p.kind === 'nor')).toHaveLength(3);
+    expect(agreesWith(net, 'A + BC')).toBe(true);
+  });
+
+  it('a typed expression minimises to the same 3 NORs as the table, but builds as written without it', () => {
+    const opts = { norOnly: true, cancelNotPairs: true };
+    const asWritten = synthesizeExpr(parseExpr('A + BC'), opts);
+    expect(asWritten.parts.filter((p) => p.kind === 'nor')).toHaveLength(5);
+    const minimised = synthesizeTable(truthTableOfExpr(parseExpr('A + BC')), opts);
+    expect(minimised.parts.filter((p) => p.kind === 'nor')).toHaveLength(3);
+    expect(agreesWith(minimised, 'A + BC')).toBe(true);
+  });
+
   it('treats a constant-0 column as a constant source', () => {
     const net = synthesizeTable(table("A A' + B B'"));
     expect(net.parts.map((p) => p.kind)).toContain('constant');
@@ -170,5 +259,27 @@ describe('synthesizeTable', () => {
     const t = table('AB');
     const withDc = exprOfCover(t, 0, new Set([1, 2]));
     expect(printExpr(withDc).length).toBeLessThanOrEqual(printExpr(exprOfCover(t)).length);
+  });
+});
+
+describe('exprOfPosCover', () => {
+  const table = (src: string) => truthTableOfExpr(parseExpr(src));
+  it('builds the minimum product of sums, equal to the function', () => {
+    const t = table('A + BC');
+    const pos = exprOfPosCover(t);
+    expect(printExpr(pos)).toBe('(A + B)(A + C)');
+    for (let m = 0; m < 8; m++) {
+      const env = new Map<string, 0 | 1>([
+        ['A', ((m >> 2) & 1) as 0 | 1],
+        ['B', ((m >> 1) & 1) as 0 | 1],
+        ['C', (m & 1) as 0 | 1],
+      ]);
+      expect(evalExpr(pos, env)).toBe(evalExpr(parseExpr('A + BC'), env));
+    }
+  });
+
+  it('is constant 1 with no zero and constant 0 when every cell is zero', () => {
+    expect(printExpr(exprOfPosCover(table("AB + (AB)'")))).toBe('1');
+    expect(printExpr(exprOfPosCover(table("AB(AB)'")))).toBe('0');
   });
 });

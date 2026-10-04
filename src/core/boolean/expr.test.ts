@@ -6,6 +6,7 @@ import {
   hasXor,
   parseExpr,
   printExpr,
+  productNeedsDot,
   truthTableOfExpr,
 } from './expr';
 import * as bv from '../value/busValue';
@@ -17,6 +18,14 @@ const outputs = (src: string): number[] =>
   truthTableOfExpr(parseExpr(src)).rows.map((r) => bit(r[0]!));
 
 describe('parseExpr', () => {
+  it('reads the circled dot and the word XNOR as XNOR at XOR precedence', () => {
+    expect(outputs('A ⊙ B')).toEqual([1, 0, 0, 1]);
+    expect(outputs('A XNOR B')).toEqual([1, 0, 0, 1]);
+    expect(printExpr(parseExpr('A ⊙ B'))).toBe("(A ⊕ B)'");
+    expect(outputs('A + B ⊙ C')).toEqual(outputs('A + (B ⊙ C)'));
+    expect(outputs('A ⊙ B ⊕ C')).toEqual(outputs('(A ⊙ B) ⊕ C'));
+  });
+
   it('reads juxtaposition as AND and a prime as NOT', () => {
     expect(printExpr(parseExpr("A'B + BC"))).toBe("A'B + BC");
   });
@@ -104,5 +113,18 @@ describe('hasXor', () => {
   it('finds an XOR anywhere in the tree', () => {
     expect(hasXor(parseExpr("(A ^ B)'C"))).toBe(true);
     expect(hasXor(parseExpr("A'B + BC"))).toBe(false);
+  });
+});
+
+describe('productNeedsDot', () => {
+  const v = (name: string) => ({ kind: 'var', name }) as const;
+  it('juxtaposes single-letter names, with or without digits and bars', () => {
+    expect(productNeedsDot(v('A'), v('B1'))).toBe(false);
+    expect(productNeedsDot({ kind: 'not', a: v('A') }, v('B'))).toBe(false);
+  });
+  it('dots a constant and a name that would fuse with its neighbour', () => {
+    expect(productNeedsDot(v('A'), { kind: 'const', value: 1 })).toBe(true);
+    expect(productNeedsDot(v('Cin'), v('A'))).toBe(true);
+    expect(productNeedsDot(v('A'), { kind: 'not', a: v('U3.13') })).toBe(true);
   });
 });

@@ -389,13 +389,15 @@ export function drawBubble(
  *  around it before the glyphs rasterize. `inward` is the local direction the
  *  text extends into (e.g. (1,0) for a left-edge pin label); alignment flips
  *  to whichever side the anchor faces after rotation/mirror. Pass (0,0) for
- *  centered text. */
+ *  centered text. `overbarPx`, the font size, bars a one-line label (an
+ *  active-low pin name). */
 export function drawUprightText(
   ctx: CanvasRenderingContext2D,
   placement: Placement,
   text: string,
   anchor: Vec2,
   inward: Vec2,
+  opts?: { overbarPx?: number },
 ): void {
   const rot = placement.rot ?? 0;
   const mirror = placement.mirror ?? false;
@@ -426,6 +428,21 @@ export function drawUprightText(
         ? -(lines.length - 1) * lineH
         : -((lines.length - 1) * lineH) / 2;
   lines.forEach((line, i) => ctx.fillText(line, 0, first + i * lineH));
+  const barPx = opts?.overbarPx;
+  if (barPx !== undefined && lines.length === 1) {
+    const w = ctx.measureText(text).width;
+    const x0 = ctx.textAlign === 'left' ? 0 : ctx.textAlign === 'right' ? -w : -w / 2;
+    // Just above the em box, wherever the baseline put it: the K-map's height.
+    const top =
+      ctx.textBaseline === 'top' ? 0 : ctx.textBaseline === 'bottom' ? -barPx : -barPx / 2;
+    const y = top - barPx * 0.08;
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.lineWidth = Math.max(1, barPx * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + w, y);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

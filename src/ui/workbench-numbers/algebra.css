@@ -1,0 +1,209 @@
+/* Algebra tab chrome. */
+
+.algebra-tab {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 4);
+}
+
+/* A column stretches its children; the picker must hug its buttons. */
+.algebra-tab > .segmented {
+  align-self: flex-start;
+}
+
+.algebra-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+}
+
+.algebra-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.algebra-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+}
+
+.algebra-error {
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Laws table */
+.algebra-laws,
+.algebra-canon {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.algebra-laws th,
+.algebra-laws td,
+.algebra-canon th,
+.algebra-canon td {
+  border: 1px solid var(--line);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  text-align: left;
+  font-size: var(--text-secondary);
+}
+
+.algebra-laws thead th,
+.algebra-canon thead th {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.algebra-law__row {
+  font-family: var(--font-mono);
+  width: 3em;
+}
+
+.algebra-law__name {
+  cursor: help;
+}
+
+.algebra-law__mask {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.algebra-law__unmask {
+  all: unset;
+  cursor: pointer;
+  min-height: var(--touch-h);
+  display: inline-flex;
+  align-items: center;
+}
+
+.algebra-law__unmask:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.algebra-aka {
+  min-height: 1.5em;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+/* Canonical forms */
+.algebra-canon__true {
+  background: var(--accent-fill);
+}
+
+.algebra-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: calc(var(--space-unit) * 4);
+}
+
+.algebra-forms__label {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.algebra-forms__expr {
+  overflow-x: auto;
+  padding: var(--space-unit) 0;
+}
+
+/* Simplify */
+.algebra-ladder {
+  display: flex;
+  flex-direction: column;
+  border: var(--chrome-border);
+  background: var(--surface);
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.algebra-line {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 4);
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  border-bottom: 1px solid var(--line);
+}
+
+.algebra-line:last-child {
+  border-bottom: none;
+}
+
+.algebra-line__cite {
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  text-align: right;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+}
+
+.algebra-line--flagged .algebra-line__cite {
+  color: var(--warn);
+}
+
+.algebra-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.algebra-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 3);
+  text-align: left;
+  min-height: var(--touch-h);
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.algebra-step__cite {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  flex: 0 1 34ch;
+  overflow-wrap: anywhere;
+}
+
+.algebra-step__change {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.algebra-step__arrow {
+  color: var(--muted);
+}
+
+.algebra-steps__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.algebra-steps__more {
+  align-self: flex-start;
+}
+
+.algebra-verdict {
+  font-size: var(--text-secondary);
+}
+
+.algebra-verdict--not {
+  color: var(--warn);
+}

@@ -397,6 +397,15 @@
   border-color: var(--accent);
 }
 
+.reveal-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reveal-btn:disabled:hover {
+  color: var(--muted);
+}
+
 .result-row__expr {
   color: var(--muted);
   font-weight: 400;

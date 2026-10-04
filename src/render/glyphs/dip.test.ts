@@ -73,6 +73,43 @@ describe('DIP layout', () => {
     expect(l16.height).toBeGreaterThan(l14.height);
   });
 
+  it('is one width for every package, as a real 300-mil DIP is', () => {
+    const widths = [...lib.values()]
+      .filter((d) => isDipPackage(d.appearance?.package))
+      .map((d) => dipLayout(inputFor(d.id), theme).width);
+    expect(widths.length).toBeGreaterThan(6);
+    expect(new Set(widths).size).toBe(1);
+  });
+
+  it("keeps every pin name out of the part number's lane", () => {
+    for (const part of ['74LS00', '74LS47']) {
+      const l = dipLayout(inputFor(part), theme);
+      const lane = (0.8 * l.nameFontPx) / 2;
+      for (const r of [...l.left, ...l.right]) {
+        const w = r.text.length * r.fontPx * 0.6;
+        const inner = l.left.includes(r)
+          ? l.boxLeft + 0.6 * l.g + w
+          : l.width - (l.boxLeft + 0.6 * l.g + w);
+        const clear = l.left.includes(r)
+          ? inner <= l.bodyCenter.x - lane + 1e-9
+          : inner >= l.bodyCenter.x + lane - 1e-9;
+        expect(clear, `${part} ${r.text}`).toBe(true);
+      }
+    }
+  });
+
+  it('prints an active-low pin under a bar, not behind a slash', () => {
+    const l = dipLayout(inputFor('74LS47'), theme);
+    const bi = l.left.find((r) => r.pin.name === '/BI_RBO')!;
+    expect(bi).toMatchObject({ text: 'BI/RBO', bar: true });
+    expect(bi.fontPx).toBeLessThan(theme.glyphText);
+    expect(l.left.find((r) => r.pin.name === 'A1')).toMatchObject({
+      text: 'A1',
+      bar: false,
+      fontPx: theme.glyphText,
+    });
+  });
+
   it('names the pins as the datasheet does, not by direction', () => {
     const l = dipLayout(inputFor('74LS02'), theme);
     // The '02 puts gate 1's OUTPUT on pin 1: the whole reason the physical

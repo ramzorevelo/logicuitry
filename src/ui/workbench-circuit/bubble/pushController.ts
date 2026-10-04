@@ -17,8 +17,7 @@ import {
   type MergeFrom,
   type TransformGeom,
 } from '../../../core/gates/transform';
-import { diffRows, tablesEqual } from '../../../core/boolean/truthTable';
-import { truthTableOf } from '../../../core/gates/verify';
+import { boardDiffRows } from '../../../core/gates/verify';
 
 export type PushMove =
   | { kind: 'outputBackward'; gateId: string }
@@ -80,18 +79,15 @@ export function previewPush(
 ): PushPreview {
   const result = applyMove(board, move, geom);
   if (result) {
-    const before = truthTableOf(board, lib);
-    const after = truthTableOf(result, lib);
-    if (tablesEqual(before, after)) return { legal: true, result };
+    const differing = boardDiffRows(board, result, lib);
+    if (differing.length === 0) return { legal: true, result };
     // Constructed illegal by a core bug, not a bad move -- still surfaced as
     // a failed drag rather than silently committing a wrong transformation.
-    return { legal: false, attempted: result, diffRows: diffRows(before, after) };
+    return { legal: false, attempted: result, diffRows: differing };
   }
   const attempted = naiveAttempt(board, move, geom);
   if (!attempted) return { legal: false, attempted: null, diffRows: [] };
-  const before = truthTableOf(board, lib);
-  const after = truthTableOf(attempted, lib);
-  return { legal: false, attempted, diffRows: diffRows(before, after) };
+  return { legal: false, attempted, diffRows: boardDiffRows(board, attempted, lib) };
 }
 
 /** Commits `move` iff legal; returns null (no-op) otherwise -- callers

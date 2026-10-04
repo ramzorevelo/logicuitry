@@ -12,7 +12,7 @@ import type {
 } from '../../core/numkit/types';
 import { getPrefs } from '../prefs';
 
-export type NumbersTab = 'convert' | 'compute';
+export type NumbersTab = 'convert' | 'compute' | 'algebra';
 export type BitWidth = 4 | 8 | 12 | 16 | 24 | 32;
 export const WIDTHS: BitWidth[] = [4, 8, 12, 16, 24, 32];
 

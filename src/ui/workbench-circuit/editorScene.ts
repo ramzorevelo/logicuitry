@@ -53,7 +53,15 @@ import { pinFacing } from './smartConnect';
 import { getPrefs } from '../prefs';
 import type { Rect, Vec2, Viewport } from '../../render/scene';
 import { chipTintColor, signalStyle, type SignalState, type Theme } from '../../render/theme';
-import { computeWireRoutes, pointAlongPolyline, routeAvoiding, routeOrthogonal } from './wireGeom';
+import {
+  computeWireRoutes,
+  pinExitSide,
+  pointAlongPolyline,
+  routeAvoiding,
+  routeOrthogonal,
+} from './wireGeom';
+import type { Expr } from '../../core/boolean/expr';
+import { exprFont, exprTextHeight, layoutExprText, paintExprText } from '../../render/exprText';
 import { GHOST_ALPHA } from '../../render/ghostPreview';
 import { drawCachedGlyph } from '../../render/glyphCache';
 import { lodFor } from '../../render/lod';
@@ -180,6 +188,9 @@ export interface RenderParams extends GlyphContext {
         shortLabels: ReadonlyMap<string, string>;
       }
     | undefined;
+  /** View > Sub-expressions: `<componentId>.<pin>` -> the expression that
+   *  output computes, drawn beside the pin. */
+  subExpressions?: ReadonlyMap<string, Expr> | undefined;
 }
 
 interface Geo {
@@ -403,6 +414,9 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     }
   }
 
+  if (p.subExpressions && theme.lod !== 'flat')
+    drawSubExpressions(ctx, theme, p.subExpressions, geo);
+
   if (p.ghost) {
     ctx.globalAlpha = GHOST_ALPHA;
     drawComponent(ctx, theme, p.ghost, p);
@@ -566,6 +580,42 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     ctx.setLineDash([4, 3]);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+}
+
+/** Each gate output's expression beside its pin, on the side the wire leaves
+ *  by and clear of it, over a paper plate so a wire behind stays readable. */
+function drawSubExpressions(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  exprs: ReadonlyMap<string, Expr>,
+  geo: ReadonlyMap<string, Geo>,
+): void {
+  const fontPx = theme.glyphText;
+  const g = theme.gridSchematic;
+  const pad = 2;
+  ctx.font = exprFont(theme, fontPx);
+  for (const [key, expr] of exprs) {
+    const dot = key.lastIndexOf('.');
+    const at = geo.get(key.slice(0, dot));
+    const pin = at?.pins.get(key.slice(dot + 1));
+    if (!at || !pin) continue;
+    const layout = layoutExprText(ctx, expr);
+    const h = exprTextHeight(layout, fontPx);
+    const side = pinExitSide(pin, at.bounds) ?? 'right';
+    // Text middle sits above a horizontal wire, beside a vertical one.
+    const x = side === 'left' ? pin.x - g / 2 - layout.width : pin.x + g / 2;
+    const y =
+      side === 'up'
+        ? pin.y - g / 2 - fontPx / 2
+        : side === 'down'
+          ? pin.y + g / 2 + h - fontPx / 2
+          : pin.y - pad * 2 - fontPx / 2;
+    ctx.fillStyle = theme.colors.paper;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x - pad, y + fontPx / 2 - h - pad, layout.width + pad * 2, h + pad * 2);
+    ctx.globalAlpha = 1;
+    paintExprText(ctx, theme, layout, x, y, fontPx, theme.colors.accent);
   }
 }
 

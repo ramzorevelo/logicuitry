@@ -80,8 +80,7 @@ import {
   withOutputBubble,
   type GateFamilyKind,
 } from '../../core/gates/bubbleModel';
-import { OUTPUT_TERMINAL_KINDS, truthTableOf } from '../../core/gates/verify';
-import type { TruthTable } from '../../core/boolean/truthTable';
+import { boardDiffRows } from '../../core/gates/verify';
 import { commitPush, previewPush, type PushMove, type PushPreview } from './bubble/pushController';
 import type { NetChangeRecord } from '../../core/sim/kernel';
 import { buildReplayIndex, replayNetValue, type ReplayIndex } from '../../core/timing/traceView';
@@ -327,9 +326,6 @@ interface CircuitState {
   // canvas redraw effect must list them (or call draw() at the mutation
   // site) explicitly -- `rev` only signals board/sim mutations.
   mode: 'edit' | 'bubble';
-  /** Truth table snapshotted at mode entry; the drawer's fixed "original"
-   *  column and the reference every push is verified against. */
-  bubbleBaseline: TruthTable | null;
   bubbleFocus: TerminalFocus | null;
   bubblePreview: { move: PushMove; result: PushPreview } | null;
   /** Insert-¬¬ tool: focus cycles wires, a click/Enter on one inserts a pair. */
@@ -1988,6 +1984,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
   // unrelated error kind (draw:, timing:, ...) that happens to still be set.
   // Compiles the top-level board always (same precedent as runSta/power --
   // a def-tab edit surfaces once an instance of that def sits on the board).
+  // Entering bubble mode rewrites literal gates into bubble params as an undo
+  // step, so undoing it (or redoing past it) would leave literal kinds that
+  // expose no bubble anchors to drag.
+  const renormalizeForBubbleMode = (draft: Circuit) => {
+    if (get().mode !== 'bubble') return;
+    draft.components = importCircuit({ ...get().board, ...draft }).components;
+  };
+
   const checkWidthMismatch = (editedId: string) => {
     const board = get().board;
     const tabPrefix = 'main/'; // compile() always roots the given circuit at 'main/'.
@@ -2100,7 +2104,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     mode: 'edit',
     labelConflict: null,
     pendingTabClose: null,
-    bubbleBaseline: null,
     bubbleFocus: null,
     bubblePreview: null,
     bubblePairMode: false,
@@ -3180,6 +3183,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const apply: ApplyFn = (kind, id, value) => applyToCircuit(draft, kind, id, value as never);
       if (!historyFor(tab.id).undo(apply)) return;
       if (tab.kind === 'board') {
+        renormalizeForBubbleMode(draft);
         set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
         sim = null;
         // Re-validate against the now-reverted board: a stale compile-error/
@@ -3196,6 +3200,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const apply: ApplyFn = (kind, id, value) => applyToCircuit(draft, kind, id, value as never);
       if (!historyFor(tab.id).redo(apply)) return;
       if (tab.kind === 'board') {
+        renormalizeForBubbleMode(draft);
         set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
         sim = null;
         checkWidthMismatch('');
@@ -3519,14 +3524,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const normalized = importCircuit(get().board);
       // Entering bubble mode never blocks on a wide (width>1) gate/terminal
       // elsewhere on the board -- each bubble-push transform refuses
-      // individually on the specific wide gate it would touch, and
-      // truthTableOf below bit-expands wide terminals so the baseline
-      // equivalence check doesn't require 1-bit-only.
-      const outputs = normalized.components.filter((c) => OUTPUT_TERMINAL_KINDS.has(c.kind));
-      let baseline: TruthTable;
+      // individually on the specific wide gate it would touch, and the
+      // equivalence check bit-expands wide terminals so it doesn't require
+      // 1-bit-only.
       try {
-        if (outputs.length === 0) throw new RangeError('no output terminal (output/LED/probe)');
-        baseline = truthTableOf(normalized, get().chipLib);
+        if (boardDiffRows(get().board, normalized, get().chipLib).length > 0)
+          throw new RangeError('normalizing the board changed its function');
       } catch (e) {
         set({ error: `bubble mode: ${e instanceof Error ? e.message : String(e)}` });
         return;
@@ -3540,7 +3543,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       });
       set({
         mode: 'bubble',
-        bubbleBaseline: baseline,
         bubbleFocus: null,
         bubblePreview: null,
         bubblePairMode: false,
@@ -3568,7 +3570,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       });
       set({
         mode: 'edit',
-        bubbleBaseline: null,
         bubbleFocus: null,
         bubblePreview: null,
         bubblePairMode: false,

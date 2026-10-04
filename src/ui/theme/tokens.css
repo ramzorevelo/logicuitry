@@ -377,10 +377,10 @@
 :root .tool-btn,
 :root .mode-btn,
 :root .workbench-tab,
-:root .theme-picker__button,
 :root .palette-item,
 :root .drawer-toggle,
 :root .reveal-btn,
+:root .algebra-step,
 :root .segmented,
 :root .package-dialog button:not(.package-swatch),
 :root .analyze-drawer button {
@@ -404,10 +404,10 @@
 :root .tool-btn::before,
 :root .mode-btn::before,
 :root .workbench-tab::before,
-:root .theme-picker__button::before,
 :root .palette-item::before,
 :root .drawer-toggle::before,
 :root .reveal-btn::before,
+:root .algebra-step::before,
 :root .segmented::before,
 :root .package-dialog button:not(.package-swatch)::before,
 :root .analyze-drawer button::before {
@@ -545,8 +545,32 @@
 :root .mode-btn:hover,
 :root .workbench-tab:hover,
 :root .drawer-toggle:hover,
-:root .reveal-btn:hover {
+:root .reveal-btn:hover:not(:disabled),
+:root .algebra-step:hover,
+:root .algebra-step:focus-visible {
   background: var(--accent);
+}
+
+/* Text fields and selects default to the OS widget fill, a grey no theme owns
+   (worst in dark). :where keeps this at zero specificity so any component rule
+   still wins. */
+:where(
+  input:not([type]),
+  input[type='text'],
+  input[type='number'],
+  input[type='search'],
+  textarea,
+  select
+) {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--chrome-radius);
+}
+
+:where(input:disabled, textarea:disabled, select:disabled) {
+  opacity: 0.6;
 }
 
 /* Scrollbars follow the theme. color-scheme already picks the right native

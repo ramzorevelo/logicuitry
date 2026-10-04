@@ -25,7 +25,7 @@ export class ExprError extends Error {
   }
 }
 
-type TokenKind = 'var' | 'const' | 'and' | 'or' | 'xor' | 'not' | 'post-not' | '(' | ')';
+type TokenKind = 'var' | 'const' | 'and' | 'or' | 'xor' | 'xnor' | 'not' | 'post-not' | '(' | ')';
 
 interface Token {
   kind: TokenKind;
@@ -37,6 +37,7 @@ const WORDS: Record<string, TokenKind> = {
   AND: 'and',
   OR: 'or',
   XOR: 'xor',
+  XNOR: 'xnor',
   NOT: 'not',
 };
 
@@ -48,6 +49,7 @@ const SYMBOLS: Record<string, TokenKind> = {
   '|': 'or',
   '^': 'xor',
   '⊕': 'xor', // circled plus
+  '⊙': 'xnor', // circled dot
   '~': 'not',
   '!': 'not',
   '¬': 'not', // not sign
@@ -168,13 +170,25 @@ export function parseExpr(src: string): Expr {
     return args.length === 1 ? args[0]! : { kind: 'and', args };
   };
 
+  // XNOR is not a node kind: it folds left into not(xor(..)), so a chain of
+  // mixed XOR and XNOR keeps the left-to-right reading.
   const xor = (): Expr => {
-    const args = [and()];
-    while (peek()?.kind === 'xor') {
-      pos++;
-      args.push(and());
+    let e = and();
+    let run: Expr[] | null = null;
+    for (;;) {
+      const k = peek()?.kind;
+      if (k === 'xor') {
+        pos++;
+        if (!run) run = [e];
+        run.push(and());
+        e = { kind: 'xor', args: run };
+      } else if (k === 'xnor') {
+        pos++;
+        e = { kind: 'not', a: { kind: 'xor', args: [e, and()] } };
+        run = null;
+      } else break;
     }
-    return args.length === 1 ? args[0]! : { kind: 'xor', args };
+    return e;
   };
 
   function or(): Expr {
@@ -277,6 +291,18 @@ export function printExpr(e: Expr): string {
     case 'or':
       return e.args.map((a) => wrap(a, PRECEDENCE.or)).join(' + ');
   }
+}
+
+/** A name that is not one letter plus digits (`Cin`, `U3.13`) fuses with its
+ *  neighbour when juxtaposed, so a product of it needs a dot. */
+function isCompoundName(e: Expr): boolean {
+  while (e.kind === 'not') e = e.a;
+  return e.kind === 'var' && !/^[A-Za-z][0-9]*$/.test(e.name);
+}
+
+/** Whether a drawn product puts `·` between `prev` and `next`. */
+export function productNeedsDot(prev: Expr, next: Expr): boolean {
+  return next.kind === 'const' || isCompoundName(prev) || isCompoundName(next);
 }
 
 /** Disables the NAND-only option, the same restriction Logisim applies. */

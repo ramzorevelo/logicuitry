@@ -52,6 +52,13 @@ export interface Prefs {
    *  launch is the new version. Windows installers exit the app to run, which
    *  is why this is on close and not on startup. */
   applyUpdatesOnClose: boolean;
+  /** Minterm numbers in the K-map cell corners. */
+  kmapCellNumbers: boolean;
+  /** Which axis the most significant input runs along by default: the top
+   *  edge (the lesson's convention) or the side. A per-map choice overrides. */
+  kmapMsbSide: 'top' | 'side';
+  /** The grouping-rules tip under the K-map is open. */
+  kmapRulesOpen: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -74,6 +81,9 @@ export const DEFAULT_PREFS: Prefs = {
   confirmReplaceBoard: true,
   autoDownloadUpdates: false,
   applyUpdatesOnClose: false,
+  kmapCellNumbers: true,
+  kmapMsbSide: 'top',
+  kmapRulesOpen: false,
 };
 
 export const PREFS_STORAGE_KEY = 'lcir.prefs';
@@ -122,6 +132,9 @@ export function mergePrefs(raw: unknown): Prefs {
     confirmReplaceBoard: bool(r['confirmReplaceBoard'], d.confirmReplaceBoard),
     autoDownloadUpdates: bool(r['autoDownloadUpdates'], d.autoDownloadUpdates),
     applyUpdatesOnClose: bool(r['applyUpdatesOnClose'], d.applyUpdatesOnClose),
+    kmapCellNumbers: bool(r['kmapCellNumbers'], d.kmapCellNumbers),
+    kmapMsbSide: r['kmapMsbSide'] === 'side' ? 'side' : 'top',
+    kmapRulesOpen: bool(r['kmapRulesOpen'], d.kmapRulesOpen),
   };
 }
 

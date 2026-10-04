@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { comp, wire, board } from '../model/testFixtures';
 import type { ChipLibrary } from '../model/types';
-import { analysisTablesOf, truthTableOf } from './verify';
+import { analysisTablesOf, boardDiffRows, truthTableOf } from './verify';
 
 const noLib: ChipLibrary = new Map();
 
@@ -64,6 +64,51 @@ describe('truthTableOf stays per-terminal (no net dedup)', () => {
     });
     const table = truthTableOf(b, noLib);
     expect(table.inputPaths).toHaveLength(2);
+  });
+});
+
+describe('boardDiffRows over independent groups', () => {
+  const chains = (n: number, invertLast = false) =>
+    board({
+      components: Array.from({ length: n }, (_, i) => [
+        comp(`i${i}`, 'inport'),
+        comp(`g${i}`, invertLast && i === n - 1 ? 'not' : 'buf'),
+        comp(`o${i}`, 'outport'),
+      ]).flat(),
+      wires: Array.from({ length: n }, (_, i) => [
+        wire(`a${i}`, [`i${i}`, 'y'], [`g${i}`, 'a']),
+        wire(`b${i}`, [`g${i}`, 'y'], [`o${i}`, 'a']),
+      ]).flat(),
+    });
+
+  it('11 inputs that never meet are checked per output, where the whole-board table refuses', () => {
+    const b = chains(11);
+    expect(() => truthTableOf(b, noLib)).toThrow(/exceeds max/);
+    expect(boardDiffRows(b, chains(11), noLib)).toEqual([]);
+  });
+
+  it('still catches a changed function inside one cone', () => {
+    expect(boardDiffRows(chains(11), chains(11, true), noLib).length).toBeGreaterThan(0);
+  });
+
+  it('refuses one output that really needs more than 8 inputs', () => {
+    const wide = board({
+      components: [
+        ...Array.from({ length: 9 }, (_, i) => comp(`i${i}`, 'inport')),
+        comp('g', 'and', { inputs: 8 }),
+        comp('g2', 'and'),
+        comp('o', 'outport'),
+      ],
+      wires: [
+        ...Array.from({ length: 8 }, (_, i) =>
+          wire(`w${i}`, [`i${i}`, 'y'], ['g', String.fromCharCode(97 + i)]),
+        ),
+        wire('w8', ['g', 'y'], ['g2', 'a']),
+        wire('w9', ['i8', 'y'], ['g2', 'b']),
+        wire('wo', ['g2', 'y'], ['o', 'a']),
+      ],
+    });
+    expect(() => boardDiffRows(wide, wide, noLib)).toThrow(/max 8/);
   });
 });
 

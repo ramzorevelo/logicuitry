@@ -1,0 +1,34 @@
+/* Expressions are DOM text here (unlike the bit grids and the board), so
+   the stacked overbars are borders on nested inline-blocks. */
+
+.boolexpr {
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.boolexpr__not {
+  display: inline-block;
+  border-top: 0.09em solid currentColor;
+  padding-top: 0.08em;
+  margin: 0 0.05em;
+  line-height: 1.2;
+}
+
+.boolexpr__node--selected {
+  background: var(--accent-fill);
+  color: var(--accent);
+}
+
+.boolexpr--interactive .boolexpr__node {
+  cursor: pointer;
+}
+
+.boolexpr__node--target {
+  outline: 1px solid var(--accent);
+}
+
+.boolexpr__node--marked {
+  outline: 2px dashed var(--accent);
+  outline-offset: 1px;
+}

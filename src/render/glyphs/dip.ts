@@ -24,8 +24,11 @@ const NOTCH_R = 0.75; // * G
 /** Clear lane down the middle for the part number, as a fraction of its font
  *  size: a rotated line costs its cap height in width, not its length. */
 const NAME_LANE = 0.8;
-/** Body padding either side of the label columns. */
-const SIDE_PAD = 1.5; // * G
+/** Every package is one body width, as every real 300-mil DIP is: a part's
+ *  pin names are fitted to the body, never the body to its longest name. */
+const BODY_W = 9; // * G
+/** Pin name inset from the body edge. */
+const NAME_INSET = 0.6; // * G
 
 export interface DipLayout {
   g: number;
@@ -37,10 +40,29 @@ export interface DipLayout {
   /** Centre of the body, where the part number runs along the long axis. */
   bodyCenter: Vec2;
   /** Pin rows top to bottom, paired left/right, in package pin order. */
-  left: { pin: ResolvedPin; number: number; y: number }[];
-  right: { pin: ResolvedPin; number: number; y: number }[];
+  left: DipRow[];
+  right: DipRow[];
   bounds: Rect;
   pins: Map<string, Vec2>;
+}
+
+export interface DipRow {
+  pin: ResolvedPin;
+  number: number;
+  y: number;
+  /** The name as printed: an active-low `/X` reads as X under a bar. */
+  text: string;
+  bar: boolean;
+  /** At or below the glyph text size, whatever fits the name's column. */
+  fontPx: number;
+}
+
+/** `/BI_RBO` is the datasheet's BI/RBO under one bar; the slash prefix is
+ *  only how a pin name can say "active low" in plain text. */
+export function dipPinText(name: string): { text: string; bar: boolean } {
+  return name.startsWith('/')
+    ? { text: name.slice(1).replace(/_/g, '/'), bar: true }
+    : { text: name, bar: false };
 }
 
 /** Pin count a package name declares, e.g. 'DIP14' -> 14. */
@@ -69,20 +91,21 @@ export function dipLayout(input: GeometryInput, theme: Theme): DipLayout {
   // symmetrically on its own pin rows rather than hanging off the top one.
   const END_PAD = ROW_PITCH * g;
   const rowY = (i: number) => END_PAD + i * ROW_PITCH * g;
-  const left = ordered.slice(0, perSide).map((pin, i) => ({ pin, number: i + 1, y: rowY(i) }));
+  // Each name gets the half body left beside the part number's lane.
+  const column = (BODY_W * g - NAME_LANE * nameFontPx) / 2 - NAME_INSET * g;
+  const row = (pin: ResolvedPin, number: number, y: number): DipRow => {
+    const { text, bar } = dipPinText(pin.label ?? pin.name);
+    const fit = column / measureMonoText(text, 1);
+    return { pin, number, y, text, bar, fontPx: Math.min(fontPx, fit) };
+  };
+  const left = ordered.slice(0, perSide).map((pin, i) => row(pin, i + 1, rowY(i)));
   const right = ordered
     .slice(perSide)
     .reverse()
-    .map((pin, i) => ({ pin, number: ordered.length - i, y: rowY(i) }));
+    .map((pin, i) => row(pin, ordered.length - i, rowY(i)));
 
-  const widest = (rows: { pin: ResolvedPin }[]) =>
-    rows.reduce((w, r) => Math.max(w, measureMonoText(r.pin.label ?? r.pin.name, fontPx)), 0);
-  const bodyW = Math.max(
-    widest(left) + widest(right) + NAME_LANE * nameFontPx + SIDE_PAD * g,
-    7 * g,
-  );
   const boxLeft = STUB * g;
-  const boxRight = boxLeft + Math.ceil(bodyW / g) * g;
+  const boxRight = boxLeft + BODY_W * g;
   const width = boxRight + STUB * g;
   const height = perSide * ROW_PITCH * g + END_PAD;
 
@@ -165,18 +188,19 @@ export function drawDip(
           { x: (tipX + edgeX) / 2, y: row.y - g * 0.6 },
           { x: 0, y: 0 },
         );
-        const label = row.pin.label ?? row.pin.name;
-        const inset = g * 0.6;
-        const textW = measureMonoText(label, theme.glyphText);
+        const inset = g * NAME_INSET;
+        const textW = measureMonoText(row.text, row.fontPx);
+        ctx.font = `${row.fontPx}px ${theme.fonts.mono}`;
         drawUprightText(
           ctx,
           placement,
-          label,
+          row.text,
           {
             x: isLeft ? edgeX + inset + textW / 2 : edgeX - inset - textW / 2,
-            y: row.y + theme.glyphText * 0.1,
+            y: row.y + row.fontPx * 0.1,
           },
           { x: 0, y: 0 },
+          row.bar ? { overbarPx: row.fontPx } : undefined,
         );
       }
     }

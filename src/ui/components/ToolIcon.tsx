@@ -27,7 +27,9 @@ export type IconName =
   | 'sta'
   | 'open'
   | 'doubleNot'
-  | 'cancel';
+  | 'cancel'
+  | 'maximize'
+  | 'restore';
 
 const PATHS: Record<IconName, JSX.Element> = {
   cancel: <path d="M6 6 L18 18 M18 6 L6 18" />,
@@ -72,6 +74,9 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   open: <path d="M3 19 V6 H9 L11 8 H21 V19 Z M3 19 L6 12 H21" />,
+  // Outward and inward corner arrows; `fit` already means "frame the board".
+  maximize: <path d="M14 4 H20 V10 M20 4 L13 11 M10 20 H4 V14 M4 20 L11 13" />,
+  restore: <path d="M20 10 H14 V4 M14 10 L21 3 M4 14 H10 V20 M10 14 L3 21" />,
   fit: <path d="M4 8 V4 H8 M16 4 H20 V8 M20 16 V20 H16 M8 20 H4 V16" />,
   undo: (
     <>

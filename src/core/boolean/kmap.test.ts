@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import * as bv from '../value/busValue';
 import type { TruthTable } from './truthTable';
-import { buildKmap, implicantTerm, isLegalGroup, minimalCover } from './kmap';
+import {
+  buildKmap,
+  checkGroups,
+  diagnoseGroup,
+  essentialPrimes,
+  groupTerm,
+  implicantTerm,
+  isLegalGroup,
+  minimalCover,
+  minimumCovers,
+  primeImplicants,
+} from './kmap';
 
 // Hand-built tables (no compile needed): one output column, bit per row.
 function table(inputPaths: string[], onesList: number[]): TruthTable {
@@ -181,5 +192,107 @@ describe("don't-care support (H&H §2.7.3, Ex 2.11)", () => {
     for (const m of ones) expect(covered.has(m)).toBe(true);
     // Deterministic.
     expect(minimalCover(t, 0, dc)).toEqual(cover);
+  });
+});
+
+describe('polarity', () => {
+  const names = ['A', 'B', 'C', 'D'];
+  const complement = (t: TruthTable): TruthTable => ({
+    ...t,
+    rows: t.rows.map((r) => [bv.known(r[0]!.v & 1 ? 0 : 1, 1)]),
+  });
+
+  it('POS cover of f equals the SOP cover of its complement, exhaustively', () => {
+    for (let n = 2; n <= 3; n++) {
+      for (let f = 0; f < 2 ** (2 ** n); f++) {
+        const ones = Array.from({ length: 2 ** n }, (_, m) => m).filter((m) => (f >> m) & 1);
+        const t = table(names.slice(0, n), ones);
+        expect(minimumCovers(t, 0, undefined, 'zeros')).toEqual(minimumCovers(complement(t), 0));
+      }
+    }
+    // Fixed n = 4 sample (xorshift, seedless by construction).
+    let x = 0x1234;
+    for (let i = 0; i < 40; i++) {
+      x ^= x << 7;
+      x ^= x >>> 9;
+      x &= 0xffff;
+      const ones = Array.from({ length: 16 }, (_, m) => m).filter((m) => (x >> m) & 1);
+      const t = table(names, ones);
+      expect(minimumCovers(t, 0, undefined, 'zeros')).toEqual(minimumCovers(complement(t), 0));
+    }
+  });
+
+  it('groupTerm reads a sum term, complemented where fixed at 1', () => {
+    // f = (A + B')(C) style: zeros at 2,3 -> A'B fixed: A=0 (plain), B=1 (complemented).
+    const t = table(['A', 'B', 'C'], [0, 1, 4, 5, 6, 7]);
+    expect(groupTerm(t, [2, 3], 'zeros')).toEqual([
+      { var: 'A', negated: false },
+      { var: 'B', negated: true },
+    ]);
+    expect(groupTerm(t, [2, 3], 'ones')).toEqual(implicantTerm(t, [2, 3]));
+  });
+
+  it('diagnoses refused circles by rule', () => {
+    const t = table(['A', 'B', 'C'], [0, 1, 3]);
+    expect(diagnoseGroup(t, 0, [0, 1])).toBe('ok');
+    expect(diagnoseGroup(t, 0, [0, 2])).toBe('rule2');
+    expect(diagnoseGroup(t, 0, [0, 1, 3])).toBe('rule3');
+    expect(diagnoseGroup(t, 0, [4, 5], undefined, 'zeros')).toBe('ok');
+    expect(diagnoseGroup(t, 0, [2, 5, 6], undefined, 'zeros')).toBe('rule3');
+    expect(diagnoseGroup(t, 0, [2, 3], new Set([3]), 'zeros')).toBe('ok');
+    expect(diagnoseGroup(t, 0, [3], new Set([3]))).toBe('dc-only');
+    expect(isLegalGroup(t, 0, [0, 1])).toBe(true);
+  });
+
+  it('Example 5.3 primes and essentials', () => {
+    const t = table(names, [0, 1, 2, 4, 5, 7, 11, 15]);
+    expect(primeImplicants(t, 0)).toHaveLength(5);
+    expect(essentialPrimes(t, 0)).toEqual([
+      [0, 1, 4, 5],
+      [0, 2],
+      [11, 15],
+    ]);
+  });
+
+  it("a larger 4-variable function reduces to C, B'D', A'BD", () => {
+    const t = table(names, [0, 2, 3, 5, 6, 7, 8, 10, 11, 14, 15]);
+    const cover = minimumCovers(t, 0)[0]!;
+    const terms = cover.map((g) =>
+      groupTerm(t, g)
+        .map((l) => l.var + (l.negated ? "'" : ''))
+        .join(''),
+    );
+    expect(terms.sort()).toEqual(["A'BD", "B'D'", 'C'].sort());
+  });
+
+  it('yields every minimum when there are several', () => {
+    // Cyclic 3-var function: two minimal 3-group covers.
+    const t = table(['A', 'B', 'C'], [0, 1, 3, 7, 6, 4]);
+    expect(minimumCovers(t, 0)).toHaveLength(2);
+    expect(minimalCover(t, 0)).toEqual(minimumCovers(t, 0)[0]);
+  });
+
+  it('checkGroups flags non-prime, redundant, missing and non-minimum circles', () => {
+    const t = table(['A', 'B', 'C'], [0, 1, 4, 5]); // Y = C'
+    const ok = checkGroups(t, 0, [[0, 1, 4, 5]]);
+    expect(ok).toEqual({
+      circles: [{ notPrime: false, redundant: false }],
+      coversAll: true,
+      isMinimum: true,
+    });
+    const bad = checkGroups(t, 0, [
+      [0, 1],
+      [0, 4],
+      [1, 5],
+    ]);
+    expect(bad.circles.every((c) => c.notPrime)).toBe(true);
+    expect(bad.circles[0]!.redundant).toBe(true);
+    expect(bad.isMinimum).toBe(false);
+    expect(checkGroups(t, 0, [[0, 1]]).coversAll).toBe(false);
+    const redundant = checkGroups(t, 0, [
+      [0, 1, 4, 5],
+      [0, 1, 4, 5],
+    ]);
+    expect(redundant.circles.every((c) => c.redundant)).toBe(true);
   });
 });

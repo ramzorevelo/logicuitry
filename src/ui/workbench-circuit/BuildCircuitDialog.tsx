@@ -7,13 +7,20 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import * as bv from '../../core/value/busValue';
 import { ExprError, parseExpr, printExpr, truthTableOfExpr } from '../../core/boolean/expr';
 import { MAX_KMAP_INPUTS, MIN_KMAP_INPUTS } from '../../core/boolean/kmap';
-import { exprOfCover, synthesizeExpr, synthesizeTable } from '../../core/boolean/synthesize';
+import {
+  exprOfCover,
+  exprOfPosCover,
+  synthesizeExpr,
+  synthesizeTable,
+} from '../../core/boolean/synthesize';
 import type { SynthNetlist } from '../../core/boolean/synthesize';
 import type { TruthTable } from '../../core/boolean/truthTable';
 import { cellKeyAction, nextCell, type Cell } from './buildGrid';
 import { useModalKeys } from '../modalKeys';
 
 const VAR_NAMES = ['A', 'B', 'C', 'D'];
+
+type GateSet = 'any' | 'nand' | 'nor';
 
 interface Props {
   /** Seeds the expression box, e.g. the cover showing in the Analyze drawer. */
@@ -47,8 +54,9 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
   const [cells, setCells] = useState<Cell[]>(() => Array<Cell>(8).fill('0'));
   const [name, setName] = useState('Built circuit');
   const [twoInputOnly, setTwoInputOnly] = useState(false);
-  const [nandOnly, setNandOnly] = useState(false);
+  const [gateSet, setGateSet] = useState<GateSet>('any');
   const [cancelNotPairs, setCancelNotPairs] = useState(false);
+  const [minimiseFirst, setMinimiseFirst] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
 
   useModalKeys(onClose);
@@ -96,6 +104,16 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
     }
   };
 
+  // The table path builds NOR-only from the product of sums, not the SOP above.
+  const posCover = useMemo(() => {
+    if (tab !== 'table' || gateSet !== 'nor') return null;
+    try {
+      return printExpr(exprOfPosCover(tableOf(names, cells), 0, dontCares));
+    } catch {
+      return null;
+    }
+  }, [tab, gateSet, names, cells, dontCares]);
+
   const cycleCell = (index: number) => writeCell(index, nextCell(cells[index]!));
 
   const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -116,13 +134,17 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
     try {
       const options = {
         twoInputGatesOnly: twoInputOnly,
-        nandOnly,
-        cancelNotPairs: nandOnly && cancelNotPairs,
+        nandOnly: gateSet === 'nand',
+        norOnly: gateSet === 'nor',
+        cancelNotPairs: gateSet !== 'any' && cancelNotPairs,
       };
+      const expression = { ...options, outputLabel: text.trim() };
       const netlist =
-        tab === 'expression'
-          ? synthesizeExpr(parseExpr(text), { ...options, outputLabel: text.trim() })
-          : synthesizeTable(tableOf(names, cells), { ...options, dontCares });
+        tab === 'table'
+          ? synthesizeTable(tableOf(names, cells), { ...options, dontCares })
+          : minimiseFirst && gateSet !== 'any'
+            ? synthesizeTable(truthTableOfExpr(parseExpr(text)), expression)
+            : synthesizeExpr(parseExpr(text), expression);
       onBuild(netlist, name.trim() || 'Built circuit');
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e));
@@ -247,6 +269,9 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
               </tbody>
             </table>
             <p className="analyze-muted">Minimal cover: {text}</p>
+            {posCover !== null ? (
+              <p className="analyze-muted">NOR only builds the minimum POS: {posCover}</p>
+            ) : null}
           </div>
         )}
 
@@ -261,16 +286,16 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
           </span>
         </label>
         <label className="settings-row">
-          <input
-            type="checkbox"
-            checked={nandOnly}
-            onChange={(e) => setNandOnly(e.target.checked)}
-          />
+          <select value={gateSet} onChange={(e) => setGateSet(e.target.value as GateSet)}>
+            <option value="any">Any gates</option>
+            <option value="nand">NAND only</option>
+            <option value="nor">NOR only</option>
+          </select>
           <span className="settings-row__text">
-            <span>Use NAND gates only</span>
+            <span>Gates</span>
           </span>
         </label>
-        {nandOnly ? (
+        {gateSet !== 'any' ? (
           <label className="settings-row">
             <input
               type="checkbox"
@@ -279,6 +304,22 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
             />
             <span className="settings-row__text">
               <span>Cancel back-to-back NOT pairs</span>
+            </span>
+          </label>
+        ) : null}
+        {gateSet !== 'any' && tab === 'expression' ? (
+          <label className="settings-row">
+            <input
+              type="checkbox"
+              checked={minimiseFirst}
+              onChange={(e) => setMinimiseFirst(e.target.checked)}
+            />
+            <span className="settings-row__text">
+              <span>Minimise first</span>
+              <span className="settings-row__hint">
+                Build the minimum {gateSet === 'nor' ? 'product of sums' : 'sum of products'}{' '}
+                instead of the expression as written.
+              </span>
             </span>
           </label>
         ) : null}

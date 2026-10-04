@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as bv from '../core/value/busValue';
 import type { TruthTable } from '../core/boolean/truthTable';
 import { buildKmap } from '../core/boolean/kmap';
-import { groupBlocks, kmapCellAt, layoutKmap } from './kmap';
+import { cornerPlan, groupBlocks, kmapCellAt, layoutKmap } from './kmap';
 
 function table(inputPaths: string[], onesList: number[]): TruthTable {
   const ones = new Set(onesList);
@@ -55,5 +55,31 @@ describe('groupBlocks', () => {
       const openCount = Object.values(b.open).filter(Boolean).length;
       expect(openCount).toBe(2);
     }
+  });
+});
+
+describe('cornerPlan', () => {
+  const m = { cell: 48, labelW: 64, labelH: 44 };
+  const labelPx = 14;
+
+  it('gives a short name its own line above the column variables', () => {
+    const plan = cornerPlan(m, labelPx, 9, 256);
+    expect(plan.nameY).not.toBeNull();
+    // Line boxes (one font high) must not intersect.
+    expect(plan.nameY! + labelPx / 2).toBeLessThanOrEqual(plan.colVarsY - labelPx / 2 + 1);
+  });
+
+  it('drops a name wider than the map and keeps the column variables', () => {
+    const plan = cornerPlan(m, labelPx, 400, 256);
+    expect(plan.nameY).toBeNull();
+    expect(plan.colVarsY).toBeCloseTo(m.labelH * 0.35);
+  });
+
+  it('holds at maximized metrics', () => {
+    const big = { cell: 120, labelW: 156, labelH: 108 };
+    const px = 36;
+    const plan = cornerPlan(big, px, 60, 156 + 4 * 120);
+    expect(plan.nameY).not.toBeNull();
+    expect(plan.nameY! + px / 2).toBeLessThanOrEqual(plan.colVarsY - px / 2 + 1);
   });
 });

@@ -127,26 +127,46 @@ function analyzeSubcube(
   return { const1, const0, free };
 }
 
+/** Which output value a circle groups: 1s (SOP) or 0s (POS). */
+export type KmapPolarity = 'ones' | 'zeros';
+
+const targetBit = (polarity: KmapPolarity): 0 | 1 => (polarity === 'ones' ? 1 : 0);
+
+export type GroupDiagnosis = 'ok' | 'rule2' | 'rule3' | 'dc-only';
+
+/** Why a circle is refused: a wrong-valued cell (rule 2, checked first), not a
+ *  power-of-two subcube (rule 3), or nothing but don't-cares. */
+export function diagnoseGroup(
+  table: TruthTable,
+  outputIndex: number,
+  minterms: readonly number[],
+  dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
+): GroupDiagnosis {
+  const want = targetBit(polarity);
+  let sawReal = false;
+  for (const m of minterms) {
+    if (dontCares?.has(m)) continue;
+    if (bitValue(table.rows[m]![outputIndex]!) !== want) return 'rule2';
+    sawReal = true;
+  }
+  if (!analyzeSubcube(table.inputPaths.length, minterms)) return 'rule3';
+  // SPEC: a pure-DC subcube (no real target) is rejected as illegal, same as any
+  // other illegal group -- a circle over don't-cares alone claims nothing.
+  return sawReal ? 'ok' : 'dc-only';
+}
+
 /** True iff `minterms` is a legal circling: a subcube whose cells are all
- *  1-or-don't-care, containing at least one real 1 (a pure-DC circle is
- *  pointless -- H&H p.80 Ex 2.11). */
+ *  target-or-don't-care, containing at least one real target (a pure-DC circle
+ *  is pointless -- H&H p.80 Ex 2.11). */
 export function isLegalGroup(
   table: TruthTable,
   outputIndex: number,
   minterms: readonly number[],
   dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
 ): boolean {
-  const cube = analyzeSubcube(table.inputPaths.length, minterms);
-  if (!cube) return false;
-  let sawReal1 = false;
-  for (const m of minterms) {
-    if (dontCares?.has(m)) continue;
-    if (bitValue(table.rows[m]![outputIndex]!) !== 1) return false;
-    sawReal1 = true;
-  }
-  // SPEC: a pure-DC subcube (no real 1) is rejected as illegal, same as any
-  // other illegal group -- a circle over don't-cares alone claims nothing.
-  return sawReal1;
+  return diagnoseGroup(table, outputIndex, minterms, dontCares, polarity) === 'ok';
 }
 
 export interface ImplicantLiteral {
@@ -170,22 +190,44 @@ export function implicantTerm(table: TruthTable, minterms: readonly number[]): I
   return out;
 }
 
+/** Term read-off for either polarity. 'ones': product, complemented where fixed
+ *  at 0. 'zeros': sum, complemented where fixed at 1. */
+export function groupTerm(
+  table: TruthTable,
+  minterms: readonly number[],
+  polarity: KmapPolarity = 'ones',
+): ImplicantLiteral[] {
+  if (polarity === 'ones') return implicantTerm(table, minterms);
+  const n = table.inputPaths.length;
+  const cube = analyzeSubcube(n, minterms);
+  if (!cube) throw new RangeError('not a subcube');
+  const out: ImplicantLiteral[] = [];
+  for (let i = 0; i < n; i++) {
+    const bit = 1 << (n - 1 - i);
+    if (cube.const1 & bit) out.push({ var: table.inputPaths[i]!, negated: true });
+    else if (cube.const0 & bit) out.push({ var: table.inputPaths[i]!, negated: false });
+  }
+  return out;
+}
+
 function litCount(inputCount: number, cube: { free: number }): number {
   let freeCount = 0;
   for (let b = cube.free; b; b >>= 1) freeCount += b & 1;
   return inputCount - freeCount;
 }
 
-/** All subcubes whose cells are all 1-or-don't-care, as sorted minterm lists. */
+/** All subcubes whose cells are all target-or-don't-care, as sorted minterm lists. */
 function allCoverSubcubes(
   table: TruthTable,
   outputIndex: number,
   n: number,
-  dontCares?: ReadonlySet<number>,
+  dontCares: ReadonlySet<number> | undefined,
+  polarity: KmapPolarity,
 ): number[][] {
+  const want = targetBit(polarity);
   const cover = new Set<number>();
   for (let m = 0; m < 1 << n; m++) {
-    if (dontCares?.has(m) || bitValue(table.rows[m]![outputIndex]!) === 1) cover.add(m);
+    if (dontCares?.has(m) || bitValue(table.rows[m]![outputIndex]!) === want) cover.add(m);
   }
   const cubes: number[][] = [];
   const mask = (1 << n) - 1;
@@ -224,59 +266,162 @@ function compareLists(a: readonly number[], b: readonly number[]): number {
   return a.length - b.length;
 }
 
-/**
- * Deterministic exact minimum SOP cover (reveal only): fewest implicants,
- * tie-broken by fewest literals then lexicographically by covered-minterm
- * lists, so a given table always reveals the same cover even though the book
- * allows a non-unique minimum. Returns [] for a constant-0 output.
- */
-export function minimalCover(
-  table: TruthTable,
-  outputIndex: number,
-  dontCares?: ReadonlySet<number>,
-): number[][] {
+function checkedInputCount(table: TruthTable): number {
   const n = table.inputPaths.length;
   if (n < MIN_KMAP_INPUTS || n > MAX_KMAP_INPUTS)
     throw new RangeError(`K-map supports ${MIN_KMAP_INPUTS}..${MAX_KMAP_INPUTS} inputs, got ${n}`);
-  const isReal1 = (m: number) => bitValue(table.rows[m]![outputIndex]!) === 1;
-  const cubes = allCoverSubcubes(table, outputIndex, n, dontCares);
-  if (cubes.length === 0) return [];
-  // Prime implicants: cubes not strictly contained in a larger cover cube,
-  // dropping any prime that covers no real 1 (a pure-DC prime is never a
-  // useful cover target -- H&H p.80 Ex 2.11).
+  return n;
+}
+
+interface CoverContext {
+  n: number;
+  primes: number[][];
+  targets: number[];
+  cubes: number[][];
+}
+
+function coverContext(
+  table: TruthTable,
+  outputIndex: number,
+  dontCares: ReadonlySet<number> | undefined,
+  polarity: KmapPolarity,
+): CoverContext {
+  const n = checkedInputCount(table);
+  const want = targetBit(polarity);
+  const isReal = (m: number) =>
+    !dontCares?.has(m) && bitValue(table.rows[m]![outputIndex]!) === want;
+  const cubes = allCoverSubcubes(table, outputIndex, n, dontCares, polarity);
+  // Primes: cubes not strictly inside a larger cover cube, dropping any that
+  // covers no real target (a pure-DC prime is never a useful cover target --
+  // H&H p.80 Ex 2.11).
   const primes = cubes
     .filter((c) => !cubes.some((d) => d.length > c.length && isSubset(c, d)))
-    .filter((c) => c.some((m) => isReal1(m)))
+    .filter((c) => c.some(isReal))
     .sort(compareLists);
-  const need = new Set<number>();
-  for (let m = 0; m < 1 << n; m++) if (isReal1(m)) need.add(m);
-  const targets = [...need].sort((a, b) => a - b);
+  const targets: number[] = [];
+  for (let m = 0; m < 1 << n; m++) if (isReal(m)) targets.push(m);
+  return { n, primes, targets, cubes };
+}
 
-  let best: number[][] | null = null;
-  let bestLits = Infinity;
-  const literals = (cover: number[][]): number =>
-    cover.reduce((sum, g) => sum + litCount(n, analyzeSubcube(n, g)!), 0);
+/** Every prime group (implicant, or implicate for 'zeros') covering a real target. */
+export function primeImplicants(
+  table: TruthTable,
+  outputIndex: number,
+  dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
+): number[][] {
+  return coverContext(table, outputIndex, dontCares, polarity).primes;
+}
+
+/** Primes that are the only cover of some real target. */
+export function essentialPrimes(
+  table: TruthTable,
+  outputIndex: number,
+  dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
+): number[][] {
+  const { primes, targets } = coverContext(table, outputIndex, dontCares, polarity);
+  return primes.filter((p) =>
+    p.some((m) => targets.includes(m) && primes.filter((q) => q.includes(m)).length === 1),
+  );
+}
+
+const literalTotal = (n: number, cover: readonly (readonly number[])[]): number =>
+  cover.reduce((sum, g) => sum + litCount(n, analyzeSubcube(n, g)!), 0);
+
+/**
+ * Deterministic exact minimum covers (reveal only): fewest groups, then fewest
+ * literals, sorted lexicographically by covered-minterm lists so a given table
+ * always reveals the same first cover even though the book allows several
+ * minima. Returns [] when there is no real target cell.
+ */
+export function minimumCovers(
+  table: TruthTable,
+  outputIndex: number,
+  dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
+  limit = 16,
+): number[][][] {
+  const { n, primes, targets } = coverContext(table, outputIndex, dontCares, polarity);
+  if (targets.length === 0) return [];
   const covers = (cover: number[][]): boolean => {
     const got = new Set<number>();
     for (const g of cover) for (const m of g) got.add(m);
     return targets.every((m) => got.has(m));
   };
+  let found: number[][][] = [];
+  let bestLits = Infinity;
   // Iterative deepening over cover size; n<=4 keeps this tiny.
   const search = (size: number, start: number, acc: number[][]): void => {
     if (acc.length === size) {
       if (!covers(acc)) return;
-      const lits = literals(acc);
-      const cand = acc.map((g) => g.slice()).sort(compareLists);
-      if (!best || lits < bestLits || (lits === bestLits && compareCovers(cand, best) < 0)) {
-        best = cand;
-        bestLits = lits;
-      }
+      const lits = literalTotal(n, acc);
+      if (lits > bestLits) return;
+      if (lits < bestLits) found = [];
+      bestLits = lits;
+      found.push(acc.map((g) => g.slice()).sort(compareLists));
       return;
     }
     for (let i = start; i < primes.length; i++) search(size, i + 1, [...acc, primes[i]!]);
   };
-  for (let size = 1; size <= primes.length && !best; size++) search(size, 0, []);
-  return best ?? [];
+  for (let size = 1; size <= primes.length && found.length === 0; size++) search(size, 0, []);
+  return found.sort(compareCovers).slice(0, limit);
+}
+
+/** The single deterministic minimum SOP cover the reveal shows. */
+export function minimalCover(
+  table: TruthTable,
+  outputIndex: number,
+  dontCares?: ReadonlySet<number>,
+): number[][] {
+  return minimumCovers(table, outputIndex, dontCares)[0] ?? [];
+}
+
+export interface CircleCheck {
+  /** Rule 4: a larger legal group contains this circle. */
+  notPrime: boolean;
+  /** Rule 1: every real target in this circle is covered by the other circles. */
+  redundant: boolean;
+}
+
+export interface GroupCheck {
+  circles: CircleCheck[];
+  coversAll: boolean;
+  /** Same group count and literal count as the minimum cover. */
+  isMinimum: boolean;
+}
+
+/** Explicit Check action over legal circles; never run live. */
+export function checkGroups(
+  table: TruthTable,
+  outputIndex: number,
+  circles: readonly (readonly number[])[],
+  dontCares?: ReadonlySet<number>,
+  polarity: KmapPolarity = 'ones',
+): GroupCheck {
+  const { n, targets, cubes } = coverContext(table, outputIndex, dontCares, polarity);
+  const targetSet = new Set(targets);
+  const perCircle = circles.map((c, i) => {
+    const others = new Set<number>();
+    circles.forEach((o, j) => {
+      if (j !== i) for (const m of o) others.add(m);
+    });
+    return {
+      notPrime: cubes.some((d) => d.length > c.length && isSubset(c, d)),
+      redundant: c.filter((m) => targetSet.has(m)).every((m) => others.has(m)),
+    };
+  });
+  const got = new Set<number>();
+  for (const c of circles) for (const m of c) got.add(m);
+  const coversAll = targets.every((m) => got.has(m));
+  const best = minimumCovers(table, outputIndex, dontCares, polarity, 1)[0];
+  const isMinimum =
+    !!best &&
+    coversAll &&
+    circles.every((c) => analyzeSubcube(n, c)) &&
+    circles.length === best.length &&
+    literalTotal(n, circles) === literalTotal(n, best);
+  return { circles: perCircle, coversAll, isMinimum };
 }
 
 function compareCovers(

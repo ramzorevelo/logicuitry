@@ -176,8 +176,11 @@ import {
 } from './bubble/bubbleGeometry';
 import { nextFocus } from './bubble/focusOrder';
 import { AnalyzeDrawer } from './AnalyzeDrawer';
+import { useTypedFunction } from './typedFunction';
 import { useReferenceDrawer, useReferenceDrawerControl } from '../components/ReferenceDrawer';
 import { analysisTablesOf, OUTPUT_TERMINAL_KINDS } from '../../core/gates/verify';
+import { gateExpressions, hasSubExpressions } from '../../core/gates/subexpr';
+import type { Expr } from '../../core/boolean/expr';
 
 import { PaletteRail } from './PaletteRail';
 import { ToolIcon, type IconName } from '../components/ToolIcon';
@@ -594,6 +597,9 @@ export function CircuitWorkbench() {
   // dead end there; the same command the menu runs gets a toolbar button.
   const examplesCmd = useMenuCommand('file', 'examples');
   const [viewOnly, setViewOnly] = useState(false);
+  const [showSubExprs, setShowSubExprs] = useState(false);
+  // Compiling per frame would be wasted work: connectivity only moves with rev.
+  const subExprCache = useRef<{ rev: number; pins: ReadonlyMap<string, Expr> } | null>(null);
   const viewOnlyRef = useRef(viewOnly);
   viewOnlyRef.current = viewOnly;
   // Touch classification (tap / pan / long press / pinch) lives in a pure
@@ -807,11 +813,10 @@ export function CircuitWorkbench() {
       // width expansion is analysisTablesOf's own job below, wide terminals
       // are not an Analyze error.
       analysisTablesOf(st.board, st.chipLib);
-    } catch (err) {
-      useCircuitStore.setState({
-        error: `analyze: ${err instanceof Error ? err.message : String(err)}`,
-      });
-      return;
+    } catch {
+      // A board that cannot be analysed is not a reason to refuse: the typed
+      // function needs no board, and the drawer states the board's reason.
+      useTypedFunction.getState().setSource('typed');
     }
     setAnalyzeOpen(true);
     drawerControl.setOpen(true);
@@ -890,6 +895,21 @@ export function CircuitWorkbench() {
     if (sets.length === 0) return undefined;
     if (sets.length === 1) return sets[0];
     return new Set(sets.flatMap((x) => [...x]));
+  };
+
+  const subExpressionsNow = (): ReadonlyMap<string, Expr> | undefined => {
+    if (!showSubExprs || activeTab.kind !== 'board') return undefined;
+    const st = store.getState();
+    if (subExprCache.current?.rev !== st.rev) {
+      let pins: ReadonlyMap<string, Expr> = new Map();
+      try {
+        pins = gateExpressions(st.board, st.chipLib).pins;
+      } catch {
+        // A board that does not compile has no expressions to show.
+      }
+      subExprCache.current = { rev: st.rev, pins };
+    }
+    return subExprCache.current.pins;
   };
 
   const draw = () => {
@@ -989,6 +1009,7 @@ export function CircuitWorkbench() {
           );
           return data ?? undefined;
         })(),
+        subExpressions: subExpressionsNow(),
         hoverPin,
         // The committed wire is elbowed by orthogonalPolyline on the way in, so
         // the ghost is built by the same function: assembling it by hand left
@@ -1115,6 +1136,7 @@ export function CircuitWorkbench() {
     // The renderer reads this preference straight out of the prefs store, so
     // nothing else here notices when it flips.
     alwaysShowBusWidth,
+    showSubExprs,
   ]);
 
   // Entering/leaving bubble mode cancels any in-flight editing gesture; the
@@ -5007,6 +5029,7 @@ export function CircuitWorkbench() {
       (c) => (c.kind === 'buf' || c.kind === 'not') && Number(c.params?.['width'] ?? 1) <= 1,
     );
     const groupedSelected = selected.some((c) => c.group);
+    const subExprsApply = activeTab.kind === 'board' && hasSubExpressions(st().board, st().chipLib);
     return [
       {
         // Only the two commands that need the canvas: Import lands at the
@@ -5171,6 +5194,14 @@ export function CircuitWorkbench() {
             checked: viewOnly,
             run: () => setViewOnly((v) => !v),
           },
+          {
+            id: 'subExpressions',
+            label: 'Sub-expressions',
+            checked: showSubExprs,
+            // Still offered while on, so it can be turned off again.
+            disabled: !subExprsApply && !showSubExprs,
+            run: () => setShowSubExprs((v) => !v),
+          },
           { separator: true },
           {
             id: 'analyze',
@@ -5245,6 +5276,8 @@ export function CircuitWorkbench() {
     timing,
     mode,
     viewOnly,
+    showSubExprs,
+    activeTab.kind,
   ]);
   useContributeMenus('circuit', circuitMenus);
 
@@ -6292,7 +6325,11 @@ export function CircuitWorkbench() {
               .commitSynthesis(circuitFromNetlist(netlist, freeSpot()), name);
             // The new circuit lands on a free spot, which is off screen as soon
             // as the board has anything on it.
-            if (group) store.getState().requestFit();
+            if (group) {
+              store.getState().requestFit();
+              // The typed function now exists as a circuit; analyse that.
+              useTypedFunction.getState().setSource('board');
+            }
             setBuilding(null);
           }}
           onClose={() => setBuilding(null)}

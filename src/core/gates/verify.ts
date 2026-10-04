@@ -6,9 +6,10 @@ import type { Board, ChipLibrary } from '../model/types';
 import { compile, componentPaths } from '../model/compile';
 import {
   buildTruthTable,
+  diffRows,
+  MAX_TABLE_INPUTS,
   resolveInputNet,
   resolveOutputNet,
-  tablesEqual,
   type TruthTable,
 } from '../boolean/truthTable';
 import { SEGMENT_NAMES } from '../sim/primitives/display';
@@ -52,6 +53,66 @@ export function truthTableOf(board: Board, lib: ChipLibrary): TruthTable {
   return buildTruthTable(compiled, inputCols, outputCols);
 }
 
+interface CompiledSide {
+  compiled: ReturnType<typeof compile>;
+  inputCols: string[];
+  outputCols: string[];
+}
+
+function compileSide(board: Board, lib: ChipLibrary): CompiledSide {
+  const loweredLib: ChipLibrary = new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
+  const compiled = compile(lowerCircuit(board), loweredLib);
+  return {
+    compiled,
+    inputCols: terminalRefs(board, INPUT_TERMINAL_KINDS).flatMap((r) =>
+      bitCols(compiled, r, resolveInputNet),
+    ),
+    outputCols: terminalRefs(board, OUTPUT_TERMINAL_KINDS).flatMap((r) =>
+      bitCols(compiled, r, resolveOutputNet),
+    ),
+  };
+}
+
+/** Rows (counted per output cone) where `a` and `b` disagree. Each output is
+ *  compared over only the inputs that reach it in either board, so independent
+ *  groups never add up to one oversized table. Not net-deduped, for the same
+ *  reason as `truthTableOf`. */
+export function boardDiffRows(a: Board, b: Board, lib: ChipLibrary): number[] {
+  const sa = compileSide(a, lib);
+  const sb = compileSide(b, lib);
+  if (sa.outputCols.length === 0) throw new RangeError('no output terminal (output/LED/probe)');
+  if (sa.inputCols.length === 0) throw new RangeError('truth table needs at least one input');
+  if (
+    sa.outputCols.length !== sb.outputCols.length ||
+    sa.outputCols.some((c, i) => c !== sb.outputCols[i])
+  )
+    return [0];
+  const diffs: number[] = [];
+  for (const outCol of sa.outputCols) {
+    const reachA = reachableInputBits(sa.compiled, sa.inputCols, outCol);
+    const reachB = reachableInputBits(sb.compiled, sb.inputCols, outCol);
+    const cone = sa.inputCols.filter((c) => reachA.includes(c) || reachB.includes(c));
+    // A constant output has no cone; any one input gives a valid, trivial table.
+    const cols = cone.length > 0 ? cone : [sa.inputCols[0]!];
+    if (!cols.every((c) => sb.inputCols.includes(c))) return [0];
+    try {
+      diffs.push(
+        ...diffRows(
+          buildTruthTable(sa.compiled, cols, [outCol]),
+          buildTruthTable(sb.compiled, cols, [outCol]),
+        ),
+      );
+    } catch (e) {
+      if (e instanceof RangeError && /exceeds max/.test(e.message))
+        throw new RangeError(
+          `output ${outCol} needs ${cols.length} inputs, max ${MAX_TABLE_INPUTS}`,
+        );
+      throw e;
+    }
+  }
+  return diffs;
+}
+
 /** Pins of `component` that some wire actually lands on. A 7-segment has ten
  *  of them and an unwired one has no net to build a column from, so a display
  *  contributes only the segments the board really drives. */
@@ -67,7 +128,7 @@ function wiredPins(board: Board, componentId: string): Set<string> {
  *  segment pin: each segment is its own boolean function, which is how Harris &
  *  Harris presents the seven-segment decoder. The two commons are supply
  *  terminals, never functions of the inputs, so they are skipped. */
-function terminalRefs(board: Board, kinds: ReadonlySet<string>): TerminalRef[] {
+export function terminalRefs(board: Board, kinds: ReadonlySet<string>): TerminalRef[] {
   // The same naming compile uses, from the same function: a group qualifies a
   // name, and a name already taken falls back to the component id.
   const paths = componentPaths(board, 'main/');
@@ -165,5 +226,5 @@ export function analysisTablesOf(board: Board, lib: ChipLibrary): OutputAnalysis
 /** True iff `updated` computes the exact same function as `original` (same
  *  input/output terminal component ids -- transforms never rename those). */
 export function isEquivalent(original: Board, updated: Board, lib: ChipLibrary): boolean {
-  return tablesEqual(truthTableOf(original, lib), truthTableOf(updated, lib));
+  return boardDiffRows(original, updated, lib).length === 0;
 }

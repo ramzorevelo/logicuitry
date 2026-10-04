@@ -1,0 +1,83 @@
+/* A switch, not a button: a track whose knob sits at the end it is set to.
+   Doubled class so the chamfered button ring some panels give every button
+   (the Analyze drawer's) never lands on it. */
+
+:root .toggle.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: 2px 0;
+  font: inherit;
+  font-size: var(--text-secondary);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  clip-path: none;
+  cursor: pointer;
+}
+
+:root .toggle.toggle::before {
+  content: none;
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle__track {
+  position: relative;
+  flex: none;
+  width: 2.2em;
+  height: 1.2em;
+  box-sizing: border-box;
+  border: var(--stroke-min) solid var(--muted);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.2em - 2 * var(--stroke-min) - 4px);
+  height: calc(1.2em - 2 * var(--stroke-min) - 4px);
+  border-radius: var(--chrome-radius);
+  background: var(--muted);
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+
+.toggle[aria-checked='true'] .toggle__track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle[aria-checked='true'] .toggle__knob {
+  background: var(--surface);
+  transform: translateX(1em);
+}
+
+.toggle:hover:not(:disabled) .toggle__track {
+  border-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle__track,
+  .toggle__knob {
+    transition: none;
+  }
+}
+
+.app-shell--compact .toggle {
+  min-height: var(--touch-h);
+}

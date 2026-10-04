@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
+import { Toggle } from '../components/Toggle';
 import {
   buildTraceView,
   canonicalTrackForNet,
@@ -951,15 +952,12 @@ export function WaveformPanel() {
                 </div>
               )}
             </span>
-            <button
-              type="button"
-              className="tool-btn"
-              aria-pressed={showArrows}
+            <Toggle
+              checked={showArrows}
+              onChange={setShowArrows}
+              label="Arrows"
               title="Show cause arrows between tracks (H&H Fig 2.69)"
-              onClick={() => setShowArrows((v) => !v)}
-            >
-              Arrows
-            </button>
+            />
             {column && (
               <label className="wave-panel__threshold">
                 glitch &lt;
