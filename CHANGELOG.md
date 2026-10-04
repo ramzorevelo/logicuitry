@@ -5,6 +5,13 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.4.1] - 2026-10-04
+
+### Fixed
+
+- The desktop installer and updater now report the real version instead of
+  0.1.0.
+
 ## [0.4.0] - 2026-10-04
 
 ### Added
