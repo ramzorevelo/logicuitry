@@ -5,6 +5,15 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.4.2] - 2026-10-05
+
+### Fixed
+
+- On a phone, the bottom navigation bar no longer covers sheets and dialogs
+  (Analyze, Package as chip and the like), and tapping low in Analyze no
+  longer switches workbench and closes it.
+- The Analyze sheet scrolls in portrait and landscape.
+
 ## [0.4.1] - 2026-10-04
 
 ### Fixed

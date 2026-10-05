@@ -842,6 +842,25 @@ h3 {
   min-height: 0;
 }
 
+/* height:100% on the content resolves to auto under a max-height-only sheet,
+   so it grew past the clipped inner and never scrolled. A flex column gives it
+   a definite height to scroll within. */
+.app-shell--compact .ref-drawer--open .ref-drawer__inner {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell--compact .ref-drawer--open .ref-drawer__content {
+  height: auto;
+}
+
+/* The shell's `> *` rule makes the body a z-index:1 context, which traps every
+   sheet and dialog under the bottom nav (z-index 55 inside the toolbar's 50).
+   Without its own context the body's fixed overlays compete with the toolbar. */
+.app-shell--compact .app-body {
+  z-index: auto;
+}
+
 .app-shell--compact .ref-drawer--open .ref-drawer__content {
   overscroll-behavior: contain;
 }
@@ -899,7 +918,7 @@ h3 {
   inset: auto calc(72px + env(safe-area-inset-right)) 0 0;
 }
 
-.app-shell--landscape .ref-drawer--open .ref-drawer__inner {
+.app-shell--landscape .ref-drawer--open {
   max-height: 78dvh;
 }
 
