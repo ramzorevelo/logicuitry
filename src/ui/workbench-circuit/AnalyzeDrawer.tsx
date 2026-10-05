@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
 import { componentPaths } from '../../core/model/compile';
 import { analysisTablesOf, type OutputAnalysis } from '../../core/gates/verify';
@@ -30,6 +30,7 @@ import { BoolExpr } from '../components/BoolExpr';
 import { Toggle } from '../components/Toggle';
 import {
   drawKmap,
+  fitKmapMetrics,
   kmapCellAt,
   kmapGroupAt,
   layoutKmap,
@@ -113,6 +114,12 @@ function layoutOptions(n: number): KmapAxisLayout[] {
     { cols: [2, 3], rows: [0, 1] },
   ];
 }
+
+/** Margin around the drawn map, so outline strokes at the edge are not clipped. */
+const KMAP_CANVAS_PAD = 8;
+/** The rest of the focus panel holds the readouts, and gives a finger somewhere
+ *  to scroll from: the map itself claims every touch for grouping. */
+const MAX_MAP_HEIGHT_SHARE = 0.7;
 
 /** Both halves: removal is what a user wants the moment a circle exists. */
 function groupHint(coarse: boolean): string {
@@ -321,6 +328,8 @@ export function AnalyzeDrawer({
   const [hoverGroup, setHoverGroup] = useState<number | null>(null);
   /** Centered focus view: the whole K-map section in a screen-center panel. */
   const [maximized, setMaximized] = useState(false);
+  /** Room the focus panel has for the map itself, tracked across rotation. */
+  const [maxBox, setMaxBox] = useState<{ w: number; h: number } | null>(null);
   /** Read-only auto-derived compressed truth-table view (Fig 2.29), full-table
    *  (n<=4) only; recomputes on reorder like the table itself. */
   const [compressed, setCompressed] = useState(false);
@@ -395,16 +404,13 @@ export function AnalyzeDrawer({
 
   const layout: KmapLayout | null = useMemo(() => {
     if (!kmapEligible || !table) return null;
-    // Maximized: scale the cell to the viewport (sampled at toggle time) so
-    // the map actually fills the focus panel instead of staying drawer-sized.
-    const metrics = maximized
-      ? (() => {
-          const cell = Math.max(64, Math.min(160, Math.floor(window.innerHeight / 8)));
-          return { cell, labelW: Math.round(cell * 1.3), labelH: Math.round(cell * 0.9) };
-        })()
-      : undefined;
-    return layoutKmap(buildKmap(table, 0, layouts[layoutIdx], myDcs), 0, 0, metrics);
-  }, [kmapEligible, table, layouts, layoutIdx, maximized, myDcs]);
+    const grid = buildKmap(table, 0, layouts[layoutIdx], myDcs);
+    const metrics =
+      maximized && maxBox
+        ? fitKmapMetrics(grid.colCodes.length, grid.rowCodes.length, maxBox.w, maxBox.h)
+        : undefined;
+    return layoutKmap(grid, 0, 0, metrics);
+  }, [kmapEligible, table, layouts, layoutIdx, maximized, maxBox, myDcs]);
 
   const primeGroups = useMemo(
     () => (stage >= 1 && kmapEligible && table ? primeImplicants(table, 0, myDcs, polarity) : []),
@@ -492,6 +498,35 @@ export function AnalyzeDrawer({
     // drawer's keydown root) so arrows/Enter/Esc keep working maximized.
     if (maximized) maxPanelRef.current?.focus();
   }, [maximized]);
+  useLayoutEffect(() => {
+    const panel = maxPanelRef.current;
+    const overlay = panel?.parentElement;
+    if (!maximized || !panel || !overlay) {
+      setMaxBox(null);
+      return;
+    }
+    const measure = () => {
+      // Computed max sizes are px even when authored in viewport units, and
+      // bound the content box: the panel is content-box.
+      const cs = getComputedStyle(panel);
+      const px = (v: string) => parseFloat(v) || 0;
+      const contentW = Math.min(
+        px(cs.maxWidth) || Infinity,
+        overlay.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
+      );
+      const contentH = Math.min(
+        px(cs.maxHeight) || Infinity,
+        overlay.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom),
+      );
+      const w = contentW - KMAP_CANVAS_PAD;
+      const h = contentH * MAX_MAP_HEIGHT_SHARE - KMAP_CANVAS_PAD;
+      setMaxBox((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(overlay);
+    return () => ro.disconnect();
+  }, [maximized]);
   const drawGroups: KmapGroupDraw[] = useMemo(
     () => [
       ...myCircles.map((g, i) => ({
@@ -549,8 +584,8 @@ export function AnalyzeDrawer({
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !layout) return;
-    const w = layout.width + 8;
-    const h = layout.height + 8;
+    const w = layout.width + KMAP_CANVAS_PAD;
+    const h = layout.height + KMAP_CANVAS_PAD;
     const ctx = sizeCanvas(canvas, w, h);
     if (!ctx) return;
     const theme = readTheme();

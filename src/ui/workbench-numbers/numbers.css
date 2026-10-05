@@ -538,6 +538,8 @@
 .app-shell--compact .segmented {
   display: flex;
   width: 100%;
+  /* Its 1px padding on top of 100% made the Numbers body scroll sideways. */
+  box-sizing: border-box;
 }
 
 .app-shell--compact .segmented button {

@@ -54,7 +54,11 @@ export interface PlotSpec {
   markers?: Marker[];
 }
 
-const MARGIN = { left: 44, right: 12, top: 12, bottom: 32 };
+/** Left edge of the rotated y-axis title; the tick labels sit right of it. */
+const Y_TITLE_X = 2;
+// left: title (one text height) plus the widest tick label ("5.0" at 13px mono),
+// or the two overlap.
+const MARGIN = { left: 54, right: 12, top: 12, bottom: 32 };
 
 export interface Projection {
   area: Rect;
@@ -138,7 +142,7 @@ export function drawPlot(ctx: CanvasRenderingContext2D, theme: Theme, spec: Plot
   ctx.textBaseline = 'bottom';
   ctx.fillText(spec.x.label, area.x + area.w / 2, spec.size.h);
   ctx.save();
-  ctx.translate(10, area.y + area.h / 2);
+  ctx.translate(Y_TITLE_X, area.y + area.h / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.textBaseline = 'top';
   ctx.fillText(spec.y.label, 0, 0);

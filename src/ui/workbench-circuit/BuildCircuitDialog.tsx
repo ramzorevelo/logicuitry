@@ -17,6 +17,7 @@ import type { SynthNetlist } from '../../core/boolean/synthesize';
 import type { TruthTable } from '../../core/boolean/truthTable';
 import { cellKeyAction, nextCell, type Cell } from './buildGrid';
 import { useModalKeys } from '../modalKeys';
+import { useCoarsePointer } from '../pointerKind';
 
 const VAR_NAMES = ['A', 'B', 'C', 'D'];
 
@@ -58,6 +59,7 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
   const [cancelNotPairs, setCancelNotPairs] = useState(false);
   const [minimiseFirst, setMinimiseFirst] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const coarse = useCoarsePointer();
 
   useModalKeys(onClose);
 
@@ -230,8 +232,9 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
               <span className="settings-row__text">
                 <span>Inputs</span>
                 <span className="settings-row__hint">
-                  Click a cell to cycle 0, 1, then a don't-care, or type 0, 1 or x to fill the row
-                  and drop to the next. Arrow keys move up and down.
+                  {coarse
+                    ? "Tap a cell to cycle 0, 1, then a don't-care."
+                    : "Click a cell to cycle 0, 1, then a don't-care, or type 0, 1 or x to fill the row and drop to the next. Arrow keys move up and down."}
                 </span>
               </span>
             </label>

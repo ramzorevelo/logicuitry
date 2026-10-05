@@ -17,6 +17,30 @@ export interface KmapMetrics {
 
 export const defaultKmapMetrics: KmapMetrics = { cell: 48, labelW: 64, labelH: 44 };
 
+const LABEL_W_PER_CELL = 1.3;
+const LABEL_H_PER_CELL = 0.9;
+export const KMAP_FIT_MAX_CELL = 160;
+/** Below this the labels stop fitting; the panel scrolls instead. */
+export const KMAP_FIT_MIN_CELL = 28;
+
+/** The largest metrics whose whole map (labels included) fits in
+ *  availW x availH, so a maximized map never needs scrolling to be seen. */
+export function fitKmapMetrics(
+  cols: number,
+  rows: number,
+  availW: number,
+  availH: number,
+): KmapMetrics {
+  const byW = availW / (cols + LABEL_W_PER_CELL);
+  const byH = availH / (rows + LABEL_H_PER_CELL);
+  const cell = Math.floor(Math.max(KMAP_FIT_MIN_CELL, Math.min(KMAP_FIT_MAX_CELL, byW, byH)));
+  return {
+    cell,
+    labelW: Math.round(cell * LABEL_W_PER_CELL),
+    labelH: Math.round(cell * LABEL_H_PER_CELL),
+  };
+}
+
 export interface KmapLayout {
   grid: KmapGrid;
   metrics: KmapMetrics;

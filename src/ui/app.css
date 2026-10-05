@@ -671,11 +671,13 @@ h3 {
 /* The bottom bar floats over the workbench, so the workbench needs to end
    above it or its last row is unreachable. */
 .app-shell--compact .app-body {
-  padding-bottom: calc(52px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
 }
 
 .app-shell--compact .app-body:has(.ref-drawer) {
-  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: calc(
+    var(--bottom-nav-h) + var(--ref-strip-h) + 2 * var(--stroke-min) + env(safe-area-inset-bottom)
+  );
 }
 
 /* Ctrl+1..3 needs a keyboard; the number is noise on a phone. */
@@ -697,6 +699,12 @@ h3 {
    once; nothing below hard-codes a height any more. */
 .app-shell--compact {
   --touch-h: 32px;
+  /* Everything parked above the bottom nav offsets by this, so it follows
+     --touch-h instead of going stale when that is retuned. The nav's top
+     border sits under whatever is parked on it (a sub-pixel border offset
+     left a seam), so the strip draws that divider itself. */
+  --bottom-nav-h: var(--touch-h);
+  --ref-strip-h: calc(var(--touch-h) + var(--space-unit) * 3);
 }
 
 /* Padding is what made a 44px floor into a 60px control. The height is the
@@ -710,6 +718,13 @@ h3 {
   padding-bottom: 0;
   display: inline-flex;
   align-items: center;
+}
+
+/* A text field beside a long label was squeezed to a few characters wide.
+   Stacked, the label reads first and the field gets the row. */
+.app-shell--compact .settings-row:has(> input[type='text']) {
+  flex-direction: column-reverse;
+  align-items: stretch;
 }
 
 /* Touch targets. */
@@ -759,10 +774,11 @@ h3 {
    on it closed it. */
 .app-shell--compact .ref-drawer {
   position: fixed;
-  inset: auto 0 calc(52px + env(safe-area-inset-bottom)) 0;
+  inset: auto 0 calc(var(--bottom-nav-h) + env(safe-area-inset-bottom)) 0;
   z-index: 54;
   flex-direction: column;
   border-top: var(--stroke-min) solid var(--line);
+  border-bottom: var(--stroke-min) solid var(--line);
 }
 
 /* The right-edge drawer becomes a bottom sheet: a 340px panel beside a
@@ -779,6 +795,7 @@ h3 {
   flex-direction: column;
   max-height: 70dvh;
   border-top: var(--stroke-min) solid var(--line);
+  border-bottom: 0;
   border-radius: calc(var(--radius) * 2) calc(var(--radius) * 2) 0 0;
   box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
   padding-bottom: env(safe-area-inset-bottom);
@@ -808,7 +825,8 @@ h3 {
   flex-direction: row;
   justify-content: center;
   width: 100%;
-  min-height: var(--touch-h);
+  min-height: var(--ref-strip-h);
+  padding-block: 0;
   border-right: none;
 }
 

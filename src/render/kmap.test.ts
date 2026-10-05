@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import * as bv from '../core/value/busValue';
 import type { TruthTable } from '../core/boolean/truthTable';
 import { buildKmap } from '../core/boolean/kmap';
-import { cornerPlan, groupBlocks, kmapCellAt, layoutKmap } from './kmap';
+import {
+  cornerPlan,
+  fitKmapMetrics,
+  groupBlocks,
+  KMAP_FIT_MAX_CELL,
+  KMAP_FIT_MIN_CELL,
+  kmapCellAt,
+  layoutKmap,
+} from './kmap';
 
 function table(inputPaths: string[], onesList: number[]): TruthTable {
   const ones = new Set(onesList);
@@ -23,6 +31,39 @@ describe('layoutKmap + kmapCellAt', () => {
     // Column 2 is Gray code 11 (AB=11); row 0 is C=0 -> minterm 110 = 6.
     expect(kmapCellAt(layout, 50 + 2 * 40 + 5, 30 + 5)).toBe(6);
     expect(kmapCellAt(layout, 5, 5)).toBeUndefined();
+  });
+});
+
+describe('fitKmapMetrics', () => {
+  const extent = (
+    m: { cell: number; labelW: number; labelH: number },
+    cols: number,
+    rows: number,
+  ) => ({
+    w: m.labelW + cols * m.cell,
+    h: m.labelH + rows * m.cell,
+  });
+
+  it('fits a 4x4 map inside a portrait phone panel', () => {
+    const m = fitKmapMetrics(4, 4, 320, 500);
+    const { w, h } = extent(m, 4, 4);
+    expect(w).toBeLessThanOrEqual(320);
+    expect(h).toBeLessThanOrEqual(500);
+    expect(m.cell).toBe(60);
+  });
+
+  it('is bound by height on a landscape phone', () => {
+    const m = fitKmapMetrics(4, 4, 700, 220);
+    expect(extent(m, 4, 4).h).toBeLessThanOrEqual(220);
+    expect(m.cell).toBe(44);
+  });
+
+  it('caps the cell on a large screen', () => {
+    expect(fitKmapMetrics(2, 2, 4000, 4000).cell).toBe(KMAP_FIT_MAX_CELL);
+  });
+
+  it('floors the cell when nothing fits, leaving the panel to scroll', () => {
+    expect(fitKmapMetrics(4, 4, 50, 50).cell).toBe(KMAP_FIT_MIN_CELL);
   });
 });
 
