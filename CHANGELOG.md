@@ -5,6 +5,22 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.4.3] - 2026-10-05
+
+### Fixed
+
+- On a phone, a maximized K-map fits the screen in portrait and landscape,
+  and follows a rotation; it used to run off the edge with no way to scroll
+  to it.
+- On a phone, the content and the drawer strip sit directly on the bottom
+  navigation bar, without a gap that showed the board through.
+- The Algebra tab no longer scrolls sideways on a phone, which drew a
+  scrollbar across the Simplify hint.
+- On a phone, the Expression and Name fields of Build circuit take the full
+  width; the name field was a few characters wide. The truth-table hint says
+  tap, not click.
+- The Device Lab plot's Vout label no longer overlaps the axis numbers.
+
 ## [0.4.2] - 2026-10-05
 
 ### Fixed
