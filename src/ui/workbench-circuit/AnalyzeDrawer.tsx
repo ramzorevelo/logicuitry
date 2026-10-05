@@ -677,15 +677,16 @@ export function AnalyzeDrawer({
 
   // Pointer path never moves the keyboard cursor -- a Ctrl gesture leaving a
   // cursor square behind read as a stuck selection.
+  // The ref leads the render so a lift arriving before the last move's
+  // re-render still commits every swept cell.
   const toggleCell = (m: number) => {
     setIllegalFlash(false);
     setRefusal(null);
-    setCandidate((prev) => {
-      const next = new Set(prev ?? []);
-      if (next.has(m)) next.delete(m);
-      else next.add(m);
-      return next;
-    });
+    const next = new Set(candidateRef.current ?? []);
+    if (next.has(m)) next.delete(m);
+    else next.add(m);
+    candidateRef.current = next;
+    setCandidate(next);
   };
 
   // Don't-care marking commits immediately per cell (no staging/candidate --
@@ -800,10 +801,20 @@ export function AnalyzeDrawer({
     setHoverGroup(hit ?? null);
   };
   const onPointerUp = () => {
-    // The gesture pass ends; the candidate stays live until Ctrl is released
-    // (DC marks already committed live, nothing pending to keep).
+    // A Ctrl pass leaves the candidate live until Ctrl is released; touch has
+    // no Ctrl, so the lift is the release (DC marks are already committed).
+    const touchSweep = gestureRef.current?.touch === true;
     cancelLongPress();
     gestureRef.current = null;
+    const pending = candidateRef.current;
+    if (touchSweep && pending && pending.size > 0) commitCandidate(pending);
+  };
+  // A cancelled touch (system gesture, palm) never finished choosing cells.
+  const onPointerCancel = () => {
+    const touchSweep = gestureRef.current?.touch === true;
+    cancelLongPress();
+    gestureRef.current = null;
+    if (touchSweep) setCandidate(null);
   };
   const onPointerLeave = () => {
     cancelLongPress();
@@ -1090,6 +1101,7 @@ export function AnalyzeDrawer({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
           onPointerLeave={onPointerLeave}
         />
         {refusal && (

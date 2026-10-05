@@ -18,6 +18,8 @@ updating for, the patch digit is reserved for a critical one-off fix).
   phones down.
 - After closing Analyze by tapping outside it, the Analyze button opens it on
   the first press.
+- On a touch screen, lifting the finger after a long press on the K-map
+  circles the group; it used to only highlight the cells.
 
 ## [0.4.1] - 2026-10-04
 
