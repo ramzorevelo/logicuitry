@@ -39,10 +39,16 @@ export function useReferenceDrawer(content: DrawerContent | null): void {
   }, [api, content]);
 }
 
-/** Programmatic open/close for the panel (tab click still toggles it too). */
+const noopSetOpen = (): void => undefined;
+
+/** Programmatic open/close for the panel (tab click still toggles it too).
+ *  Memoized: callers close over it in drawer content, and a fresh object per
+ *  render re-registered that content and re-rendered the workbench forever. */
 export function useReferenceDrawerControl(): { open: boolean; setOpen: (v: boolean) => void } {
   const api = useContext(ReferenceContext);
-  return { open: api?.open ?? false, setOpen: api?.setOpen ?? (() => undefined) };
+  const open = api?.open ?? false;
+  const setOpen = api?.setOpen ?? noopSetOpen;
+  return useMemo(() => ({ open, setOpen }), [open, setOpen]);
 }
 
 /** The right-edge drawer itself, rendered once by the app shell. */

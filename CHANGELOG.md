@@ -12,7 +12,12 @@ updating for, the patch digit is reserved for a critical one-off fix).
 - On a phone, the bottom navigation bar no longer covers sheets and dialogs
   (Analyze, Package as chip and the like), and tapping low in Analyze no
   longer switches workbench and closes it.
-- The Analyze sheet scrolls in portrait and landscape.
+- The Analyze sheet scrolls in portrait and landscape, and tapping inside it
+  no longer closes it.
+- Analyze no longer redraws itself continuously while open, which slowed
+  phones down.
+- After closing Analyze by tapping outside it, the Analyze button opens it on
+  the first press.
 
 ## [0.4.1] - 2026-10-04
 

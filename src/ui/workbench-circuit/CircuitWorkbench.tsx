@@ -783,6 +783,9 @@ export function CircuitWorkbench() {
     setAnalyzeOpen(false);
     drawerControl.setOpen(false);
   }, [drawerControl]);
+  // The drawer's tab and the phone's outside-tap close the panel without
+  // clearing analyzeOpen; toggling on analyzeOpen alone ate the next press.
+  const analyzeShown = analyzeOpen && drawerControl.open;
   useReferenceDrawer(
     useMemo(
       () =>
@@ -5206,8 +5209,8 @@ export function CircuitWorkbench() {
           {
             id: 'analyze',
             label: 'Analyze drawer',
-            checked: analyzeOpen,
-            run: () => (analyzeOpen ? closeAnalyze() : tryOpenAnalyze()),
+            checked: analyzeShown,
+            run: () => (analyzeShown ? closeAnalyze() : tryOpenAnalyze()),
           },
           {
             id: 'waveform',
@@ -5268,7 +5271,7 @@ export function CircuitWorkbench() {
   }, [
     selection,
     rev,
-    analyzeOpen,
+    analyzeShown,
     waveformOpen,
     powered,
     running,
@@ -5313,9 +5316,9 @@ export function CircuitWorkbench() {
             </ToolBtn>
             <ToolBtn
               icon="analyze"
-              active={analyzeOpen}
+              active={analyzeShown}
               title="Truth table + K-map drawer for the board"
-              onClick={() => (analyzeOpen ? closeAnalyze() : tryOpenAnalyze())}
+              onClick={() => (analyzeShown ? closeAnalyze() : tryOpenAnalyze())}
             >
               Analyze
             </ToolBtn>
@@ -5568,9 +5571,9 @@ export function CircuitWorkbench() {
               </ToolBtn>
               <ToolBtn
                 icon="analyze"
-                active={analyzeOpen}
+                active={analyzeShown}
                 title="Truth table + K-map drawer for the board"
-                onClick={() => (analyzeOpen ? closeAnalyze() : tryOpenAnalyze())}
+                onClick={() => (analyzeShown ? closeAnalyze() : tryOpenAnalyze())}
               >
                 Analyze
               </ToolBtn>

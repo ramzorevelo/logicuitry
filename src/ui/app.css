@@ -751,6 +751,20 @@ h3 {
 /* The palette used to be hidden here, because editing was desktop-only. It is
    not any more; circuit.css restyles it as a horizontal strip. */
 
+/* Closed, the drawer is a full-width strip above the bottom nav rather than a
+   vertical rail down the right edge: a phone cannot spare a column, and
+   sideways text is the least readable label on the smallest screen.
+   Must precede the open rule at equal specificity: placed after it, its
+   inset and z-index won, the sheet sank under its own scrim and every tap
+   on it closed it. */
+.app-shell--compact .ref-drawer {
+  position: fixed;
+  inset: auto 0 calc(52px + env(safe-area-inset-bottom)) 0;
+  z-index: 54;
+  flex-direction: column;
+  border-top: var(--stroke-min) solid var(--line);
+}
+
 /* The right-edge drawer becomes a bottom sheet: a 340px panel beside a
    phone-width canvas leaves neither usable. It must NOT be inset:0 -- the
    toolbar sits in a z-index:50 stacking context and .app-body in a z-index:1
@@ -788,17 +802,6 @@ h3 {
   inset: 0;
   z-index: 59;
   background: transparent;
-}
-
-/* Closed, the drawer is a full-width strip above the bottom nav rather than a
-   vertical rail down the right edge: a phone cannot spare a column, and
-   sideways text is the least readable label on the smallest screen. */
-.app-shell--compact .ref-drawer {
-  position: fixed;
-  inset: auto 0 calc(52px + env(safe-area-inset-bottom)) 0;
-  z-index: 54;
-  flex-direction: column;
-  border-top: var(--stroke-min) solid var(--line);
 }
 
 .app-shell--compact .ref-drawer__tab {
