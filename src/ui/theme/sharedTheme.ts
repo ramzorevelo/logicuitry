@@ -10,7 +10,7 @@ import { readTheme, type Theme } from '../../render/theme';
 import { themeRevision } from './useThemeRevision';
 
 let cached: Theme | null = null;
-let cachedAt = -1;
+let cachedAt = '';
 
 export function sharedTheme(): Theme {
   const rev = themeRevision();

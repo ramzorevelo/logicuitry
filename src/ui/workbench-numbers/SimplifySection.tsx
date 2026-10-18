@@ -58,9 +58,12 @@ export function SimplifySection() {
     [last, a.selection, worked],
   );
   const menuSteps = menu
-    ? menu.shorter.length === 0 || showMore
-      ? [...menu.shorter, ...menu.others]
-      : menu.shorter
+    ? [
+        ...menu.inner,
+        ...(menu.shorter.length === 0 || showMore
+          ? [...menu.shorter, ...menu.others]
+          : menu.shorter),
+      ]
     : [];
 
   useEffect(() => {
@@ -283,9 +286,11 @@ export function SimplifySection() {
                     <span className="analyze-muted">Selected:</span>
                     <BoolExpr expr={nodeAt(last!.expr, a.selection!.at)} />
                     <span className="analyze-muted">
-                      {menu.shorter.length > 0
-                        ? 'Laws that shorten it. Pick one to write the next line.'
-                        : 'No law shortens it. Laws that rewrite it:'}
+                      {menu.inner.length > 0
+                        ? 'Break the bar inside first, then the laws that shorten it. Pick one to write the next line.'
+                        : menu.shorter.length > 0
+                          ? 'Laws that shorten it. Pick one to write the next line.'
+                          : 'No law shortens it. Laws that rewrite it:'}
                     </span>
                   </div>
                   {menuSteps.map(stepButton)}

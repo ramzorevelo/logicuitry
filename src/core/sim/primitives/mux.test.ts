@@ -182,3 +182,41 @@ describe('mux', () => {
     expect(show(noEnable[0]!, 1)).toBe(show(withEnKnown1[0]!, 1));
   });
 });
+
+describe('mux as a real part (hidden params)', () => {
+  const ls151 = { selectBits: 3, strobeLow: true, invertedOut: true };
+  // Inputs in pins() order: d0..d7 s0 s1 s2 en. Outputs: y w.
+  const run = (params: Params, lits: string) =>
+    mux
+      .evaluate(ctx(params, [...lits].map(s)))
+      .outputs.map((v) => show(v, 1))
+      .join('');
+
+  it('pin shape: a low-true strobe named en, and w beside y', () => {
+    const pins = mux.pins(ls151);
+    expect(pins.slice(-3).map((p) => p.name)).toEqual(['en', 'y', 'w']);
+    expect(pins.filter((p) => p.activeLow).map((p) => p.name)).toEqual(['en']);
+    expect(mux.pins({ selectBits: 1, hasEnable: true }).some((p) => p.activeLow)).toBe(false);
+  });
+
+  it('strobeLow needs no hasEnable and inverts the sense of en', () => {
+    expect(run({ selectBits: 1, strobeLow: true }, '0100')).toBe('0');
+    expect(run({ selectBits: 1, strobeLow: true }, '0110')).toBe('1');
+    expect(run({ selectBits: 1, strobeLow: true }, '0111')).toBe('0');
+  });
+
+  it('strobed off drives y low and w high whatever else is unknown', () => {
+    expect(run(ls151, 'XXXXXXXXXXX1')).toBe('01');
+  });
+
+  it('an unknown strobe, select or selected input makes both outputs X', () => {
+    expect(run(ls151, '10000000000X')).toBe('XX');
+    expect(run(ls151, '100000000X00')).toBe('XX');
+    expect(run(ls151, 'X00000000000')).toBe('XX');
+  });
+
+  it('w is the complement of y', () => {
+    expect(run(ls151, '100000000000')).toBe('10');
+    expect(run(ls151, '000000000000')).toBe('01');
+  });
+});

@@ -19,8 +19,13 @@ export interface StaOverlayData {
 }
 
 function compName(path: string): string {
-  const base = path.startsWith('main/') ? path.slice(5) : path;
-  return base.endsWith('.d') ? base.slice(0, -2) : base;
+  return path.startsWith('main/') ? path.slice(5) : path;
+}
+
+/** The primitive path an endpoint sits on, without its `.<capturePin>`. */
+function endpointPath(e: PathTiming): string {
+  const suffix = e.capturePin === undefined ? '' : `.${e.capturePin}`;
+  return suffix && e.endpoint.endsWith(suffix) ? e.endpoint.slice(0, -suffix.length) : e.endpoint;
 }
 
 function findComp(board: Circuit, path: string): Component | undefined {
@@ -32,7 +37,7 @@ function findComp(board: Circuit, path: string): Component | undefined {
 function pathNets(
   compiled: CompiledCircuit,
   startpoint: string,
-  endpoint: string,
+  endpoint: PathTiming,
   hops: readonly TimingHop[],
 ): Set<number> {
   const nets = new Set<number>();
@@ -43,9 +48,8 @@ function pathNets(
     const net = compiled.pathToNet.get(path);
     return net === undefined ? [] : [net];
   };
-  const insOf = (path: string): number[] => {
-    const base = path.endsWith('.d') ? path.slice(0, -2) : path;
-    const pi = compiled.pathToPrimitive.get(base);
+  const insOf = (e: PathTiming): number[] => {
+    const pi = compiled.pathToPrimitive.get(endpointPath(e));
     return pi === undefined ? [] : compiled.primitives[pi]!.inputs;
   };
   const link = (froms: number[], tos: number[]) => {
@@ -92,8 +96,11 @@ export function buildStaOverlay(
     const comp = board.components.find((c) => c.id === id);
     if (comp) {
       const name = comp.label || comp.id;
-      const hit = report.endpoints.find((e) => compName(e.endpoint) === name);
-      if (hit) path = hit;
+      // A stateful block ends several paths; show its slowest.
+      const slowest = report.endpoints
+        .filter((e) => compName(endpointPath(e)) === name)
+        .reduce<PathTiming | null>((w, e) => (w && w.totalTpdPs >= e.totalTpdPs ? w : e), null);
+      if (slowest) path = slowest;
     }
   }
   if (!path) return null;
@@ -101,12 +108,12 @@ export function buildStaOverlay(
   const criticalWires = wiresOnNets(
     board,
     compiled,
-    pathNets(compiled, path.startpoint, path.endpoint, path.critical),
+    pathNets(compiled, path.startpoint, path, path.critical),
   );
   const shortWires = wiresOnNets(
     board,
     compiled,
-    pathNets(compiled, path.shortStartpoint, path.endpoint, path.short),
+    pathNets(compiled, path.shortStartpoint, path, path.short),
   );
 
   const labels = new Map<string, string>();

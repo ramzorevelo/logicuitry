@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Board, ChipDef } from '../../core/model/types';
-import { exportDoc, filePickersSupported } from '../../io/fsAccess';
+import { docFileWritable, exportDoc, filePickersSupported } from '../../io/fsAccess';
 import {
   boardFileName,
   loadRecentBoards,
@@ -38,8 +38,16 @@ import { getPrefs } from '../prefs';
 import { SHORTCUTS } from '../menu/shortcuts';
 import type { Menu } from '../menu/menuModel';
 import { modalKeysHeld } from '../modalKeys';
+import { isDirtyAgainst, restoredCleanMark, type CleanMark } from './cleanMark';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
+
+/** The File Handling API's launch queue, Chromium only and absent from the DOM lib. */
+interface LaunchWindow {
+  launchQueue?: {
+    setConsumer(consume: (params: { files: readonly FileSystemHandle[] }) => void): void;
+  };
+}
 
 export interface BoardDocument {
   /** File menu contribution, ready to hand to useContributeMenus. */
@@ -64,30 +72,33 @@ export function useBoardDocument(): BoardDocument {
   // reload lands on the same document, not just the same shapes.
   const [currentFile, setCurrentFile] = useState<DocFile | null>(null);
   const [dirty, setDirty] = useState(false);
-  // `rev` at the last save or load: anything past it is unsaved work.
-  const cleanRevRef = useRef<number | null>(null);
+  // The board at the last save or load: any other board is unsaved work.
+  const board = useCircuitStore((s) => s.board);
+  const cleanRef = useRef<CleanMark | null>(null);
   const markClean = useCallback(() => {
-    cleanRevRef.current = store.getState().rev;
+    cleanRef.current = store.getState().board;
     setDirty(false);
   }, [store]);
 
   useEffect(() => {
-    if (cleanRevRef.current === null) {
-      cleanRevRef.current = rev;
+    if (cleanRef.current === null) {
+      cleanRef.current = board;
       return;
     }
-    setDirty(rev !== cleanRevRef.current);
-  }, [rev]);
+    setDirty(isDirtyAgainst(board, cleanRef.current));
+  }, [board]);
 
   // Restore once on mount, then autosave whenever the board settles. Both go
   // through the normal document pipeline: a restored board is migrated and
   // schema-validated like any file, never trusted just because we wrote it.
   const restoredRef = useRef(false);
+  // Settles once the restore is done, so a file the app was launched with lands after it.
+  const restoreDone = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
     if (!getPrefs().restoreLastBoard) return;
-    void loadSession()
+    restoreDone.current = loadSession()
       .then((session) => {
         if (!session) return;
         const doc = parseDocument(serializeDocument(session.board));
@@ -95,14 +106,14 @@ export function useBoardDocument(): BoardDocument {
         useCircuitStore.getState().loadBoard(doc);
         if (getPrefs().fitOnOpen) useCircuitStore.getState().requestFit();
         setCurrentFile(session.file ?? null);
-        markClean();
+        cleanRef.current = restoredCleanMark(session.dirty, useCircuitStore.getState().board);
         setDirty(session.dirty);
       })
       .catch(() => {
         // A corrupt or stale session must never block startup: the starter
         // board is already loaded, so silently keep it.
       });
-  }, [markClean]);
+  }, []);
 
   useEffect(() => {
     if (!restoredRef.current || !getPrefs().autosave) return;
@@ -141,7 +152,13 @@ export function useBoardDocument(): BoardDocument {
    *  confirmation preference off skips the ask entirely, unsaved work included
    *  -- that is what the preference says. */
   const guardDiscard = (action: string, run: () => void) => {
-    if (!dirty || !getPrefs().confirmReplaceBoard) run();
+    // Read from the refs, not `dirty`: a launch right after the restore runs before the render
+    // that sets it.
+    const clean = cleanRef.current;
+    const unsaved =
+      (clean !== null && isDirtyAgainst(store.getState().board, clean)) ||
+      store.getState().hasTabEdits();
+    if (!unsaved || !getPrefs().confirmReplaceBoard) run();
     else setPendingDiscard({ action, run });
   };
 
@@ -152,6 +169,12 @@ export function useBoardDocument(): BoardDocument {
 
   const adoptFile = useCallback(
     (file: DocFile, board: Board) => {
+      // An upload cannot be written back, so Save downloads instead.
+      if (!docFileWritable(file)) {
+        setCurrentFile(null);
+        markClean();
+        return;
+      }
       setCurrentFile(file);
       markClean();
       void rememberRecentBoard({ name: file.name, file, openedAt: Date.now() }).catch(() => {
@@ -215,8 +238,6 @@ export function useBoardDocument(): BoardDocument {
 
   // Double-clicking a document in the file manager launches us
   // with the path as an argument; the shell hands it over once, at startup.
-  // This is the one capability the PWA cannot match (the File Handling API is
-  // Chrome/Edge only).
   useEffect(() => {
     if (!isDesktop()) return;
     void (async () => {
@@ -226,12 +247,34 @@ export function useBoardDocument(): BoardDocument {
         if (!path) return;
         const name = path.split(/[\/]/).pop() ?? path;
         const file = { name, path } as unknown as DocFile;
-        acceptOpened(await readDocumentFile(file), file);
+        const doc = await readDocumentFile(file);
+        await restoreDone.current;
+        acceptOpened(doc, file);
       } catch {
         // No argument, an unreadable file, or a document this app does not
         // open: the app is already running and usable, which is the point.
       }
     })();
+  }, [acceptOpened]);
+
+  // The installed PWA's half of the same: the manifest's file_handlers offer it for documents,
+  // and Chrome or Edge hands the file over through the launch queue.
+  useEffect(() => {
+    const queue = isDesktop() ? undefined : (window as LaunchWindow).launchQueue;
+    queue?.setConsumer(({ files }) => {
+      const handle = files.find((f) => f.kind === 'file');
+      if (!handle) return;
+      const file = handle as unknown as DocFile;
+      void (async () => {
+        try {
+          const doc = await readDocumentFile(file);
+          await restoreDone.current;
+          acceptOpened(doc, file);
+        } catch (e) {
+          useCircuitStore.setState({ error: `open: ${(e as Error).message}` });
+        }
+      })();
+    });
   }, [acceptOpened]);
 
   const resolveChipOpen = (as: 'chip' | 'board') => {
@@ -271,6 +314,7 @@ export function useBoardDocument(): BoardDocument {
     // Same flow as double-clicking an instance; the board tab is untouched, so
     // Ctrl+S keeps targeting the board.
     store.getState().openDefTab(def.id, `${def.id}/`, def.name);
+    if (!docFileWritable(file)) return;
     void rememberRecentBoard({ name: file.name, file, openedAt: Date.now() }).catch(() => {
       // Convenience only.
     });
@@ -327,7 +371,11 @@ export function useBoardDocument(): BoardDocument {
     const board = store.getState().board;
     if (!currentFile) {
       if (filePickersSupported()) await fileSaveAs();
-      else exportDoc(board, boardFileName(board));
+      else {
+        exportDoc(board, boardFileName(board));
+        // The board is on disk now, even though nothing can be written back to it later.
+        markClean();
+      }
       return;
     }
     try {
@@ -361,8 +409,10 @@ export function useBoardDocument(): BoardDocument {
       // cannot be reliably intercepted, so New lives in the menu only.
       if (e.key === 's' || e.key === 'S') {
         e.preventDefault();
-        if (e.shiftKey) void fileSaveAsRef.current();
-        else void fileSaveRef.current();
+        // Save As is greyed without file pickers, so its key stands down too.
+        if (e.shiftKey) {
+          if (filePickersSupported()) void fileSaveAsRef.current();
+        } else void fileSaveRef.current();
       } else if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         void fileOpenRef.current();
@@ -398,16 +448,21 @@ export function useBoardDocument(): BoardDocument {
             disabled: !onBoard,
             run: () => void fileOpenChip(),
           },
-          {
-            id: 'openRecent',
-            label: 'Open Recent',
-            disabled: !onBoard,
-            items: recents.map((entry) => ({
-              id: `recent-${entry.name}-${entry.openedAt}`,
-              label: entry.name,
-              run: () => void openRecent(entry),
-            })),
-          },
+          // Without pickers nothing opened can be reopened: an upload is a one-off snapshot.
+          ...(pickers
+            ? [
+                {
+                  id: 'openRecent',
+                  label: 'Open Recent',
+                  disabled: !onBoard,
+                  items: recents.map((entry) => ({
+                    id: `recent-${entry.name}-${entry.openedAt}`,
+                    label: entry.name,
+                    run: () => void openRecent(entry),
+                  })),
+                },
+              ]
+            : []),
           { separator: true },
           {
             id: 'save',
@@ -444,10 +499,10 @@ export function useBoardDocument(): BoardDocument {
               const next = pendingDiscard.run;
               void (async () => {
                 await fileSaveRef.current();
-                // markClean() sets cleanRevRef synchronously; `dirty` state has
+                // markClean() sets cleanRef synchronously; `dirty` state has
                 // not re-rendered yet, so read the ref, not the flag. A declined
                 // picker or a failed write leaves the dialog up.
-                if (cleanRevRef.current !== store.getState().rev) return;
+                if (cleanRef.current !== store.getState().board) return;
                 setPendingDiscard(null);
                 next();
               })();

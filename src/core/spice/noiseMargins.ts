@@ -74,13 +74,19 @@ export interface MarginStep {
   ok: boolean;
 }
 
+/** `-0.80 V` with a true minus, matching the one in the subtraction it comes from. */
+export function formatVolts(x: number): string {
+  const text = Math.abs(x).toFixed(2);
+  return `${x < 0 && Number(text) !== 0 ? '−' : ''}${text} V`;
+}
+
 /**
  * The NMH/NML derivations written out term by term, so the board work and the
  * readout come from one computation rather than two that can drift.
  */
 export function marginSteps(driver: LevelSet, receiver: LevelSet): MarginStep[] {
   const m = interopMargins(driver, receiver);
-  const v = (x: number) => `${x.toFixed(2)} V`;
+  const v = formatVolts;
   return [
     {
       label: 'NMH',

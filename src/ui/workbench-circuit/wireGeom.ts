@@ -78,6 +78,11 @@ export interface RoutePreference {
    *  on a densely-pinned edge it runs along its own pin row grazing every
    *  neighbouring stub. */
   stub?: number;
+  /** Extra run out of each pin, never clamped: the lane a wire nested round one edge keeps. */
+  laneFrom?: number;
+  laneTo?: number;
+  /** Rank clean candidates by how many wires they cross, not by list order. */
+  avoidCrossings?: boolean;
 }
 
 /** Drops repeated points, keeping every corner. */
@@ -113,7 +118,8 @@ export function simplifyPolyline(pts: readonly Vec2[]): Vec2[] {
 }
 
 /** The pin end of a route: `d` straight out along the pin, but never past the
- *  far end of the wire.
+ *  far end of the wire, plus `lane`, which is never clamped: a nested wire has
+ *  to reach its lane wherever its far end is.
  *
  *  The stub is a MINIMUM run out of the pin, not a fixed one. Unclamped, a pin
  *  sitting one grid step to the side of its target got the full 2G, sailed
@@ -121,11 +127,11 @@ export function simplifyPolyline(pts: readonly Vec2[]): Vec2[] {
  *  the taking. Only a target the pin has to reach ACROSS is clamped; one
  *  behind the pin keeps the full stub, because coming out and around really is
  *  required there. */
-function stubEnd(p: Vec2, side: Side | undefined, d: number, far: Vec2): Vec2 {
+function stubEnd(p: Vec2, side: Side | undefined, d: number, far: Vec2, lane = 0): Vec2 {
   if (!side) return p;
   const v = SIDE_STEP[side];
   const avail = v.x !== 0 ? (far.x - p.x) * v.x : (far.y - p.y) * v.y;
-  const len = avail >= 0 ? Math.min(d, avail) : d;
+  const len = lane > 0 ? d + lane : avail >= 0 ? Math.min(d, avail) : d;
   return { x: p.x + v.x * len, y: p.y + v.y * len };
 }
 
@@ -188,22 +194,23 @@ export function routeOverlapsWires(
  *  tidies afterward" stance -- not full pathfinding). Body-avoidance for the
  *  common adjacent-gates / one-obstacle-hop cases (P2.1, M4.2); wire-overlap
  *  avoidance for the common several-parallel-wires case (M4.5); neither is
- *  exhaustive. A candidate that clears both wins outright; failing that, the
+ *  exhaustive. A candidate that clears both wins outright (with
+ *  `avoidCrossings`, the one crossing fewest wires); failing that, the
  *  first that at least clears bodies (today's pre-M4.5 behavior) wins, so
  *  wire-overlap avoidance can never make body-avoidance worse. */
-export function routeAvoiding(
+function routeWithStub(
   a: Vec2,
   b: Vec2,
   obstacles: readonly Rect[],
-  wireObstacles: readonly Vec2[][] = [],
-  grid = 16,
+  wireObstacles: readonly Vec2[][],
+  grid: number,
   prefer?: RoutePreference,
 ): Vec2[] {
   const stub = prefer?.stub ?? 0;
   // Every candidate starts and ends with the run straight out of its pin, so
   // the choice below is only ever about how to join the two stub ends.
-  const pa = stubEnd(a, prefer?.from, stub, b);
-  const pb = stubEnd(b, prefer?.to, stub, a);
+  const pa = stubEnd(a, prefer?.from, stub, b, prefer?.laneFrom);
+  const pb = stubEnd(b, prefer?.to, stub, a, prefer?.laneTo);
   const flip = leadFlip(
     prefer?.from && axisOfSide(prefer.from),
     prefer?.to && axisOfSide(prefer.to),
@@ -231,7 +238,8 @@ export function routeAvoiding(
   // and forcing it here turned a straight wire into a three-bend excursion out
   // past one pin and back. It is still only a candidate: where the straight
   // run would cut through a body, the stubbed routes below take over.
-  const aligned = a.x === b.x || a.y === b.y;
+  // A lane is a run the wire must make, so it rules the straight segment out.
+  const aligned = (a.x === b.x || a.y === b.y) && !prefer?.laneFrom && !prefer?.laneTo;
   const direct = { raw: [a, b], pts: [a, b] };
 
   // Both pins facing the same axis cannot be joined by one elbow without one
@@ -277,10 +285,56 @@ export function routeAvoiding(
   const best = pool[0] ?? first;
   if (obstacles.length === 0 && wireObstacles.length === 0) return best.pts;
   const clearsBody = (c: { pts: Vec2[] }) => !polylineCrossesAny(c.pts, obstacles);
-  for (const c of pool)
-    if (clearsBody(c) && !routeOverlapsWires(c.pts, wireObstacles)) return c.pts;
+  const clean = (c: { pts: Vec2[] }) => clearsBody(c) && !routeOverlapsWires(c.pts, wireObstacles);
+  if (prefer?.avoidCrossings) {
+    const fewest = fewestCrossings(pool.filter(clean), wireObstacles);
+    if (fewest) return fewest.pts;
+  } else for (const c of pool) if (clean(c)) return c.pts;
   for (const c of pool) if (clearsBody(c)) return c.pts;
   return best.pts;
+}
+
+/** routeWithStub, dropping a nested wire's lane when every route out to it meets a body: one
+ *  standing closer in front of the edge than the lane. Sharing the inner lane beats a wire drawn
+ *  through a part. */
+export function routeAvoiding(
+  a: Vec2,
+  b: Vec2,
+  obstacles: readonly Rect[],
+  wireObstacles: readonly Vec2[][] = [],
+  grid = 16,
+  prefer?: RoutePreference,
+): Vec2[] {
+  const pts = routeWithStub(a, b, obstacles, wireObstacles, grid, prefer);
+  if (!(prefer?.laneFrom || prefer?.laneTo) || !polylineCrossesAny(pts, obstacles)) return pts;
+  return routeWithStub(a, b, obstacles, wireObstacles, grid, { ...prefer, laneFrom: 0, laneTo: 0 });
+}
+
+/** The first of `pool` crossing the fewest of `wireObstacles`, undefined when it is empty. */
+function fewestCrossings<T extends { pts: Vec2[] }>(
+  pool: readonly T[],
+  wireObstacles: readonly Vec2[][],
+): T | undefined {
+  let best: T | undefined;
+  let bestCount = Infinity;
+  for (const c of pool) {
+    const n = crossingCount(c.pts, wireObstacles);
+    if (n < bestCount) {
+      best = c;
+      bestCount = n;
+    }
+    if (n === 0) break;
+  }
+  return best;
+}
+
+function crossingCount(pts: readonly Vec2[], wireObstacles: readonly Vec2[][]): number {
+  let n = 0;
+  for (let i = 0; i < pts.length - 1; i++)
+    for (const other of wireObstacles)
+      for (let j = 0; j < other.length - 1; j++)
+        if (segmentsIntersect(pts[i]!, pts[i + 1]!, other[j]!, other[j + 1]!)) n++;
+  return n;
 }
 
 /** Ensures the first/last legs of a stored-bend-point wire stay orthogonal
@@ -334,23 +388,31 @@ export function wireDisplayPoints(
  *  of the draw loop drifts out of sync the moment a route actually detours
  *  (the M4.2 follow-up "route-consistency bug": every interactive hit-test
  *  checked a different, invisible path than the one on screen). Walks
- *  `wires` in board order, accumulating each computed polyline as an
- *  obstacle for the next; a stored-bend wire routes via `orthogonalPolyline`
- *  (unchanged) and still counts as an obstacle for the ones after it, but is
- *  never itself re-routed around another wire. */
+ *  `wires` in board order, except that wires nested round one edge go outer
+ *  first, accumulating each computed polyline as an obstacle for the next; a
+ *  stored-bend wire routes via `orthogonalPolyline` (unchanged) and still
+ *  counts as an obstacle for the ones after it, but is never itself re-routed
+ *  around another wire. */
 export function computeWireRoutes(
   wires: readonly Wire[],
   resolveEnd: (end: WireEnd) => Vec2 | undefined,
   boundsById: ReadonlyMap<string, Rect>,
   grid: number,
 ): Map<string, Vec2[]> {
-  const routes = new Map<string, Vec2[]>();
   const wireObstacles: Vec2[][] = [];
   const bodyObstacles = [...boundsById.values()];
-  for (const wire of wires) {
+  const sideOf = (end: WireEnd, at: Vec2): Side | undefined =>
+    end.kind === 'pin' ? pinExitSide(at, boundsById.get(end.component)) : undefined;
+  const placed = wires.flatMap((wire): PlacedWire[] => {
     const a = resolveEnd(wire.a);
     const b = resolveEnd(wire.b);
-    if (!a || !b) continue;
+    return a && b ? [{ wire, a, b, from: sideOf(wire.a, a), to: sideOf(wire.b, b) }] : [];
+  });
+  const stub = PIN_STUB * grid;
+  const nest = nestWrappedEnds(placed, stub, NEST_LANE * grid);
+  const computed = new Map<string, Vec2[]>();
+  for (const i of nest.order) {
+    const { wire, a, b, from, to } = placed[i]!;
     // A wire with stored bends re-elbows through them (orthogonalPolyline)
     // rather than auto-routing, so a deliberately-placed corner survives an
     // endpoint moving nearby. But that re-elbow has no obstacle awareness at
@@ -363,22 +425,111 @@ export function computeWireRoutes(
     // elbow flip can save it (the pin moved past its own bend). A wire drawn
     // over itself is never what the instructor meant, and every gesture that
     // could author one already refuses to, so it is not a shape to preserve.
-    const sideOf = (end: WireEnd, at: Vec2): Side | undefined =>
-      end.kind === 'pin' ? pinExitSide(at, boundsById.get(end.component)) : undefined;
     const prefer: RoutePreference = {
-      from: sideOf(wire.a, a),
-      to: sideOf(wire.b, b),
-      stub: PIN_STUB * grid,
+      from,
+      to,
+      stub,
+      laneFrom: nest.lanes.get(laneKey(i, 'a')) ?? 0,
+      laneTo: nest.lanes.get(laneKey(i, 'b')) ?? 0,
+      avoidCrossings: nest.nested.has(i),
     };
     const stored = wire.points.length ? orthogonalPolyline(a, wire.points, b) : undefined;
     const pts =
       stored && !polylineCrossesAny(stored, bodyObstacles) && !hasCollinearReversal(stored)
         ? stored
         : routeAvoiding(a, b, bodyObstacles, wireObstacles, grid, prefer);
-    routes.set(wire.id, pts);
+    computed.set(wire.id, pts);
     wireObstacles.push(pts);
   }
-  return routes;
+  // Board order, whatever order they were routed in: callers draw in map order.
+  return new Map(placed.map(({ wire }) => [wire.id, computed.get(wire.id)!]));
+}
+
+/** Grid steps between the lanes of wires nested round one edge: a gate's pin pitch. One step
+ *  apart, two runs read as a single smear on a lecture-room TV. */
+const NEST_LANE = 2;
+
+export interface PlacedWire {
+  wire: Wire;
+  a: Vec2;
+  b: Vec2;
+  from: Side | undefined;
+  to: Side | undefined;
+}
+
+const laneKey = (wire: number, end: 'a' | 'b') => `${wire}${end}`;
+
+/** Lanes and routing order for auto-routed wires wrapping round to pins on one edge of a part
+ *  (far end beside or behind the edge). They nest without crossing only when the pin farther from
+ *  the side they come round from takes the outer lane and its wire routes first. */
+export function nestWrappedEnds(
+  placed: readonly PlacedWire[],
+  stub: number,
+  laneStep: number,
+): { order: number[]; lanes: Map<string, number>; nested: Set<number> } {
+  const groups = new Map<string, { wire: number; end: 'a' | 'b'; along: number }[]>();
+  placed.forEach(({ wire, a, b, from, to }, i) => {
+    // A hand-bent wire draws its own path, so it neither uses a lane nor claims one.
+    if (wire.points.length > 0) return;
+    for (const end of ['a', 'b'] as const) {
+      const pinEnd = wire[end];
+      const side = end === 'a' ? from : to;
+      if (pinEnd.kind !== 'pin' || !side) continue;
+      const pin = end === 'a' ? a : b;
+      const far = end === 'a' ? b : a;
+      const n = SIDE_STEP[side];
+      if ((far.x - pin.x) * n.x + (far.y - pin.y) * n.y > stub) continue;
+      const edgeAlongX = n.x === 0;
+      const offset = edgeAlongX ? far.x - pin.x : far.y - pin.y;
+      if (offset === 0) continue;
+      // Signed so that a larger value is a pin nearer the side the wire comes round from.
+      const along = (edgeAlongX ? pin.x : pin.y) * Math.sign(offset);
+      const key = `${pinEnd.component} ${side} ${Math.sign(offset)}`;
+      groups.set(key, [...(groups.get(key) ?? []), { wire: i, end, along }]);
+    }
+  });
+
+  const lanes = new Map<string, number>();
+  const nested = new Set<number>();
+  // Inner wire -> the outer wires that must route before it, across every group at once: one
+  // group reordering after another could undo the first one's order.
+  const outerOf = new Map<number, Set<number>>();
+  for (const members of groups.values()) {
+    const pins = [...new Set(members.map((m) => m.along))].sort((x, y) => y - x);
+    if (pins.length < 2) continue;
+    const rank = new Map<number, number>();
+    for (const m of members) {
+      const r = pins.indexOf(m.along);
+      lanes.set(laneKey(m.wire, m.end), r * laneStep);
+      rank.set(m.wire, Math.max(rank.get(m.wire) ?? 0, r));
+      nested.add(m.wire);
+    }
+    for (const [inner, r] of rank)
+      for (const [outer, ro] of rank)
+        if (ro > r) outerOf.set(inner, (outerOf.get(inner) ?? new Set()).add(outer));
+  }
+  return { order: outerFirstOrder(placed.length, outerOf), lanes, nested };
+}
+
+/** Board order, holding a wire back only until its outer wires have routed. A cycle (two wires
+ *  each outer to the other at different parts) falls back to board order for what is left. */
+function outerFirstOrder(
+  count: number,
+  outerOf: ReadonlyMap<number, ReadonlySet<number>>,
+): number[] {
+  const all = Array.from({ length: count }, (_, i) => i);
+  if (outerOf.size === 0) return all;
+  const order: number[] = [];
+  const done = new Set<number>();
+  while (order.length < count) {
+    const ready = all.find(
+      (i) => !done.has(i) && [...(outerOf.get(i) ?? [])].every((o) => done.has(o)),
+    );
+    const next = ready ?? all.find((i) => !done.has(i))!;
+    order.push(next);
+    done.add(next);
+  }
+  return order;
 }
 
 /** Two-elbow (Z) route used by smart-connect, split at the x midpoint so a

@@ -1,3 +1,4 @@
+import { getPrimitive } from './registry';
 import { describe, expect, it } from 'vitest';
 import * as bv from '../../value/busValue';
 import type { EvalContext, Params, PrimitiveSpec } from './types';
@@ -52,9 +53,11 @@ describe('dlatch', () => {
     const c = ctx(p, [s('0101'), s('0')], { state: { q: s('1010') } });
     expect(show(out(dlatch, c), 4)).toBe('1010');
   });
-  it('goes all-X while en unknown', () => {
-    const c = ctx(p, [s('1010'), s('X')], { state: { q: s('1010') } });
-    expect(show(out(dlatch, c), 4)).toBe('XXXX');
+  it('while en is unknown keeps only the bits where d and the held q agree', () => {
+    const same = ctx(p, [s('1010'), s('X')], { state: { q: s('1010') } });
+    expect(show(out(dlatch, same), 4)).toBe('1010');
+    const differ = ctx(p, [s('1001'), s('X')], { state: { q: s('1010') } });
+    expect(show(out(dlatch, differ), 4)).toBe('10XX');
   });
 });
 
@@ -81,8 +84,45 @@ describe('register', () => {
     const c = edge(['0101', '0', '0'], ['0101', '1', '0'], s('1010'));
     expect(show(out(register, c), 4)).toBe('1010');
   });
-  it('goes all-X on an unknown edge', () => {
-    const c = edge(['1010', 'X', '1'], ['1010', '1', '1'], s('1010'));
-    expect(show(out(register, c), 4)).toBe('XXXX');
+  it('an unknown edge keeps only the bits where d and the held q agree', () => {
+    expect(show(out(register, edge(['1010', 'X', '1'], ['1010', '1', '1'], s('1010'))), 4)).toBe(
+      '1010',
+    );
+    expect(show(out(register, edge(['0110', 'X', '1'], ['0110', '1', '1'], s('1010'))), 4)).toBe(
+      'XX10',
+    );
+  });
+
+  it('a clock that cannot have risen (X to 0, 1 to X) holds q', () => {
+    expect(show(out(register, edge(['0110', 'X', '1'], ['0110', '0', '1'], s('1010'))), 4)).toBe(
+      '1010',
+    );
+    expect(show(out(register, edge(['0110', '1', '1'], ['0110', 'X', '1'], s('1010'))), 4)).toBe(
+      '1010',
+    );
+  });
+
+  it('a known-inactive enable holds q through an unknown edge', () => {
+    expect(show(out(register, edge(['0110', 'X', '0'], ['0110', '1', '0'], s('1010'))), 4)).toBe(
+      '1010',
+    );
+    const low = {
+      ...edge(['0110', 'X', '1'], ['0110', '1', '1'], s('1010')),
+      params: { width: 4, enableLow: true },
+    };
+    expect(show(out(register, low), 4)).toBe('1010');
+  });
+
+  it('an unknown enable at a clean edge keeps only the agreeing bits', () => {
+    expect(show(out(register, edge(['0110', '0', 'X'], ['0110', '1', 'X'], s('1010'))), 4)).toBe(
+      'XX10',
+    );
+  });
+});
+
+describe('active-low pin flag', () => {
+  it("marks the DFF's preset and clear, and nothing else on it", () => {
+    const pins = getPrimitive('dff').pins({ asyncSet: true, asyncClear: true });
+    expect(pins.filter((p) => p.activeLow).map((p) => p.name)).toEqual(['pre', 'clr']);
   });
 });

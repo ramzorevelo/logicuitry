@@ -82,8 +82,8 @@ export function StaCard(props: {
           {sequential.paths.map((p, i) => (
             <div key={i} className="sta-card__seqpath">
               <div className="sta-card__muted">
-                {short(p.launch)} → {short(p.capture)} · slack {formatTimePs(p.setupSlackPs)} · hold
-                margin {formatTimePs(p.holdMarginPs)}
+                {short(p.launch)} → {short(p.capture)}.{p.capturePin} · slack{' '}
+                {formatTimePs(p.setupSlackPs)} · hold margin {formatTimePs(p.holdMarginPs)}
               </div>
               <SetupInequality p={p} />
               <HoldInequality p={p} />

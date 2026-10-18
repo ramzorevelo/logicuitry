@@ -9,6 +9,8 @@ import {
   type Menu,
   type MenuCommand,
 } from './menuModel';
+import { useBackLayer } from '../backStack';
+import { useCompact } from '../compact';
 
 interface Props {
   menus: readonly Menu[];
@@ -31,6 +33,8 @@ export function MenuBar({ menus }: Props) {
     setSubIndex(null);
     if (focusBar) barRefs.current[0]?.focus();
   }, []);
+
+  useBackLayer(useCompact() && openIndex !== null ? () => close(false) : null);
 
   // Clamp when the active workbench changes the bar out from under us.
   useEffect(() => {

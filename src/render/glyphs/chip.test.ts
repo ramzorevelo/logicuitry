@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Theme } from '../theme';
 import { makeTestTheme } from '../theme.fixture';
-import { boxLayout, busSlashGeometry } from './chip';
-import type { GeometryInput } from './symbol';
+import type { Rect } from '../scene';
+import { boxLayout, busSlashGeometry, drawBox } from './chip';
+import { glyphBodyName, primitivePins, type GeometryInput } from './symbol';
+import '../../core/sim/primitives/registry';
 
 const G = 8;
 
@@ -232,6 +234,165 @@ describe('busSlashGeometry', () => {
   });
 });
 
+type Matrix = [number, number, number, number, number, number];
+
+/**
+ * A canvas that tracks its transform and records every fillText as the
+ * world-space box the text covers, so overlap is checked after rotation and
+ * mirroring the way the screen shows it. Mono text, as measureMonoText assumes.
+ */
+function textRecordingCtx(): {
+  ctx: CanvasRenderingContext2D;
+  boxes: { text: string; r: Rect }[];
+  arcs: number;
+  barred: string[];
+} {
+  const boxes: { text: string; r: Rect }[] = [];
+  const drawn = { arcs: 0, barred: [] as string[] };
+  let m: Matrix = [1, 0, 0, 1, 0, 0];
+  const stack: Matrix[] = [];
+  const apply = (x: number, y: number) => ({
+    x: m[0] * x + m[2] * y + m[4],
+    y: m[1] * x + m[3] * y + m[5],
+  });
+  const mul = (n: Matrix) => {
+    m = [
+      m[0] * n[0] + m[2] * n[1],
+      m[1] * n[0] + m[3] * n[1],
+      m[0] * n[2] + m[2] * n[3],
+      m[1] * n[2] + m[3] * n[3],
+      m[0] * n[4] + m[2] * n[5] + m[4],
+      m[1] * n[4] + m[3] * n[5] + m[5],
+    ];
+  };
+  const state: Record<string, unknown> = {
+    font: '13px mono',
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+  };
+  const px = () => Number(/(\d+(?:\.\d+)?)px/.exec(String(state['font']))![1]);
+  const methods: Record<string, (...a: never[]) => unknown> = {
+    save: () => stack.push([...m]),
+    restore: () => {
+      m = stack.pop()!;
+    },
+    translate: (x: number, y: number) => mul([1, 0, 0, 1, x, y]),
+    scale: (x: number, y: number) => mul([x, 0, 0, y, 0, 0]),
+    rotate: (a: number) => {
+      const c = Math.round(Math.cos(a));
+      const s = Math.round(Math.sin(a));
+      mul([c, s, -s, c, 0, 0]);
+    },
+    // drawUprightText measures a label only to lay its overbar.
+    measureText: (t: string) => {
+      drawn.barred.push(t);
+      return { width: t.length * px() * 0.6 };
+    },
+    arc: () => {
+      drawn.arcs++;
+    },
+    fillText: (text: string, x: number, y: number) => {
+      const w = text.length * px() * 0.6;
+      const h = px();
+      const x0 =
+        state['textAlign'] === 'left' ? x : state['textAlign'] === 'right' ? x - w : x - w / 2;
+      const y0 =
+        state['textBaseline'] === 'top'
+          ? y
+          : state['textBaseline'] === 'bottom'
+            ? y - h
+            : y - h / 2;
+      const corners = [apply(x0, y0), apply(x0 + w, y0 + h)];
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => p.y);
+      const left = Math.min(...xs);
+      const top = Math.min(...ys);
+      boxes.push({
+        text,
+        r: { x: left, y: top, w: Math.max(...xs) - left, h: Math.max(...ys) - top },
+      });
+    },
+  };
+  const ctx = new Proxy(state, {
+    get: (target, key: string) => methods[key] ?? (key in target ? target[key] : () => undefined),
+    set: (target, key: string, value) => {
+      target[key] = value;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return {
+    ctx,
+    boxes,
+    get arcs() {
+      return drawn.arcs;
+    },
+    get barred() {
+      return drawn.barred;
+    },
+  };
+}
+
+const overlaps = (a: Rect, b: Rect) =>
+  a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+
+describe('arithmetic block glyphs', () => {
+  const shapes: [string, Record<string, string | boolean>][] = [
+    ['adder', {}],
+    ['adder', { pinView: 'a=expanded;b=expanded;sum=expanded' }],
+    ['comparator', {}],
+    ['comparator', { hasCascade: true, pinView: 'a=expanded;b=expanded' }],
+    ['parity', {}],
+  ];
+
+  it('draw as a labelled box with pins in order, every pin on the grid', () => {
+    for (const [kind, params] of shapes) {
+      const pins = primitivePins(kind, params);
+      const layout = boxLayout(
+        { kind, params, pins, name: glyphBodyName(kind, 'U1', undefined) },
+        theme,
+      );
+      expect(layout.name, kind).toBe(kind);
+      expect(layout.left.map((p) => p.name)).toEqual(
+        pins.filter((p) => p.dir === 'in').map((p) => p.name),
+      );
+      expect(layout.right.map((p) => p.name)).toEqual(
+        pins.filter((p) => p.dir === 'out').map((p) => p.name),
+      );
+      for (const pos of layout.pins.values()) {
+        expect(pos.x % G).toBeCloseTo(0, 6);
+        expect(pos.y % G).toBeCloseTo(0, 6);
+      }
+      expect([...layout.left, ...layout.right].some((p) => p.activeLow || p.role === 'clock')).toBe(
+        false,
+      );
+    }
+  });
+
+  it('never overlap the name with a pin label at any rotation, mirrored or not', () => {
+    for (const [kind, params] of shapes) {
+      const input: GeometryInput = {
+        kind,
+        params,
+        pins: primitivePins(kind, params),
+        name: glyphBodyName(kind, 'U1', undefined),
+      };
+      for (const rot of [0, 90, 180, 270] as const)
+        for (const mirror of [false, true]) {
+          const { ctx, boxes } = textRecordingCtx();
+          drawBox(ctx, theme, input, { pos: { x: 0, y: 0 }, rot, mirror }, undefined, false, 'U1');
+          expect(boxes.length).toBe(input.pins.length + 2);
+          for (let i = 0; i < boxes.length; i++)
+            for (let j = i + 1; j < boxes.length; j++)
+              expect(
+                overlaps(boxes[i]!.r, boxes[j]!.r),
+                `${kind} ${JSON.stringify(params)} rot ${rot}${mirror ? ' mirrored' : ''}: ` +
+                  `${boxes[i]!.text} / ${boxes[j]!.text}`,
+              ).toBe(false);
+        }
+    }
+  });
+});
+
 describe('boxLayout row pitch follows the pin-label size', () => {
   const input: GeometryInput = { kind: 'dff', params: {}, pins: dffPins, name: 'DFF' };
 
@@ -263,5 +424,96 @@ describe('boxLayout row pitch follows the pin-label size', () => {
     expect(boxLayout(sel, theme).bottom[1]!.x! - boxLayout(sel, theme).bottom[0]!.x!).toBe(2 * G);
     const big = boxLayout(sel, { ...theme, glyphText: 26 });
     expect(big.bottom[1]!.x! - big.bottom[0]!.x!).toBeGreaterThan(2 * G);
+  });
+});
+
+describe('sequential block glyphs', () => {
+  const shapes: [string, Record<string, string | number | boolean>][] = [
+    ['srlatch', {}],
+    ['srlatch', { form: 'nand' }],
+    ['dff', { asyncSet: true, asyncClear: true }],
+    ['counter', { width: 4 }],
+    [
+      'counter',
+      { width: 4, clear: 'async', hasLoad: true, hasEnable: true, pinView: 'q=expanded' },
+    ],
+    ['counter', { width: 4, hasLoad: true, dualEnable: true, activeLow: true }],
+    ['shiftreg', { width: 8 }],
+    [
+      'shiftreg',
+      { width: 4, clear: 'async', serialAnd: true, activeLow: true, pinView: 'q=expanded' },
+    ],
+    [
+      'shiftreg',
+      { width: 8, hasLoad: true, asyncLoad: true, clockInhibit: true, invertedOut: true },
+    ],
+  ];
+
+  it('draw a labelled box: clock wedge on clk only, bubbles only on active-low pins', () => {
+    for (const [kind, params] of shapes) {
+      const pins = primitivePins(kind, params);
+      const layout = boxLayout(
+        { kind, params, pins, name: glyphBodyName(kind, 'U1', undefined) },
+        theme,
+      );
+      const drawn = [...layout.left, ...layout.right];
+      expect(layout.name, kind).toBe(kind);
+      expect(layout.left.map((p) => p.name)).toEqual(
+        pins.filter((p) => p.dir === 'in').map((p) => p.name),
+      );
+      expect(drawn.filter((p) => p.role === 'clock').map((p) => p.name)).toEqual(
+        kind === 'srlatch' ? [] : ['clk'],
+      );
+      expect(drawn.filter((p) => p.activeLow).map((p) => p.name)).toEqual(
+        pins.filter((p) => p.activeLow).map((p) => p.name),
+      );
+      for (const pos of layout.pins.values()) {
+        expect(pos.x % G).toBeCloseTo(0, 6);
+        expect(pos.y % G).toBeCloseTo(0, 6);
+      }
+    }
+  });
+
+  it('draws one bubble and one overbar per active-low pin, and none elsewhere', () => {
+    for (const [kind, params] of shapes) {
+      const pins = primitivePins(kind, params);
+      const rec = textRecordingCtx();
+      drawBox(
+        rec.ctx,
+        theme,
+        { kind, params, pins, name: glyphBodyName(kind, 'U1', undefined) },
+        { pos: { x: 0, y: 0 } },
+        undefined,
+        false,
+        'U1',
+      );
+      const low = pins.filter((p) => p.activeLow).map((p) => p.label ?? p.name);
+      expect(rec.arcs, `${kind} ${JSON.stringify(params)}`).toBe(low.length);
+      expect(rec.barred, `${kind} ${JSON.stringify(params)}`).toEqual(low);
+    }
+  });
+
+  it('never overlap the name with a pin label at any rotation, mirrored or not', () => {
+    for (const [kind, params] of shapes) {
+      const input: GeometryInput = {
+        kind,
+        params,
+        pins: primitivePins(kind, params),
+        name: glyphBodyName(kind, 'U1', undefined),
+      };
+      for (const rot of [0, 90, 180, 270] as const)
+        for (const mirror of [false, true]) {
+          const { ctx, boxes } = textRecordingCtx();
+          drawBox(ctx, theme, input, { pos: { x: 0, y: 0 }, rot, mirror }, undefined, false, 'U1');
+          expect(boxes.length).toBe(input.pins.length + 2);
+          for (let i = 0; i < boxes.length; i++)
+            for (let j = i + 1; j < boxes.length; j++)
+              expect(
+                overlaps(boxes[i]!.r, boxes[j]!.r),
+                `${kind} ${JSON.stringify(params)} rot ${rot}${mirror ? ' mirrored' : ''}: ` +
+                  `${boxes[i]!.text} / ${boxes[j]!.text}`,
+              ).toBe(false);
+        }
+    }
   });
 });

@@ -119,35 +119,37 @@ export function LawsSection() {
         )}
       </div>
 
-      <table className="algebra-laws">
-        <thead>
-          <tr>
-            <th scope="col">Row</th>
-            <th scope="col">a</th>
-            <th scope="col">b (dual)</th>
-            <th scope="col">Law</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ row, a, b }) => (
-            <tr key={row}>
-              <th scope="row" className="algebra-law__row">
-                {row}
-              </th>
-              {cell(a)}
-              {cell(b)}
-              <td
-                className="algebra-law__name"
-                onMouseEnter={() => setAka(a.alsoCalled.length > 0 ? a : null)}
-                onMouseLeave={() => setAka(null)}
-                onClick={() => setAka(aka === a || a.alsoCalled.length === 0 ? null : a)}
-              >
-                {a.name}
-              </td>
+      <div className="algebra-laws-scroll">
+        <table className="algebra-laws">
+          <thead>
+            <tr>
+              <th scope="col">Row</th>
+              <th scope="col">a</th>
+              <th scope="col">b (dual)</th>
+              <th scope="col">Law</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(({ row, a, b }) => (
+              <tr key={row}>
+                <th scope="row" className="algebra-law__row">
+                  {row}
+                </th>
+                {cell(a)}
+                {cell(b)}
+                <td
+                  className="algebra-law__name"
+                  onMouseEnter={() => setAka(a.alsoCalled.length > 0 ? a : null)}
+                  onMouseLeave={() => setAka(null)}
+                  onClick={() => setAka(aka === a || a.alsoCalled.length === 0 ? null : a)}
+                >
+                  {a.name}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="algebra-aka" aria-live="polite">
         {aka ? `${aka.name}, also called: ${aka.alsoCalled.join(', ')}` : ''}
       </div>

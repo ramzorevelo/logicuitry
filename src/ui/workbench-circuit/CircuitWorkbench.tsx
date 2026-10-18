@@ -15,6 +15,7 @@ import {
   VARIABLE_ARITY_GATES,
   type ComponentPins,
   type Tab,
+  type Tool,
 } from './circuitStore';
 
 /** Gate kinds a wired gate can be swapped between: one shared pin vocabulary
@@ -43,7 +44,9 @@ import {
 } from './pinTargets';
 import { groupRects, renderBoard } from './editorScene';
 import { groupContaining, groupHandleAt, groupMemberIds } from './groupHit';
-import { useCompact } from '../compact';
+import { useCompact, useLandscape } from '../compact';
+import { useBackLayer } from '../backStack';
+import { formatTimePs } from '../../render/waveform';
 import { useCoarsePointer } from '../pointerKind';
 import { SelectionActionBar } from './SelectionActionBar';
 import { LONG_PRESS_MS, initialGestureState, reduceGesture, type Intent } from './touchGestures';
@@ -67,9 +70,9 @@ import {
 } from '../../render/glyphs/io';
 import { rectContains, rectFromPoints, rectsIntersect, type Rect } from '../../render/scene';
 import { pickDocumentFile, readDocumentFile } from '../../io/boardFile';
-import { filePickersSupported } from '../../io/fsAccess';
 import { useShellStore } from '../store';
 import type {
+  ChipLibrary,
   Circuit,
   Component,
   ComponentKind,
@@ -137,10 +140,13 @@ import {
 import { extractInternalSelection } from './duplicate';
 import { getPrefs, usePrefsStore } from '../prefs';
 import { sevenSegCommon } from '../../core/sim/primitives/display';
+import { clearParam, STATEFUL_KINDS, type ClearMode } from '../../core/sim/primitives/sequential';
+import { COUNTER_DEFAULT_WIDTH } from '../../core/sim/primitives/counter';
+import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
 import { busLabelHitPoints, wireBusWidth } from './busBadge';
 import { useContributeMenus, useMenuCommand } from '../menu/MenuProvider';
 import type { Menu } from '../menu/menuModel';
-import { SHORTCUTS } from '../menu/shortcuts';
+import { SHORTCUTS, historyKey } from '../menu/shortcuts';
 import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
 import { serializePinView, type PinViewState } from '../../core/sim/primitives/busPins';
 import { currentPinView, pinViewGroupsFor } from './pinViewUI';
@@ -541,6 +547,14 @@ export function CircuitWorkbench() {
     initial?: number;
     valueText?: string;
     hasEnable?: boolean;
+    hasCascade?: boolean;
+    /** DFF: the active-low preset and clear pins. */
+    asyncSet?: boolean;
+    asyncClear?: boolean;
+    form?: 'nor' | 'nand';
+    clear?: ClearMode;
+    hasLoad?: boolean;
+    parallelOut?: boolean;
     inputs?: number;
     /** Gate-kind swap (variable-arity gates only): same pin vocabulary, so
      *  every wire survives the change. */
@@ -599,7 +613,11 @@ export function CircuitWorkbench() {
   const [viewOnly, setViewOnly] = useState(false);
   const [showSubExprs, setShowSubExprs] = useState(false);
   // Compiling per frame would be wasted work: connectivity only moves with rev.
-  const subExprCache = useRef<{ rev: number; pins: ReadonlyMap<string, Expr> } | null>(null);
+  const subExprCache = useRef<{
+    rev: number;
+    chipLib: ChipLibrary;
+    pins: ReadonlyMap<string, Expr>;
+  } | null>(null);
   const viewOnlyRef = useRef(viewOnly);
   viewOnlyRef.current = viewOnly;
   // Touch classification (tap / pan / long press / pinch) lives in a pure
@@ -748,6 +766,7 @@ export function CircuitWorkbench() {
   const tabs = useCircuitStore((s) => s.tabs);
   const activeTabId = useCircuitStore((s) => s.activeTabId);
   const chipLib = useCircuitStore((s) => s.chipLib);
+  const board = useCircuitStore((s) => s.board);
   const selection = useCircuitStore((s) => s.selection);
   const mode = useCircuitStore((s) => s.mode);
   // Powering on/off, or entering/leaving bubble mode, is a new context: what
@@ -795,7 +814,7 @@ export function CircuitWorkbench() {
               body: (
                 <AnalyzeDrawer
                   onClose={closeAnalyze}
-                  onBuild={(expression) => setBuilding({ expression })}
+                  onBuild={(expression) => setBuilding(expression ? { expression } : {})}
                 />
               ),
             }
@@ -903,14 +922,14 @@ export function CircuitWorkbench() {
   const subExpressionsNow = (): ReadonlyMap<string, Expr> | undefined => {
     if (!showSubExprs || activeTab.kind !== 'board') return undefined;
     const st = store.getState();
-    if (subExprCache.current?.rev !== st.rev) {
+    if (subExprCache.current?.rev !== st.rev || subExprCache.current.chipLib !== st.chipLib) {
       let pins: ReadonlyMap<string, Expr> = new Map();
       try {
         pins = gateExpressions(st.board, st.chipLib).pins;
       } catch {
         // A board that does not compile has no expressions to show.
       }
-      subExprCache.current = { rev: st.rev, pins };
+      subExprCache.current = { rev: st.rev, chipLib: st.chipLib, pins };
     }
     return subExprCache.current.pins;
   };
@@ -979,6 +998,10 @@ export function CircuitWorkbench() {
         ),
       };
     const from = wiringRef.current;
+    // A finger has no hover, so between taps the ghost ends at the last bend placed.
+    const bends = wireBendsRef.current;
+    const wireTip = hoverPin ?? bends[bends.length - 1];
+    const tipBends = hoverPin ? bends : bends.slice(0, -1);
     try {
       renderBoard(ctx, theme, {
         board,
@@ -1013,7 +1036,7 @@ export function CircuitWorkbench() {
           return data ?? undefined;
         })(),
         subExpressions: subExpressionsNow(),
-        hoverPin,
+        hoverPin: hoverPin ?? (from ? (wireTip ?? from.worldPos) : undefined),
         // The committed wire is elbowed by orthogonalPolyline on the way in, so
         // the ghost is built by the same function: assembling it by hand left
         // the leg from the start pin to the first bend as a bare diagonal.
@@ -1021,18 +1044,18 @@ export function CircuitWorkbench() {
         // committed route does, so the ghost is not showing a different wire
         // from the one the click is about to make.
         wiringPreview:
-          from && hoverPin
-            ? wireBendsRef.current.length
-              ? orthogonalPolyline(from.worldPos, wireBendsRef.current, hoverPin)
+          from && wireTip
+            ? tipBends.length
+              ? orthogonalPolyline(from.worldPos, tipBends, wireTip)
               : routeAvoiding(
                   from.worldPos,
-                  hoverPin,
+                  wireTip,
                   [...componentBoundsMap().values()],
                   [],
                   theme.gridSchematic,
                   {
                     from: startPinSide(from),
-                    to: sideAtPin(hoverPin),
+                    to: sideAtPin(wireTip),
                     stub: PIN_STUB * theme.gridSchematic,
                   },
                 )
@@ -1117,6 +1140,8 @@ export function CircuitWorkbench() {
     scheduleDraw();
   }, [
     rev,
+    // A library load swaps chipLib without bumping rev.
+    chipLib,
     hoverPin,
     viewport,
     tool,
@@ -1340,6 +1365,16 @@ export function CircuitWorkbench() {
 
   const fitRef = useRef(fitView);
   fitRef.current = fitView;
+
+  // A turned phone gets a fresh fit, or a portrait-framed board sits below the short canvas. Keyed
+  // on the shell, not on resizes: a panel or the soft keyboard must keep the instructor's camera.
+  const landscapeShell = useLandscape() && compact;
+  const lastShell = useRef(landscapeShell);
+  useEffect(() => {
+    if (lastShell.current === landscapeShell) return;
+    lastShell.current = landscapeShell;
+    fitRef.current();
+  }, [landscapeShell]);
 
   // A different tab is a different circuit: fit it instead of keeping the
   // previous tab's viewport.
@@ -1606,9 +1641,9 @@ export function CircuitWorkbench() {
           }
           if (specs.length > 0) s.setComponentParamsBatch(specs);
         }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      } else if (historyKey(e)) {
         e.preventDefault();
-        if (e.shiftKey) s.redo();
+        if (historyKey(e) === 'redo') s.redo();
         else s.undo();
       }
     };
@@ -2145,9 +2180,9 @@ export function CircuitWorkbench() {
 
   const handleBubbleKey = (e: KeyboardEvent) => {
     const s = store.getState();
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+    if (historyKey(e)) {
       e.preventDefault();
-      if (e.shiftKey) s.redo();
+      if (historyKey(e) === 'redo') s.redo();
       else s.undo();
     } else if (e.key === 'Home') {
       e.preventDefault();
@@ -3465,6 +3500,11 @@ export function CircuitWorkbench() {
     drawRef.current();
   };
 
+  // Back on a phone throws the wire away, like the toolbar's Cancel.
+  useBackLayer(coarse && wiring ? discardWire : null);
+  // And closes a param editor unsaved, as Esc does.
+  useBackLayer(coarse && paramEdit ? () => setParamEdit(null) : null);
+
   /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
    *  a cut, a suggestion, a duplicate ghost. Shared by Esc and by a press
    *  outside the canvas, which is the only way to reach it on a touchscreen. */
@@ -3532,6 +3572,14 @@ export function CircuitWorkbench() {
       if (pts.length === 2) {
         panRef.current = null;
         lassoRef.current = null;
+        // A second finger makes it a pinch: the first finger's drag is a preview
+        // committed only on lift, so dropping it here cancels it.
+        dragRef.current = null;
+        wireDragRef.current = null;
+        freeEndDragRef.current = null;
+        busLabelDragRef.current = null;
+        cutRef.current = null;
+        draw();
         window.clearTimeout(longPressTimer.current);
         const [a, b] = pts;
         if (a && b) beginPinch(Math.hypot(a.x - b.x, a.y - b.y), (a.x + b.x) / 2, (a.y + b.y) / 2);
@@ -3734,7 +3782,7 @@ export function CircuitWorkbench() {
       }
       st.place(
         tool.componentKind,
-        world,
+        e.pointerType === 'touch' ? originCentredOn(world, tool) : world,
         grid,
         tool.params,
         ghostPoseRef.current,
@@ -3768,6 +3816,14 @@ export function CircuitWorkbench() {
       setWiringStart(null);
       wireBendsRef.current = [];
       setHoverPin(undefined);
+    } else if (
+      from &&
+      e.pointerType === 'touch' &&
+      tapsWireStart(from, targets, world, grid, hitScale(theme))
+    ) {
+      // The touch stand-in for Esc with nothing placed: no wire is left behind.
+      discardWire();
+      return;
     } else if (from) {
       // A wire is pending (started from the Wire tool or a Select-mode pin
       // press): this click completes or drops it, whatever the tool.
@@ -3825,6 +3881,7 @@ export function CircuitWorkbench() {
         // same as the plain free-start path below.
         const pos = { x: Math.round(world.x / grid) * grid, y: Math.round(world.y / grid) * grid };
         wireBendsRef.current = [...wireBendsRef.current, pos];
+        draw();
         return;
       }
       const a: WireEnd = isFreeStart(from)
@@ -3901,6 +3958,7 @@ export function CircuitWorkbench() {
       // instead of ending the wire with a free end -- only Esc does that now.
       const pos = { x: Math.round(world.x / grid) * grid, y: Math.round(world.y / grid) * grid };
       wireBendsRef.current = [...wireBendsRef.current, pos];
+      draw();
       return;
     }
     if (tool.kind === 'wire') {
@@ -4325,9 +4383,8 @@ export function CircuitWorkbench() {
       if (gestureRef.current.points.length < 2) pinchRef.current = null;
       // A hover cue has no way to expire on touch: the finger lifts and no
       // further move ever arrives to move or clear it, so the pin ghost sat
-      // there for good. With a wire still in flight it is not hover at all --
-      // it shows where that wire will land -- so it stays.
-      if (!wiringRef.current) setHoverPin(undefined);
+      // there for good. A wire in flight falls back to ending at its last tap.
+      setHoverPin(undefined);
     }
     panRef.current = null;
     if (heldButtonsRef.current.size > 0) {
@@ -4445,6 +4502,24 @@ export function CircuitWorkbench() {
     }
   };
 
+  /** The origin that puts a part's body centre at `at`. A finger has no ghost to aim with, and a
+   *  top-left anchor ran a DIP down under the action bar. */
+  const originCentredOn = (at: Vec2, tool: Extract<Tool, { kind: 'place' }>): Vec2 => {
+    const pose = ghostPoseRef.current;
+    const def = tool.defId ? store.getState().chipLib.get(tool.defId) : undefined;
+    const probe: Component = {
+      id: '__ghost',
+      kind: tool.componentKind,
+      pos: at,
+      rot: pose.rot,
+      mirror: pose.mirror,
+      ...(tool.params ? { params: tool.params } : {}),
+      ...(tool.defId ? { defId: tool.defId } : {}),
+    };
+    const { bounds } = symbolBounds(probe, themeRef.current!, def);
+    return { x: 2 * at.x - (bounds.x + bounds.w / 2), y: 2 * at.y - (bounds.y + bounds.h / 2) };
+  };
+
   // Resolve which DIP-bank cell a click landed on, in the component's local
   // space (worldToLocal handles rot/mirror); width-1 toggles always toggle
   // bit 0 (dipCellIndexAt only applies to the width>1 glyph).
@@ -4480,8 +4555,9 @@ export function CircuitWorkbench() {
     // starting a selection drag -- so tapping is the only way to pick the
     // handle that a subsequent drag moves. It selects any handle, not just a
     // component: tapping a wire used to clear the selection, which left no way
-    // to pick one up at all.
-    if ((viewOnlyRef.current || coarseRef.current) && !panMovedRef.current) {
+    // to pick one up at all. Powered locks editing, so a touch tap there only drives inputs.
+    const tapSelects = viewOnlyRef.current || (coarseRef.current && !powered);
+    if (tapSelects && !panMovedRef.current) {
       const id = handleIdAt(world);
       store.getState().setSelection(id ? new Set([id]) : new Set());
       draw();
@@ -4582,6 +4658,9 @@ export function CircuitWorkbench() {
       c.kind === 'constant' ||
       c.kind === 'decoder' ||
       c.kind === 'encoder' ||
+      c.kind === 'adder' ||
+      c.kind === 'comparator' ||
+      STATEFUL_KINDS.has(c.kind) ||
       c.kind === 'sevenseg' ||
       c.kind === 'mux' ||
       c.kind === 'demux' ||
@@ -4591,13 +4670,26 @@ export function CircuitWorkbench() {
       const theme = themeRef.current!;
       const bounds = symbolBounds(c, theme).bounds;
       const screen = worldToScreen(viewportRef.current, { x: bounds.x, y: bounds.y + bounds.h });
-      const width = Number(c.params?.['width'] ?? 1);
+      const width = Number(
+        c.params?.['width'] ??
+          (c.kind === 'counter'
+            ? COUNTER_DEFAULT_WIDTH
+            : c.kind === 'shiftreg'
+              ? SHIFTREG_DEFAULT_WIDTH
+              : 1),
+      );
       // Every kind reaching this branch is name-able (Task 1a) -- the branch's
       // own condition list above is the actual gate on which kinds get an
       // overlay at all.
       const labelable = true;
       const noWidthField =
-        c.kind === 'decoder' || c.kind === 'encoder' || c.kind === 'chip' || c.kind === 'sevenseg';
+        c.kind === 'decoder' ||
+        c.kind === 'encoder' ||
+        c.kind === 'adder' ||
+        c.kind === 'comparator' ||
+        c.kind === 'srlatch' ||
+        c.kind === 'chip' ||
+        c.kind === 'sevenseg';
       // Task 6: a multi-selection containing the double-clicked component
       // batches -- the shown/applied fields are the intersection of every
       // selected component's own descriptor-key set (paramSpecs.ts), empty
@@ -4660,6 +4752,28 @@ export function CircuitWorkbench() {
             }
           : {}),
         ...(c.kind === 'encoder' ? { inputs: Number(c.params?.['addressBits'] ?? 2) } : {}),
+        ...(c.kind === 'comparator'
+          ? { hasCascade: Boolean(c.params?.['hasCascade'] ?? false) }
+          : {}),
+        ...(c.kind === 'dff'
+          ? {
+              asyncSet: c.params?.['asyncSet'] === true,
+              asyncClear: c.params?.['asyncClear'] === true,
+            }
+          : {}),
+        ...(c.kind === 'srlatch'
+          ? { form: c.params?.['form'] === 'nand' ? ('nand' as const) : ('nor' as const) }
+          : {}),
+        ...(c.kind === 'counter' || c.kind === 'shiftreg'
+          ? {
+              clear: clearParam(c.params ?? {}, c.kind === 'counter' ? 'sync' : 'none'),
+              hasLoad: c.params?.['hasLoad'] === true,
+            }
+          : {}),
+        ...(c.kind === 'counter' && c.params?.['dualEnable'] !== true
+          ? { hasEnable: c.params?.['hasEnable'] === true }
+          : {}),
+        ...(c.kind === 'shiftreg' ? { parallelOut: c.params?.['parallelOut'] !== false } : {}),
         ...(c.kind === 'mux'
           ? {
               inputs: Number(c.params?.['selectBits'] ?? 2),
@@ -4730,6 +4844,8 @@ export function CircuitWorkbench() {
             : 'inputs';
       p[key] = pe.inputs;
     }
+    if (pe.hasLoad !== undefined) p['hasLoad'] = pe.hasLoad;
+    if (pe.parallelOut !== undefined) p['parallelOut'] = pe.parallelOut;
     return p;
   };
 
@@ -4761,6 +4877,26 @@ export function CircuitWorkbench() {
     ...(kind && powered && paramLiveness(kind, key) === 'structural' ? { disabled: true } : {}),
   });
 
+  const paramEditCheckbox = (
+    pe: NonNullable<typeof paramEdit>,
+    key: 'asyncSet' | 'asyncClear' | 'hasLoad' | 'hasEnable' | 'parallelOut',
+    label: string,
+  ) =>
+    paramEditFieldVisible(pe, key) && (
+      <label>
+        {label}
+        <input
+          type="checkbox"
+          checked={!!pe[key]}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setParamEdit((cur) => (cur ? { ...cur, [key]: on } : cur));
+          }}
+          {...paramEditFocusHandlers(setParamEdit, key, pe.kind)}
+        />
+      </label>
+    );
+
   // Maps a batchable param key back to the overlay's own flat field that
   // holds its raw (double-clicked-component-shaped) entered value --
   // gate's `inputs`, mux/demux's `selectBits`, and decoder/encoder's
@@ -4780,6 +4916,20 @@ export function CircuitWorkbench() {
         return pe.inputs;
       case 'hasEnable':
         return pe.hasEnable;
+      case 'hasCascade':
+        return pe.hasCascade;
+      case 'asyncSet':
+        return pe.asyncSet;
+      case 'asyncClear':
+        return pe.asyncClear;
+      case 'form':
+        return pe.form;
+      case 'clear':
+        return pe.clear;
+      case 'hasLoad':
+        return pe.hasLoad;
+      case 'parallelOut':
+        return pe.parallelOut;
       case 'selSide':
         return pe.selSide;
       case 'initial':
@@ -4910,6 +5060,28 @@ export function CircuitWorkbench() {
       if (paramEdit.inputs === undefined || !Number.isFinite(paramEdit.inputs)) return flash();
       params['addressBits'] = clampInt(paramEdit.inputs, 1, 4);
       params['pinView'] = serializePinView(paramEdit.pinView);
+    } else if (STATEFUL_KINDS.has(paramEdit.kind)) {
+      if (paramEdit.kind === 'srlatch') {
+        params['form'] = paramEdit.form === 'nand' ? 'nand' : 'nor';
+      } else {
+        if (paramEdit.width === undefined || !Number.isFinite(paramEdit.width)) return flash();
+        params['width'] = clampInt(paramEdit.width, 1, MAX_WIDTH);
+        params['pinView'] = serializePinView(paramEdit.pinView);
+      }
+      if (paramEdit.kind === 'dff') {
+        params['asyncSet'] = !!paramEdit.asyncSet;
+        params['asyncClear'] = !!paramEdit.asyncClear;
+      }
+      if (paramEdit.kind === 'counter' || paramEdit.kind === 'shiftreg') {
+        params['clear'] = paramEdit.clear ?? 'none';
+        params['hasLoad'] = !!paramEdit.hasLoad;
+      }
+      if (paramEdit.kind === 'counter' && paramEdit.hasEnable !== undefined)
+        params['hasEnable'] = paramEdit.hasEnable;
+      if (paramEdit.kind === 'shiftreg') params['parallelOut'] = paramEdit.parallelOut !== false;
+    } else if (paramEdit.kind === 'adder' || paramEdit.kind === 'comparator') {
+      if (paramEdit.kind === 'comparator') params['hasCascade'] = !!paramEdit.hasCascade;
+      params['pinView'] = serializePinView(paramEdit.pinView);
     } else if (paramEdit.kind === 'mux' || paramEdit.kind === 'demux') {
       if (paramEdit.inputs === undefined || !Number.isFinite(paramEdit.inputs)) return flash();
       if (paramEdit.width === undefined || !Number.isFinite(paramEdit.width)) return flash();
@@ -5020,7 +5192,6 @@ export function CircuitWorkbench() {
   const circuitMenus = useMemo<Menu[]>(() => {
     const st = () => store.getState();
     const sel = () => st().selection;
-    const pickers = filePickersSupported();
     // What the selection can actually accept. A command that is offered and
     // then does nothing is worse than one that is absent: on touch the action
     // bar drops whatever is disabled, so this is also what keeps a tap on an
@@ -5040,12 +5211,7 @@ export function CircuitWorkbench() {
         // File comes from the shell's document layer and merges in above.
         id: 'file',
         items: [
-          {
-            id: 'import',
-            label: 'Import circuit...',
-            disabled: !pickers,
-            run: () => void fileImport(),
-          },
+          { id: 'import', label: 'Import circuit...', run: () => void fileImport() },
           { id: 'package', label: 'Package as chip...', run: () => setPackaging(true) },
           { id: 'build', label: 'Build circuit...', run: () => setBuilding({}) },
         ],
@@ -5266,11 +5432,14 @@ export function CircuitWorkbench() {
         ],
       },
     ];
-    // `rev` so the heal test re-runs when the wires around a selected junction
-    // change without the selection itself changing.
+    // The board and library so the heal test re-runs when the wires around a
+    // selected junction change without the selection itself changing. Not
+    // `rev`: the pump bumps it every frame, and re-contributing the menus
+    // per frame chained a provider update onto every passive-effect flush.
   }, [
     selection,
-    rev,
+    board,
+    chipLib,
     analyzeShown,
     waveformOpen,
     powered,
@@ -5610,7 +5779,7 @@ export function CircuitWorkbench() {
               </button>
               <span className="sim-status">
                 {powered ? (running ? 'running' : 'settled, paused') : 'off'}
-                {simTime !== null && ` · t = ${(simTime / 1000).toFixed(1)} ns`}
+                {simTime !== null && ` · t = ${formatTimePs(simTime)}`}
               </span>
             </div>
             <div className="tool-group">
@@ -5836,10 +6005,20 @@ export function CircuitWorkbench() {
               >
                 {running ? 'Pause' : 'Run'}
               </ToolBtn>
-              <ToolBtn icon="undo" title="Undo" onClick={() => store.getState().undo()}>
+              <ToolBtn
+                icon="undo"
+                title="Undo"
+                disabled={!store.getState().canUndo()}
+                onClick={() => store.getState().undo()}
+              >
                 Undo
               </ToolBtn>
-              <ToolBtn icon="redo" title="Redo" onClick={() => store.getState().redo()}>
+              <ToolBtn
+                icon="redo"
+                title="Redo"
+                disabled={!store.getState().canRedo()}
+                onClick={() => store.getState().redo()}
+              >
                 Redo
               </ToolBtn>
             </div>
@@ -6105,6 +6284,73 @@ export function CircuitWorkbench() {
                     {...paramEditFocusHandlers(setParamEdit, 'addressBits', paramEdit.kind)}
                   />
                 </label>
+              )}
+              {paramEdit.kind === 'comparator' &&
+                paramEditFieldVisible(paramEdit, 'hasCascade') && (
+                  <label>
+                    cascade inputs
+                    <input
+                      type="checkbox"
+                      checked={!!paramEdit.hasCascade}
+                      onChange={(e) => {
+                        const hasCascade = e.target.checked;
+                        setParamEdit((cur) => (cur ? { ...cur, hasCascade } : cur));
+                      }}
+                      {...paramEditFocusHandlers(setParamEdit, 'hasCascade', paramEdit.kind)}
+                    />
+                  </label>
+                )}
+              {paramEdit.kind === 'dff' && (
+                <>
+                  {paramEditCheckbox(paramEdit, 'asyncSet', 'preset pin')}
+                  {paramEditCheckbox(paramEdit, 'asyncClear', 'clear pin')}
+                </>
+              )}
+              {paramEdit.kind === 'srlatch' && paramEditFieldVisible(paramEdit, 'form') && (
+                <label>
+                  form
+                  <select
+                    className="select"
+                    value={paramEdit.form ?? 'nor'}
+                    onChange={(e) => {
+                      const form = e.target.value === 'nand' ? 'nand' : 'nor';
+                      setParamEdit((cur) => (cur ? { ...cur, form } : cur));
+                    }}
+                    {...paramEditFocusHandlers(setParamEdit, 'form', paramEdit.kind)}
+                  >
+                    <option value="nor">NOR, inputs active high</option>
+                    <option value="nand">NAND, inputs active low</option>
+                  </select>
+                </label>
+              )}
+              {(paramEdit.kind === 'counter' || paramEdit.kind === 'shiftreg') && (
+                <>
+                  {paramEditFieldVisible(paramEdit, 'clear') && (
+                    <label>
+                      clear
+                      <select
+                        className="select"
+                        value={paramEdit.clear ?? 'none'}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const clear: ClearMode = v === 'sync' || v === 'async' ? v : 'none';
+                          setParamEdit((cur) => (cur ? { ...cur, clear } : cur));
+                        }}
+                        {...paramEditFocusHandlers(setParamEdit, 'clear', paramEdit.kind)}
+                      >
+                        <option value="none">none</option>
+                        <option value="sync">synchronous</option>
+                        <option value="async">asynchronous</option>
+                      </select>
+                    </label>
+                  )}
+                  {paramEditCheckbox(paramEdit, 'hasLoad', 'load pins')}
+                  {paramEdit.kind === 'counter' &&
+                    paramEdit.hasEnable !== undefined &&
+                    paramEditCheckbox(paramEdit, 'hasEnable', 'enable pin')}
+                  {paramEdit.kind === 'shiftreg' &&
+                    paramEditCheckbox(paramEdit, 'parallelOut', 'parallel out')}
+                </>
               )}
               {(paramEdit.kind === 'mux' || paramEdit.kind === 'demux') && (
                 <>
@@ -6434,4 +6680,19 @@ function nearestAnyPin(targets: PinTarget[], cursor: Vec2, scale: number): PinTa
     }
   }
   return best;
+}
+
+/** A tap back on the pin (or grid point) the pending wire started from. */
+function tapsWireStart(
+  from: WiringStart,
+  targets: PinTarget[],
+  tap: Vec2,
+  grid: number,
+  scale: number,
+): boolean {
+  // Under half a step: a tap meant for the neighbouring grid point must not discard the wire.
+  if (isFreeStart(from) || isOnWireStart(from))
+    return Math.hypot(tap.x - from.worldPos.x, tap.y - from.worldPos.y) < grid / 2;
+  const pin = nearestAnyPin(targets, tap, scale);
+  return pin?.componentId === from.componentId && pin.pinName === from.pinName;
 }

@@ -9,7 +9,8 @@
 // Inputs and textareas were already exempt in each global handler; that is not
 // enough, because a dialog is also selects, checkboxes and buttons.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useBackLayer } from './backStack';
 
 let held = 0;
 
@@ -30,6 +31,29 @@ export function pushModalKeys(): () => void {
   };
 }
 
+const escapeOwners: object[] = [];
+
+export interface EscapeClaim {
+  /** True while this is the newest open dialog, the only one Escape closes. */
+  readonly isTop: boolean;
+  release(): void;
+}
+
+/** Every dialog's capture listener sees one Escape; only the top one may act on it. */
+export function claimEscape(): EscapeClaim {
+  const token = {};
+  escapeOwners.push(token);
+  return {
+    get isTop() {
+      return escapeOwners[escapeOwners.length - 1] === token;
+    },
+    release() {
+      const i = escapeOwners.indexOf(token);
+      if (i >= 0) escapeOwners.splice(i, 1);
+    },
+  };
+}
+
 /**
  * Claims the keyboard for a modal and closes it on Escape.
  * Pass null while the dialog is not showing, for the ones that decide that
@@ -37,19 +61,26 @@ export function pushModalKeys(): () => void {
  */
 export function useModalKeys(onClose: (() => void) | null): void {
   const open = onClose !== null;
+  useBackLayer(onClose);
   useEffect(() => {
     if (!open) return;
     return pushModalKeys();
   }, [open]);
+  const latest = useRef(onClose);
+  latest.current = onClose;
   useEffect(() => {
-    if (!onClose) return;
+    if (!open) return;
+    const claim = claimEscape();
     // Capture, so the dialog's Escape wins over the workbench's.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || !claim.isTop) return;
       e.stopPropagation();
-      onClose();
+      latest.current?.();
     };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      claim.release();
+    };
+  }, [open]);
 }

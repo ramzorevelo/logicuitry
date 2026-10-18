@@ -56,6 +56,16 @@
   font-size: var(--text-secondary);
 }
 
+/* An equation broken at a space reads as two equations, so cells keep each line whole and a
+   phone scrolls the table sideways instead. */
+.algebra-laws-scroll {
+  overflow-x: auto;
+}
+
+.algebra-law__cell {
+  white-space: nowrap;
+}
+
 .algebra-laws thead th,
 .algebra-canon thead th {
   color: var(--muted);

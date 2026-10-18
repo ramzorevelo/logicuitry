@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  productJoins,
   dontCareDisagreements,
   functionLine,
   groupingRules,
@@ -39,5 +40,13 @@ describe('kmapText', () => {
     // Cell 2: SOP takes it, POS leaves it at 1 -> agree. Cell 3: SOP skips it,
     // POS leaves it at 1 -> disagree. Cell 4: only POS takes it as 0, SOP leaves 0 -> agree.
     expect(dontCareDisagreements([2, 3, 4], [[2]], [[4]])).toEqual([3]);
+  });
+});
+
+describe('productJoins', () => {
+  it('dots multi-letter names apart and leaves single letters juxtaposed', () => {
+    expect(productJoins(['sw1', 'sw2'])).toEqual(['', '·']);
+    expect(productJoins(['A', 'B', 'C1'])).toEqual(['', '', '']);
+    expect(productJoins(['A', 'Cin'])).toEqual(['', '·']);
   });
 });

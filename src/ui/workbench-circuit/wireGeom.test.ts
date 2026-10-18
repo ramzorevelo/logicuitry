@@ -7,6 +7,8 @@ import {
   simplifyPolyline,
   alignDeltas,
   computeWireRoutes,
+  nestWrappedEnds,
+  type PlacedWire,
   cornerBeatsSegment,
   distributeDeltas,
   dragCorner,
@@ -311,6 +313,117 @@ describe('computeWireRoutes', () => {
       const w: Wire = { id: 'w1', a: free(50, -40), b: pinComp('r1', 'a'), points: [] };
       const routes = computeWireRoutes([w], resolve, bounds, 16);
       expect(routes.get('w1')).toEqual([p(50, -40), p(50, 16)]);
+    });
+  });
+
+  // A gate turned so both inputs face up, both sources down to the left: what R did to the
+  // starter board. Pin a sits farther from the side the wires come round from.
+  describe('wires wrapping round to one edge', () => {
+    const pinComp = (component: string, pin: string): WireEnd => ({ kind: 'pin', component, pin });
+    const gate: Rect = { x: 192, y: 80, w: 32, h: 72 };
+    const pins: Record<string, Vec2> = { a: p(216, 80), b: p(200, 80) };
+    const resolvePin = (e: WireEnd): Vec2 | undefined =>
+      e.kind === 'pin' ? pins[e.pin] : e.kind === 'free' ? e.pos : undefined;
+    const bounds = new Map([['g1', gate]]);
+    const toA: Wire = { id: 'toA', a: free(104, 88), b: pinComp('g1', 'a'), points: [] };
+    const toB: Wire = { id: 'toB', a: free(104, 160), b: pinComp('g1', 'b'), points: [] };
+    const crossings = (r: Vec2[], s: Vec2[]) =>
+      r.slice(1).filter((q, i) => s.slice(1).some((t, j) => segmentsIntersect(r[i]!, q, s[j]!, t)))
+        .length;
+    const top = (r: Vec2[]) => Math.min(...r.map((q) => q.y));
+
+    for (const order of [
+      [toA, toB],
+      [toB, toA],
+    ]) {
+      it(`nest with the farther pin outside, in board order ${order.map((w) => w.id).join(', ')}`, () => {
+        const routes = computeWireRoutes(order, resolvePin, bounds, 8);
+        const ra = routes.get('toA')!;
+        const rb = routes.get('toB')!;
+        expect([...routes.keys()]).toEqual(order.map((w) => w.id));
+        expect(top(ra)).toBeLessThan(top(rb));
+        expect(crossings(ra, rb)).toBe(0);
+        expect(routeOverlapsWires(ra, [rb])).toBe(false);
+        expect(polylineCrossesAny(ra, [gate]) || polylineCrossesAny(rb, [gate])).toBe(false);
+      });
+    }
+
+    it('routes the same whichever of them comes first on the board', () => {
+      const first = computeWireRoutes([toA, toB], resolvePin, bounds, 8);
+      const second = computeWireRoutes([toB, toA], resolvePin, bounds, 8);
+      expect(second.get('toA')).toEqual(first.get('toA'));
+      expect(second.get('toB')).toEqual(first.get('toB'));
+    });
+
+    it('a lone wrapping wire routes exactly as before', () => {
+      const routes = computeWireRoutes([toA], resolvePin, bounds, 8);
+      expect(routes.get('toA')).toEqual(
+        routeAvoiding(p(104, 88), pins.a!, [gate], [], 8, { to: 'up', stub: 16 }),
+      );
+    });
+
+    it('wires arriving head-on are not nested', () => {
+      const fromAbove = (id: string, x: number, pin: string): Wire => ({
+        id,
+        a: free(x, 0),
+        b: pinComp('g1', pin),
+        points: [],
+      });
+      const w1 = fromAbove('w1', 152, 'a');
+      const w2 = fromAbove('w2', 136, 'b');
+      const routes = computeWireRoutes([w1, w2], resolvePin, bounds, 8);
+      const plain1 = routeAvoiding(p(152, 0), pins.a!, [gate], [], 8, { to: 'up', stub: 16 });
+      expect(routes.get('w1')).toEqual(plain1);
+      expect(routes.get('w2')).toEqual(
+        routeAvoiding(p(136, 0), pins.b!, [gate], [plain1], 8, { to: 'up', stub: 16 }),
+      );
+    });
+
+    it('a hand-bent wire neither takes a lane nor pushes another wire out to one', () => {
+      const bent: Wire = { ...toB, points: [p(160, 160), p(160, 64), p(200, 64)] };
+      const routes = computeWireRoutes([toA, bent], resolvePin, bounds, 8);
+      expect(routes.get('toA')).toEqual(
+        routeAvoiding(p(104, 88), pins.a!, [gate], [], 8, { to: 'up', stub: 16 }),
+      );
+    });
+
+    it('a lane that would run into a body in front of the edge gives way', () => {
+      const lid: Rect = { x: 208, y: 50, w: 16, h: 10 };
+      const withLid = new Map([...bounds, ['lid', lid]]);
+      const routes = computeWireRoutes([toA, toB], resolvePin, withLid, 8);
+      expect(polylineCrossesAny(routes.get('toA')!, [lid, gate])).toBe(false);
+      expect(polylineCrossesAny(routes.get('toB')!, [lid, gate])).toBe(false);
+    });
+
+    // toW is outer at the gate but inner at the box it leaves (left-facing pins at x=104), whose
+    // outer wire is toU. Reordering one group after the other put toV ahead of toW.
+    it('keeps outer-first order when one wire is nested at both of its ends', () => {
+      const placed: PlacedWire[] = [
+        {
+          wire: { id: 'toV', a: free(96, 160), b: pinComp('g1', 'b'), points: [] },
+          a: p(96, 160),
+          b: pins.b!,
+          from: undefined,
+          to: 'up',
+        },
+        {
+          wire: { id: 'toW', a: pinComp('q1', 'w'), b: pinComp('g1', 'a'), points: [] },
+          a: p(104, 88),
+          b: pins.a!,
+          from: 'left',
+          to: 'up',
+        },
+        {
+          wire: { id: 'toU', a: pinComp('q1', 'u'), b: free(300, 0), points: [] },
+          a: p(104, 104),
+          b: p(300, 0),
+          from: 'left',
+          to: undefined,
+        },
+      ];
+      const { order } = nestWrappedEnds(placed, 16, 16);
+      expect(order.indexOf(2)).toBeLessThan(order.indexOf(1));
+      expect(order.indexOf(1)).toBeLessThan(order.indexOf(0));
     });
   });
 });

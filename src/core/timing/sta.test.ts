@@ -4,7 +4,9 @@ import type { ChipLibrary, ComponentKind } from '../model/types';
 import { board, comp, srLatchDef, wire } from '../model/testFixtures';
 import { hasPrimitive, registerPrimitive } from '../sim/primitives/registry';
 import * as bv from '../value/busValue';
-import { analyzeTiming, codecPathKey, TimingError } from './sta';
+import { builtinChipLibrary } from '../parts/packages';
+import { codecPathKey } from '../parts/arcs';
+import { analyzeTiming, outputDelayPs, TimingError } from './sta';
 
 const noLib: ChipLibrary = new Map();
 
@@ -350,5 +352,321 @@ describe('analyzeTiming: mux (M6.5) per-size real part arcs', () => {
     expect(codecPathKey('s3', 'y7')).toBe('sel_to_y');
     expect(codecPathKey('en', 'y0')).toBe('en_to_y');
     expect(codecPathKey('d', 'valid')).toBeUndefined();
+  });
+});
+
+describe('analyzeTiming through a DIP', () => {
+  const dipLib = builtinChipLibrary();
+  const dipBoard = () =>
+    board({
+      components: [
+        comp('ta', 'toggle', undefined, 'A'),
+        comp('tb', 'toggle', undefined, 'B'),
+        comp('tv', 'toggle', undefined, 'VCC'),
+        comp('tg', 'toggle', undefined, 'GND'),
+        { ...comp('u1', 'chip', undefined, 'U1'), defId: '74LS00' },
+        comp('l', 'led'),
+      ],
+      wires: [
+        wire('w1', ['ta', 'y'], ['u1', '1A']),
+        wire('w2', ['tb', 'y'], ['u1', '1B']),
+        wire('w3', ['tv', 'y'], ['u1', 'VCC']),
+        wire('w4', ['tg', 'y'], ['u1', 'GND']),
+        wire('w5', ['u1', '1Y'], ['l', 'a']),
+      ],
+    });
+
+  it('reports the gate alone: no power-gate or output-buffer hop, no fallback 10 ns', () => {
+    const c = compile(dipBoard(), dipLib);
+    for (const column of ['typ', 'max'] as const) {
+      const report = analyzeTiming(c, { column });
+      const led = report.endpoints.find((e) => e.endpoint === 'main/l')!;
+      expect(led.totalTpdPs).toBe(column === 'typ' ? 10_000 : 15_000);
+      expect(led.totalTcdPs).toBe(3_000);
+      for (const e of report.endpoints)
+        for (const hop of [...e.critical, ...e.short])
+          expect(hop.path).not.toMatch(/\/(pwr_\w+|t\d+)$/);
+      expect(led.critical.map((h) => h.path)).toEqual(['main/U1:74LS00/u1']);
+      expect(['main/A', 'main/B']).toContain(led.startpoint);
+    }
+  });
+});
+
+describe('analyzeTiming: timing shapes', () => {
+  // A '163-shaped core bound to the '74 row only for figures: every class falls back to 20/5 ns.
+  const COUNTER_163 = {
+    clear: 'sync',
+    hasLoad: true,
+    dualEnable: true,
+    activeLow: true,
+    part: '74LS74',
+  };
+
+  it("reports a '163 core's sampled pins as endpoints, each with its own setup row", () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock', { periodPs: 100_000 }),
+        comp('ctr', 'counter', COUNTER_163),
+        comp('n1', 'not'),
+        comp('t1', 'toggle'),
+        comp('t2', 'toggle'),
+        comp('t3', 'toggle'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['ctr', 'clk']),
+        wire('w2', ['ctr', 'q'], ['ctr', 'd']),
+        wire('w3', ['ctr', 'tc'], ['n1', 'a']),
+        wire('w4', ['n1', 'y'], ['ctr', 'load']),
+        wire('w5', ['t1', 'y'], ['ctr', 'clr']),
+        wire('w6', ['t2', 'y'], ['ctr', 'enp']),
+        wire('w7', ['t3', 'y'], ['ctr', 'ent']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const names = r.endpoints.filter((e) => e.capturePin).map((e) => e.endpoint);
+    expect(names.sort()).toEqual(
+      ['main/ctr.clr', 'main/ctr.d', 'main/ctr.enp', 'main/ctr.ent', 'main/ctr.load'].sort(),
+    );
+    // Latest into load: the toggle on ENT, through ENT -> tc, then the NOT.
+    const load = r.endpoints.find((e) => e.endpoint === 'main/ctr.load')!;
+    expect(load.startpoint).toBe('main/t3');
+    expect(load.critical.map((h) => h.path)).toEqual(['main/ctr', 'main/n1']);
+
+    const rows = r.sequential!.paths;
+    expect(rows.map((p) => p.capturePin).sort()).toEqual(['d', 'load']);
+    const loadRow = rows.find((p) => p.capturePin === 'load')!;
+    // tc launches at the '74 clk -> Q fallback (25 ns), then one unbound NOT (10 ns).
+    expect(loadRow.tpcqPs).toBe(25_000);
+    expect(loadRow.tpdCombPs).toBe(10_000);
+    expect(loadRow.tsetupPs).toBe(20_000);
+    expect(loadRow.minPeriodPs).toBe(55_000);
+    expect(rows.find((p) => p.capturePin === 'd')!.minPeriodPs).toBe(45_000);
+    expect(r.sequential!.minPeriodPs).toBe(55_000);
+  });
+
+  it("times a '163's sync clear at its own 25 ns setup and 3 ns hold", () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock', { periodPs: 100_000 }),
+        comp('ctr', 'counter', { clear: 'sync', activeLow: true }),
+        comp('n1', 'not'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['ctr', 'clk']),
+        wire('w2', ['ctr', 'tc'], ['n1', 'a']),
+        wire('w3', ['n1', 'y'], ['ctr', 'clr']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const clr = r.sequential!.paths.find((p) => p.capturePin === 'clr')!;
+    expect(clr.tpcqPs).toBe(20_000);
+    expect(clr.tsetupPs).toBe(25_000);
+    expect(clr.tholdPs).toBe(3_000);
+    expect(clr.minPeriodPs).toBe(55_000);
+  });
+
+  it('gathers lane-expanded data into one endpoint: slow lane critical, fast lane short', () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('ctr', 'counter', { hasLoad: true, width: 2, pinView: 'd=expanded' }),
+        comp('t', 'toggle'),
+        comp('n1', 'not'),
+        comp('n2', 'not'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['ctr', 'clk']),
+        wire('w2', ['t', 'y'], ['ctr', 'd0']),
+        wire('w3', ['t', 'y'], ['n1', 'a']),
+        wire('w4', ['n1', 'y'], ['n2', 'a']),
+        wire('w5', ['n2', 'y'], ['ctr', 'd1']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const d = r.endpoints.filter((e) => e.endpoint.startsWith('main/ctr.d'));
+    expect(d.map((e) => e.endpoint)).toEqual(['main/ctr.d']);
+    expect(d[0]!.totalTpdPs).toBe(20_000);
+    expect(d[0]!.totalTcdPs).toBe(0);
+    expect(d[0]!.critical.map((h) => h.path)).toEqual(['main/n1', 'main/n2']);
+    expect(d[0]!.short).toEqual([]);
+  });
+
+  it('accumulates the enable -> tc arc down an RCO to ENT chain', () => {
+    const dual = { dualEnable: true };
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('c1', 'counter'),
+        comp('c2', 'counter', dual),
+        comp('c3', 'counter', dual),
+        comp('l', 'led'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['c1', 'clk']),
+        wire('w2', ['ck', 'y'], ['c2', 'clk']),
+        wire('w3', ['ck', 'y'], ['c3', 'clk']),
+        wire('w4', ['c1', 'tc'], ['c2', 'ent']),
+        wire('w5', ['c2', 'tc'], ['c3', 'ent']),
+        wire('w6', ['c3', 'tc'], ['l', 'a']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const led = r.endpoints.find((e) => e.endpoint === 'main/l')!;
+    expect(led.startpoint).toBe('main/c1');
+    expect(led.critical.map((h) => h.path)).toEqual(['main/c2', 'main/c3']);
+    // Two '163 ENT to RCO hops, 9 ns typ each.
+    expect(led.totalTpdPs).toBe(18_000);
+
+    const row = r.sequential!.paths.find((p) => p.launch === 'main/c1' && p.capture === 'main/c3')!;
+    expect(row.capturePin).toBe('ent');
+    // CLK to RCO launches at its slower edge, 20 ns typ; one ENT to RCO hop follows.
+    expect(row.tpcqPs).toBe(20_000);
+    expect(row.tpdCombPs).toBe(9_000);
+    // At max CLK to RCO (35 ns) parts from CLK to Q (28 ns), which typ cannot show.
+    const max = analyzeTiming(compile(b, noLib), { column: 'max' });
+    const maxRow = max.sequential!.paths.find(
+      (p) => p.launch === 'main/c1' && p.capture === 'main/c3',
+    )!;
+    expect(maxRow.tpcqPs).toBe(35_000);
+    expect(maxRow.tpdCombPs).toBe(14_000);
+    expect(codecPathKey('clk', 'tc')).toBe('clk_to_tc');
+    expect(codecPathKey('ent', 'tc')).toBe('ent_to_tc');
+    expect(codecPathKey('en', 'tc')).toBe('ent_to_tc');
+  });
+
+  it("analyzes a mod-10 '161 (NAND of Q back to /CLR) and still refuses a real loop", () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('ctr', 'counter', {
+          clear: 'async',
+          activeLow: true,
+          dualEnable: true,
+          pinView: 'q=expanded',
+        }),
+        comp('g', 'nand'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['ctr', 'clk']),
+        wire('w2', ['ctr', 'q3'], ['g', 'a']),
+        wire('w3', ['ctr', 'q1'], ['g', 'b']),
+        wire('w4', ['g', 'y'], ['ctr', 'clr']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const clr = r.endpoints.find((e) => e.endpoint === 'main/ctr.clr')!;
+    expect(clr.critical.map((h) => h.path)).toEqual(['main/g']);
+    expect(r.sequential!.paths.some((p) => p.capturePin === 'clr')).toBe(false);
+
+    // A stop-at-N counter: Q into its own enable is registered, not combinational.
+    const stop = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('ctr', 'counter', { hasEnable: true, pinView: 'q=expanded' }),
+        comp('g', 'nand'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['ctr', 'clk']),
+        wire('w2', ['ctr', 'q3'], ['g', 'a']),
+        wire('w3', ['ctr', 'q0'], ['g', 'b']),
+        wire('w4', ['g', 'y'], ['ctr', 'en']),
+      ],
+    });
+    const stopped = analyzeTiming(compile(stop, noLib), { column: 'typ' });
+    const en = stopped.endpoints.find((e) => e.endpoint === 'main/ctr.en')!;
+    expect(en.critical.map((h) => h.path)).toEqual(['main/g']);
+    expect(stopped.sequential!.paths.find((p) => p.capturePin === 'en')?.tpdCombPs).toBe(10_000);
+
+    const loop = board({
+      components: [comp('ctr', 'counter', { dualEnable: true })],
+      wires: [wire('w1', ['ctr', 'tc'], ['ctr', 'ent'])],
+    });
+    expect(() => analyzeTiming(compile(loop, noLib), { column: 'typ' })).toThrowError(TimingError);
+  });
+
+  it('starts paths at an SR latch block and keeps it out of min period', () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('t', 'toggle'),
+        comp('sr', 'srlatch'),
+        comp('n1', 'not'),
+        comp('ff', 'dff'),
+      ],
+      wires: [
+        wire('w1', ['t', 'y'], ['sr', 's']),
+        wire('w2', ['t', 'y'], ['sr', 'r']),
+        wire('w3', ['sr', 'q'], ['n1', 'a']),
+        wire('w4', ['n1', 'y'], ['ff', 'd']),
+        wire('w5', ['ck', 'y'], ['ff', 'clk']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.endpoints.map((e) => e.endpoint)).toEqual(
+      expect.arrayContaining(['main/sr.s', 'main/sr.r', 'main/ff.d']),
+    );
+    const d = r.endpoints.find((e) => e.endpoint === 'main/ff.d')!;
+    expect(d.startpoint).toBe('main/sr');
+    expect(d.totalTpdPs).toBe(10_000);
+    expect(r.sequential!.paths).toEqual([]);
+    expect(r.sequential!.minPeriodPs).toBeNull();
+  });
+
+  it("gives a register's enable its own endpoint and row; a dff's async pins only arrival", () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('rg', 'register'),
+        comp('ff', 'dff', { asyncClear: true }),
+        comp('t', 'toggle'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['rg', 'clk']),
+        wire('w2', ['ck', 'y'], ['ff', 'clk']),
+        wire('w3', ['ff', 'q'], ['rg', 'd']),
+        wire('w4', ['ff', 'qn'], ['rg', 'en']),
+        wire('w5', ['rg', 'q'], ['ff', 'd']),
+        wire('w6', ['t', 'y'], ['ff', 'clr']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.endpoints.map((e) => e.endpoint)).toEqual(
+      expect.arrayContaining(['main/rg.d', 'main/rg.en', 'main/ff.d', 'main/ff.clr']),
+    );
+    const rows = r.sequential!.paths.map((p) => `${p.launch}->${p.capture}.${p.capturePin}`);
+    expect(rows.sort()).toEqual([
+      'main/ff->main/rg.d',
+      'main/ff->main/rg.en',
+      'main/rg->main/ff.d',
+    ]);
+  });
+
+  it('drops a clock-inhibited shift register out of sequential analysis', () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('sr', 'shiftreg', { clockInhibit: true }),
+        comp('t1', 'toggle'),
+        comp('t2', 'toggle'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['sr', 'clk']),
+        wire('w2', ['t1', 'y'], ['sr', 'si']),
+        wire('w3', ['t2', 'y'], ['sr', 'inh']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.endpoints.map((e) => e.endpoint).sort()).toEqual(['main/sr.inh', 'main/sr.si']);
+    expect(r.sequential!.paths).toEqual([]);
+  });
+});
+
+describe('outputDelayPs: single-edge arcs', () => {
+  it("reads a '161 clear published as tPHL only from that edge", () => {
+    // Clear 20 ns falls past CLK to Q 18 ns; t_cd is the fastest edge present, CLK to Q tPLH 13 ns.
+    expect(outputDelayPs('74LS161', ['clk', 'clr'], 'q0', 'typ')).toMatchObject({
+      tpdPs: 20_000,
+      tcdPs: 5_000,
+    });
   });
 });

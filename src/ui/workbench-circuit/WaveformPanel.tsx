@@ -25,7 +25,7 @@ import {
   type WaveformRow,
 } from '../../render/waveform';
 import { readTheme } from '../../render/theme';
-import { getPart } from '../../core/parts/partsDb';
+import { setupHoldWindows } from '../../core/timing/apertures';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { getPrefs } from '../prefs';
 import { useCompact } from '../compact';
@@ -278,51 +278,27 @@ export function WaveformPanel() {
       .filter((t) => !hiddenTracks.has(t.path));
   }, [expandedList, orderKeyFor, hiddenTracks]);
 
-  // Setup/hold window shading around capture-clock edges on DFF d-input
-  // tracks: derived (not user-added), so it recomputes with the view.
+  // Setup/hold window shading around capture-clock edges on the sampled inputs
+  // of top-level clocked blocks: derived (not user-added), so it recomputes with the view.
   const setupHoldAnnotations = useMemo((): WaveAnnotation[] => {
     if (!view || !column) return [];
     const st = store.getState();
     const trace = st.simTrace();
     if (!trace) return [];
+    const prims = st.board.components
+      .map((c) => trace.compiled.componentToPrimitive.get(`main/${c.id}`))
+      .filter((pi): pi is number => pi !== undefined);
     const out: WaveAnnotation[] = [];
-    for (const comp of st.board.components) {
-      if (comp.kind !== 'dff') continue;
-      const part = typeof comp.params?.['part'] === 'string' ? comp.params['part'] : '74LS74';
-      const entry = getPart(part);
-      if (!entry?.setup_min && !entry?.hold_min) continue;
-      const clkNet = st.netOfPin(comp.id, 'clk');
-      const dNet = st.netOfPin(comp.id, 'd');
-      if (clkNet === undefined || dNet === undefined) continue;
-      const dTrack = view.tracks.find((t) => t.net === dNet);
-      if (!dTrack) continue;
-      // Rising clock edges inside the window.
-      let prev = 0;
-      for (const r of trace.records) {
-        if (r.net !== clkNet) continue;
-        const v = r.value.x | r.value.z ? -1 : r.value.v & 1;
-        if (prev === 0 && v === 1 && r.time >= view.t0 && r.time <= view.t1) {
-          const su = (entry.setup_min ?? 0) * 1000;
-          const ho = (entry.hold_min ?? 0) * 1000;
-          if (su)
-            out.push({
-              kind: 'window',
-              trackPath: dTrack.path,
-              t0: r.time - su,
-              t1: r.time,
-              style: 'ok',
-            });
-          if (ho)
-            out.push({
-              kind: 'window',
-              trackPath: dTrack.path,
-              t0: r.time,
-              t1: r.time + ho,
-              style: 'warn',
-            });
-        }
-        prev = v === 1 ? 1 : 0;
-      }
+    for (const w of setupHoldWindows(trace.compiled, trace.records, prims, view.t0, view.t1)) {
+      const track = view.tracks.find((t) => t.net === w.net);
+      if (!track) continue;
+      out.push({
+        kind: 'window',
+        trackPath: track.path,
+        t0: w.t0,
+        t1: w.t1,
+        style: w.kind === 'setup' ? 'ok' : 'warn',
+      });
     }
     return out;
   }, [view, column, store]);

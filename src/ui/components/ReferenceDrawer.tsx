@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useBackLayer } from '../backStack';
+import { useCompact } from '../compact';
 
 // Right-edge slide-out reference drawer (the bitwise.html #tt-sidebar pattern):
 // a persistent vertical tab that width-animates a content panel open. Workbenches
@@ -55,6 +57,9 @@ export function useReferenceDrawerControl(): { open: boolean; setOpen: (v: boole
 export function ReferenceDrawer() {
   const api = useContext(ReferenceContext);
   const content = api?.content ?? null;
+  // On a phone the drawer is a sheet over the board; on a desktop it is a side panel to work beside.
+  const compact = useCompact();
+  useBackLayer(compact && api?.open && content ? () => api.setOpen(false) : null);
   if (!api || !content) return null;
   const { open, setOpen } = api;
 

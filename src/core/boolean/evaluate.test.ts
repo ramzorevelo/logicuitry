@@ -59,6 +59,45 @@ describe('evaluateNets', () => {
     expect(bv.toString(values.get(outNetOf(c, 'o'))!, 1)).toBe('Z');
   });
 
+  it('evaluates through an adder, a comparator and a gate: all combinational', () => {
+    const b = board({
+      components: [
+        comp('a', 'inport', { width: 4 }),
+        comp('b', 'inport', { width: 4 }),
+        comp('ci', 'inport'),
+        comp('add', 'adder'),
+        comp('cmp', 'comparator'),
+        comp('n1', 'not'),
+        comp('sum', 'outport', { width: 4 }),
+        comp('co', 'outport'),
+        comp('le', 'outport'),
+      ],
+      wires: [
+        wire('w1', ['a', 'y'], ['add', 'a']),
+        wire('w2', ['b', 'y'], ['add', 'b']),
+        wire('w3', ['ci', 'y'], ['add', 'cin']),
+        wire('w4', ['a', 'y'], ['cmp', 'a']),
+        wire('w5', ['b', 'y'], ['cmp', 'b']),
+        wire('w6', ['add', 'sum'], ['sum', 'a']),
+        wire('w7', ['add', 'cout'], ['co', 'a']),
+        wire('w8', ['cmp', 'gt'], ['n1', 'a']),
+        wire('w9', ['n1', 'y'], ['le', 'a']),
+      ],
+    });
+    const c = compile(b, noLib);
+    const values = evaluateNets(
+      c,
+      new Map([
+        [inNetOf(c, 'a'), bv.known(3, 4)],
+        [inNetOf(c, 'b'), bv.known(5, 4)],
+        [inNetOf(c, 'ci'), bv.known(1, 1)],
+      ]),
+    );
+    expect(bv.toString(values.get(outNetOf(c, 'sum'))!, 4)).toBe('1001');
+    expect(bv.toString(values.get(outNetOf(c, 'co'))!, 1)).toBe('0');
+    expect(bv.toString(values.get(outNetOf(c, 'le'))!, 1)).toBe('1');
+  });
+
   it('throws on a feedback loop that never resolves', () => {
     // NOT feeding its own input directly (no input pin to seed it).
     const b = board({

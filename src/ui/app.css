@@ -630,6 +630,38 @@ h3 {
   padding-left: calc(var(--space-unit) * 4);
 }
 
+/* The notes scroll, the heading and Close stay put, on the desktop as on a phone. */
+.whats-new {
+  overflow: hidden;
+}
+
+/* The dialog's gap already spaces it; its own margins cost a landscape phone half the notes. */
+.whats-new > h3 {
+  margin: 0;
+}
+
+.whats-new .package-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.whats-new__older {
+  border-top: var(--stroke-min) solid var(--line);
+}
+
+.whats-new__older > summary {
+  cursor: pointer;
+  padding: calc(var(--space-unit) * 2) 0;
+  color: var(--ink);
+  font-size: var(--text-body);
+}
+
+.whats-new__older[open] > summary {
+  color: var(--muted);
+}
+
 .about-dialog {
   max-width: 460px;
 }
@@ -678,6 +710,27 @@ h3 {
   padding-bottom: calc(
     var(--bottom-nav-h) + var(--ref-strip-h) + 2 * var(--stroke-min) + env(safe-area-inset-bottom)
   );
+}
+
+/* Centred by translate, the banner shrink-wrapped to half a phone's width and sat on the nav. */
+.app-shell--compact .update-banner {
+  --banner-lift: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+
+  right: calc(var(--space-unit) * 2);
+  bottom: calc(var(--banner-lift) + var(--space-unit) * 2);
+  left: calc(var(--space-unit) * 2);
+  transform: none;
+}
+
+.app-shell--compact:has(.ref-drawer) .update-banner {
+  --banner-lift: calc(
+    var(--bottom-nav-h) + var(--ref-strip-h) + 2 * var(--stroke-min) + env(safe-area-inset-bottom)
+  );
+}
+
+.app-shell--compact .update-banner > span {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Ctrl+1..3 needs a keyboard; the number is noise on a phone. */

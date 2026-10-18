@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { readTheme, type Theme } from '../../render/theme';
 import { usePlotSize } from './usePlotSize';
-import type { LevelSet } from '../../core/spice/noiseMargins';
+import { formatVolts, type LevelSet } from '../../core/spice/noiseMargins';
 
 interface DiagramProps {
   driver: LevelSet;
   receiver: LevelSet;
   maxV?: number;
+  /** The margins are the answer: their values and pass/fail colours wait for Show solution. */
+  revealed: boolean;
 }
 
 const DESIGN_W = 460;
@@ -14,7 +16,7 @@ const DESIGN_H = 340;
 
 // The classic noise-margin level diagram: driver output guarantees on the left,
 // receiver input thresholds on the right, the two margins shaded between them.
-export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps) {
+export function NoiseMarginDiagram({ driver, receiver, maxV = 5, revealed }: DiagramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { ref: boxRef, box, scale } = usePlotSize(DESIGN_W, DESIGN_H);
 
@@ -35,7 +37,7 @@ export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps)
       // diagram was composed with survives on a narrow screen.
       ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
       ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
-      render(ctx, theme, driver, receiver, maxV, { w: DESIGN_W, h: DESIGN_H });
+      render(ctx, theme, driver, receiver, maxV, revealed, { w: DESIGN_W, h: DESIGN_H });
     };
 
     draw();
@@ -45,7 +47,7 @@ export function NoiseMarginDiagram({ driver, receiver, maxV = 5 }: DiagramProps)
       attributeFilter: ['data-theme', 'class'],
     });
     return () => observer.disconnect();
-  }, [driver, receiver, maxV, box, scale]);
+  }, [driver, receiver, maxV, revealed, box, scale]);
 
   return (
     <div className="plot-box" ref={boxRef}>
@@ -60,6 +62,7 @@ function render(
   driver: LevelSet,
   receiver: LevelSet,
   maxV: number,
+  revealed: boolean,
   size: { w: number; h: number },
 ): void {
   const top = 20;
@@ -114,15 +117,17 @@ function render(
   const gapL = driverX + barW;
   const gapR = receiverX;
   const band = (v0: number, v1: number, label: string) => {
-    const ok = v1 >= v0;
+    const verdict = v1 >= v0 ? theme.colors.ok : theme.colors.warn;
+    const color = revealed ? verdict : theme.colors.muted;
     ctx.globalAlpha = 0.2;
-    ctx.fillStyle = ok ? theme.colors.ok : theme.colors.warn;
+    ctx.fillStyle = color;
     ctx.fillRect(gapL, y(Math.max(v0, v1)), gapR - gapL, Math.abs(y(v1) - y(v0)));
     ctx.globalAlpha = 1;
-    ctx.fillStyle = ok ? theme.colors.ok : theme.colors.warn;
+    ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${label} ${(v1 - v0).toFixed(2)}V`, (gapL + gapR) / 2, y((v0 + v1) / 2));
+    const text = revealed ? `${label} ${formatVolts(v1 - v0)}` : label;
+    ctx.fillText(text, (gapL + gapR) / 2, y((v0 + v1) / 2));
   };
   band(receiver.vihMin, driver.vohMin, 'NMH'); // VOH - VIH
   band(driver.volMax, receiver.vilMax, 'NML'); // VIL - VOL

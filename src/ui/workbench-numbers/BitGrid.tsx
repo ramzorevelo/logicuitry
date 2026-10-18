@@ -11,7 +11,7 @@ import {
   layoutBitRow,
   nearestBitAtPoint,
   scaleMetrics,
-  topBandH,
+  annotationRowH,
   type BorrowMarks,
   type WeightMode,
 } from '../../render/bitGrid';
@@ -82,10 +82,11 @@ export function BitGrid({
   const dragging = useRef(false);
   const moved = useRef(false);
   const selSpan = sel ? span(sel) : null;
+  const bandCellH = rowMetrics().cellH;
   const topH = borrows
-    ? borrowBandH
+    ? borrowBandH(bandCellH)
     : weights !== undefined || carries !== undefined
-      ? topBandH
+      ? annotationRowH(bandCellH)
       : 0;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const intensity = useRef<Map<number, number>>(new Map());
@@ -211,10 +212,13 @@ export function BitGrid({
   // Presentation mode: +0.5 on top of the value-entry section's own 1.5x zoom.
   // A cell never shrinks to fit the viewport -- a 32-bit row scrolls instead,
   // because a bit box small enough to fit a phone is too small to press.
-  const rowMetrics = () =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('presentation')
+  // A declaration, so the band height above can read it.
+  function rowMetrics() {
+    return typeof document !== 'undefined' &&
+      document.documentElement.classList.contains('presentation')
       ? scaleMetrics(2)
       : defaultMetrics;
+  }
   const cellH = rowMetrics().cellH;
 
   // Every pointer lookup goes through the CANVAS rect, never the event target:

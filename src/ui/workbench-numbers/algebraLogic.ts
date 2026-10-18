@@ -109,6 +109,9 @@ const shrinkOf = (s: Step): number => {
 };
 
 export interface StepMenu {
+  /** De Morgan steps that break a bar sitting inside the selection, listed
+   *  first: push a bar in before pulling a sibling under it. */
+  inner: Step[];
   /** Steps that shorten the line, biggest cut first. */
   shorter: Step[];
   /** The rest, in the laws table's order: same length or longer. */
@@ -120,24 +123,40 @@ export interface StepMenu {
  *  clicking only `XY` is what a student tries first. */
 export function stepsForSelection(e: Expr, sel: ExprSelection): StepMenu {
   const found = applicable(e, sel.at, sel.operands);
-  if (!sel.operands && sel.at.length > 0) {
-    const parent = sel.at.slice(0, -1);
+  const lone = !sel.operands && sel.at.length > 0;
+  const parent = sel.at.slice(0, -1);
+  if (lone) {
     const index = sel.at[sel.at.length - 1]!;
     if (isNary(nodeAt(e, parent)))
       found.push(...applicable(e, parent).filter((s) => s.operands?.includes(index)));
   }
+  const barBreaks = (scope: number[]): Step[] => {
+    const node = nodeAt(e, scope);
+    if (!isNary(node)) return [];
+    return node.args.flatMap((arg, i) =>
+      arg.kind === 'not' && isNary(arg.a)
+        ? applicable(e, [...scope, i]).filter(
+            (s) => (s.law === '9a' || s.law === '9b') && s.direction === 'ltr',
+          )
+        : [],
+    );
+  };
+  const innerAll = sel.operands ? [] : [...barBreaks(sel.at), ...(lone ? barBreaks(parent) : [])];
   const seen = new Set<string>();
-  const steps = found.filter((s) => {
+  const unseen = (s: Step): boolean => {
     const key = `${s.law}|${s.direction}|${acKey(s.to)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  };
+  const inner = innerAll.filter(unseen);
+  const steps = found.filter(unseen);
   const lawOrder = (s: Step): number => LAW_INDEX.get(s.law) ?? 0;
   const byLaw = (a: Step, b: Step): number =>
     lawOrder(a) - lawOrder(b) || (a.direction === b.direction ? 0 : a.direction === 'ltr' ? -1 : 1);
   const shorter = steps.filter((s) => shrinkOf(s) > 0);
   return {
+    inner,
     shorter: shorter.sort((a, b) => shrinkOf(b) - shrinkOf(a) || byLaw(a, b)),
     others: steps.filter((s) => shrinkOf(s) <= 0).sort(byLaw),
   };

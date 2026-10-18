@@ -72,6 +72,22 @@ export function pinViewGroupsFor(kind: string, params: Record<string, ParamValue
     if (addressBits > 1) groups.unshift({ key: 'a', label: 'a' });
     return groups;
   }
+  if (kind === 'adder' || kind === 'comparator') {
+    const groups: PinViewGroup[] = [
+      { key: 'a', label: 'a' },
+      { key: 'b', label: 'b' },
+    ];
+    if (kind === 'adder') groups.push({ key: 'sum', label: 'sum' });
+    return groups;
+  }
+  if (kind === 'counter' || kind === 'shiftreg') {
+    if (width <= 1) return [];
+    const groups: PinViewGroup[] = [];
+    if (params['hasLoad'] === true) groups.push({ key: 'd', label: 'd' });
+    if (kind === 'counter' || params['parallelOut'] !== false)
+      groups.push({ key: 'q', label: 'q' });
+    return groups;
+  }
   if (kind === 'encoder') {
     const addressBits = Number(params['addressBits'] ?? 2);
     const groups: PinViewGroup[] = [{ key: 'i', label: 'inputs' }];

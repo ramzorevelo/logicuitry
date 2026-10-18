@@ -78,7 +78,7 @@ describe('gateExpressions', () => {
       components: [{ ...comp('u3', 'chip'), defId: '74LS47', label: 'U3' }, comp('g', 'not')],
       wires: [wire('w1', ['u3', outPin.name], ['g', 'a'])],
     });
-    expect(pinsOf(b, lib)).toEqual({ 'g.y': "U3.13'" });
+    expect(pinsOf(b, lib)).toEqual({ 'g.y': "[U3.13]'" });
   });
 
   it('leaves a combinational loop and what reads it unlabelled', () => {

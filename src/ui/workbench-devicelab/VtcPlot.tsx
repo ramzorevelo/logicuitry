@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { drawPlot, type PlotSpec } from '../../render/plotXY';
 import { readTheme } from '../../render/theme';
 import { usePlotSize } from './usePlotSize';
@@ -15,6 +15,19 @@ interface VtcPlotProps {
 
 const DESIGN_W = 560;
 const DESIGN_H = 380;
+
+/** Holds the plot's place at its own size while there is no curve, so nothing jumps when one
+ *  arrives. */
+export function VtcPlaceholder({ children }: { children: ReactNode }) {
+  const { ref, box } = usePlotSize(DESIGN_W, DESIGN_H);
+  return (
+    <div className="plot-box" ref={ref}>
+      <div className="vtc-plot vtc-plot--pending mono" style={{ width: box.w, height: box.h }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function VtcPlot({ sweep, ghost, metrics, vdd }: VtcPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

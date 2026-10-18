@@ -134,6 +134,21 @@ export function buf(input: BusValue, width: number): BusValue {
   return { v: (input.v & ~unknown & m) >>> 0, x: unknown >>> 0, z: 0 };
 }
 
+/** Every value tried for one outcome: a bit all of them hold known and equal stays, any other is X. */
+export function agree(values: readonly BusValue[], width: number): BusValue {
+  const m = widthMask(width);
+  let unknown = 0;
+  let ones = m;
+  let zeros = m;
+  for (const value of values) {
+    unknown |= value.x | value.z;
+    ones &= value.v;
+    zeros &= ~value.v;
+  }
+  const settled = (ones | zeros) & ~unknown & m;
+  return { v: (ones & settled) >>> 0, x: (m & ~settled) >>> 0, z: 0 };
+}
+
 export function invert(bv: BusValue, width: number): BusValue {
   return not(bv, width);
 }

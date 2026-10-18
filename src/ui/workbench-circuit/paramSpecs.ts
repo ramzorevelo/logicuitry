@@ -52,7 +52,20 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
   if (kind === 'mux' || kind === 'demux') keys.add('selectBits');
   if (kind === 'decoder' || kind === 'encoder') keys.add('addressBits');
   if (kind === 'mux' || kind === 'demux' || kind === 'decoder') keys.add('hasEnable');
+  // A dual-enable core ('161/'163) has ENP and ENT, which the checkbox cannot describe.
+  if (kind === 'counter' && params['dualEnable'] !== true) keys.add('hasEnable');
+  if (kind === 'dff') {
+    keys.add('asyncSet');
+    keys.add('asyncClear');
+  }
+  if (kind === 'srlatch') keys.add('form');
+  if (kind === 'counter' || kind === 'shiftreg') {
+    keys.add('clear');
+    keys.add('hasLoad');
+  }
+  if (kind === 'shiftreg') keys.add('parallelOut');
   if (kind === 'mux' || kind === 'demux') keys.add('selSide');
+  if (kind === 'comparator') keys.add('hasCascade');
   if (kind === 'toggle') keys.add('initial');
   if (kind === 'led') {
     keys.add('color');
@@ -98,7 +111,23 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
       return Number.isFinite(n) ? Math.min(4, Math.max(1, n)) : null;
     }
     case 'hasEnable':
-      return kind === 'mux' || kind === 'demux' || kind === 'decoder' ? !!raw : null;
+      return kind === 'mux' || kind === 'demux' || kind === 'decoder' || kind === 'counter'
+        ? !!raw
+        : null;
+    case 'asyncSet':
+    case 'asyncClear':
+      return kind === 'dff' ? !!raw : null;
+    case 'form':
+      return kind === 'srlatch' ? (raw === 'nand' ? 'nand' : 'nor') : null;
+    case 'clear':
+      if (kind !== 'counter' && kind !== 'shiftreg') return null;
+      return raw === 'sync' || raw === 'async' ? raw : 'none';
+    case 'hasLoad':
+      return kind === 'counter' || kind === 'shiftreg' ? !!raw : null;
+    case 'parallelOut':
+      return kind === 'shiftreg' ? !!raw : null;
+    case 'hasCascade':
+      return kind === 'comparator' ? !!raw : null;
     case 'selSide':
       return kind === 'mux' || kind === 'demux' ? (raw === 'top' ? 'top' : 'bottom') : null;
     case 'initial': {

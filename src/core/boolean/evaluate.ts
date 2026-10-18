@@ -1,7 +1,8 @@
 // Pure combinational evaluation over a flattened CompiledCircuit -- no event
 // queue, no delay, no clock. Used by the Gates workbench's truth-table
-// enforcement; the circuit must be purely combinational
-// (no dff/dlatch/register, no feedback loop) or evaluation throws.
+// enforcement. A feedback loop throws; a stateful primitive is evaluated
+// from its power-on state, so callers needing a function refuse those kinds
+// first (buildTruthTable does).
 
 import type { CompiledCircuit } from '../model/compile';
 import { getPrimitive } from '../sim/primitives/registry';

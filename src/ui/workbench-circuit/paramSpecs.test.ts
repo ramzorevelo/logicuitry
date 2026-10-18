@@ -36,6 +36,61 @@ describe('isWidthCapable', () => {
     expect(isWidthCapable('encoder', { addressBits: 2 })).toBe(false);
   });
 
+  it('adder and comparator are fixed at 4 bits, so +/_ never steps them', () => {
+    expect(isWidthCapable('adder', {})).toBe(false);
+    expect(isWidthCapable('adder', { width: 4 })).toBe(false);
+    expect(isWidthCapable('comparator', { hasCascade: true })).toBe(false);
+    expect(paramKeysFor('adder', {})).toEqual(new Set());
+    expect(paramKeysFor('comparator', {})).toEqual(new Set(['hasCascade']));
+  });
+
+  it('comparator hasCascade is structural and its own', () => {
+    expect(paramLiveness('comparator', 'hasCascade')).toBe('structural');
+    expect(clampParamValue('comparator', 'hasCascade', 1)).toBe(true);
+    expect(clampParamValue('decoder', 'hasCascade', true)).toBeNull();
+  });
+
+  it('every free-width sequential block steps with +/_', () => {
+    for (const kind of ['dff', 'dlatch', 'register', 'counter', 'shiftreg'])
+      expect(isWidthCapable(kind, { width: 4 }), kind).toBe(true);
+    expect(isWidthCapable('srlatch', {})).toBe(false);
+  });
+
+  it('sequential overlay keys are per kind, so a mixed batch shares only identical ones', () => {
+    expect(paramKeysFor('dff', {})).toEqual(new Set(['width', 'asyncSet', 'asyncClear']));
+    expect(paramKeysFor('srlatch', {})).toEqual(new Set(['form']));
+    expect(paramKeysFor('counter', { width: 4 })).toEqual(
+      new Set(['width', 'hasEnable', 'clear', 'hasLoad']),
+    );
+    expect(paramKeysFor('shiftreg', { width: 8 })).toEqual(
+      new Set(['width', 'clear', 'hasLoad', 'parallelOut']),
+    );
+    expect(paramKeysFor('register', {})).toEqual(new Set(['width']));
+    expect(paramKeysFor('counter', { width: 4, dualEnable: true }).has('hasEnable')).toBe(false);
+  });
+
+  it('sequential params are structural and clamp into their own kind', () => {
+    for (const [kind, key] of [
+      ['dff', 'asyncSet'],
+      ['dff', 'asyncClear'],
+      ['srlatch', 'form'],
+      ['counter', 'clear'],
+      ['counter', 'hasLoad'],
+      ['counter', 'hasEnable'],
+      ['shiftreg', 'parallelOut'],
+    ] as const)
+      expect(paramLiveness(kind, key), `${kind}.${key}`).toBe('structural');
+    expect(clampParamValue('dff', 'asyncSet', 1)).toBe(true);
+    expect(clampParamValue('register', 'asyncSet', true)).toBeNull();
+    expect(clampParamValue('srlatch', 'form', 'nand')).toBe('nand');
+    expect(clampParamValue('srlatch', 'form', 'xor')).toBe('nor');
+    expect(clampParamValue('counter', 'clear', 'async')).toBe('async');
+    expect(clampParamValue('shiftreg', 'clear', 'bogus')).toBe('none');
+    expect(clampParamValue('dff', 'clear', 'sync')).toBeNull();
+    expect(clampParamValue('shiftreg', 'hasEnable', true)).toBeNull();
+    expect(clampParamValue('counter', 'parallelOut', true)).toBeNull();
+  });
+
   it('unknown kind is not width-capable', () => {
     expect(isWidthCapable('nope', {})).toBe(false);
   });

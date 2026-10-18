@@ -1,0 +1,243 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "shift-register",
+  "name": "Shift register",
+  "components": [
+    {
+      "id": "clk",
+      "kind": "clock",
+      "pos": {
+        "x": 64,
+        "y": 104
+      },
+      "label": "CLK",
+      "params": {
+        "periodPs": 100000
+      }
+    },
+    {
+      "id": "si",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 168
+      },
+      "label": "SI"
+    },
+    {
+      "id": "clr",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 232
+      },
+      "label": "CLR",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "sr",
+      "kind": "shiftreg",
+      "pos": {
+        "x": 256,
+        "y": 128
+      },
+      "params": {
+        "width": 4,
+        "clear": "async",
+        "pinView": "q=expanded"
+      }
+    },
+    {
+      "id": "l3",
+      "kind": "led",
+      "pos": {
+        "x": 400,
+        "y": 40
+      },
+      "rot": 270,
+      "label": "Q3"
+    },
+    {
+      "id": "l2",
+      "kind": "led",
+      "pos": {
+        "x": 464,
+        "y": 40
+      },
+      "rot": 270,
+      "label": "Q2"
+    },
+    {
+      "id": "l1",
+      "kind": "led",
+      "pos": {
+        "x": 528,
+        "y": 40
+      },
+      "rot": 270,
+      "label": "Q1"
+    },
+    {
+      "id": "l0",
+      "kind": "led",
+      "pos": {
+        "x": 592,
+        "y": 40
+      },
+      "rot": 270,
+      "label": "Q0"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "clk"
+      },
+      "points": [
+        {
+          "x": 136,
+          "y": 120
+        },
+        {
+          "x": 136,
+          "y": 168
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "si",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "si"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "clr"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "clr",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 112,
+          "y": 200
+        },
+        {
+          "x": 112,
+          "y": 248
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "l0",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "q0"
+      },
+      "points": [
+        {
+          "x": 616,
+          "y": 216
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "l1",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "q1"
+      },
+      "points": [
+        {
+          "x": 552,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "l2",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "q2"
+      },
+      "points": [
+        {
+          "x": 488,
+          "y": 184
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "l3",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sr",
+        "pin": "q3"
+      },
+      "points": [
+        {
+          "x": 424,
+          "y": 168
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

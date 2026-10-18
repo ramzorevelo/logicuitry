@@ -7,7 +7,8 @@ import type { CompiledCircuit } from '../model/compile';
 import * as bv from '../value/busValue';
 import type { BusValue } from '../value/busValue';
 import { getPrimitive } from '../sim/primitives/registry';
-import { evaluateNets } from './evaluate';
+import { STATEFUL_KINDS } from '../sim/primitives/sequential';
+import { BooleanEvalError, evaluateNets } from './evaluate';
 
 /** Inputs ≤8 -> ≤256 rows, exhaustive and instant. */
 export const MAX_TABLE_INPUTS = 8;
@@ -75,6 +76,34 @@ function resolveInputPinNet(circuit: CompiledCircuit, path: string): number | un
 }
 
 /**
+ * Throws when a stateful primitive feeds any of `nets`: its outputs depend on
+ * history, so a row of input values does not determine them. Walks back from
+ * the outputs and stops at the seeded table inputs.
+ */
+function refuseStoredState(
+  circuit: CompiledCircuit,
+  nets: readonly number[],
+  seeded: ReadonlySet<number>,
+): void {
+  const seen = new Set<number>(nets);
+  const queue = [...nets];
+  while (queue.length > 0) {
+    const net = queue.pop()!;
+    for (const { prim: i } of circuit.drivers[net]!) {
+      if (seeded.has(i)) continue;
+      const prim = circuit.primitives[i]!;
+      if (STATEFUL_KINDS.has(prim.kind))
+        throw new BooleanEvalError(`not purely combinational: ${prim.path} stores state`);
+      for (const n of prim.inputs) {
+        if (seen.has(n)) continue;
+        seen.add(n);
+        queue.push(n);
+      }
+    }
+  }
+}
+
+/**
  * Builds the full truth table for `outputPaths` as a function of `inputPaths`,
  * one row per assignment of 1-bit values to the inputs, MSB-first (row 0 =
  * all inputs 0, row 2^n-1 = all inputs 1).
@@ -111,6 +140,11 @@ export function buildTruthTable(
     inputPaths
       .map((p) => circuit.pathToPrimitive.get(parseBitPath(p).base))
       .filter((i): i is number => i !== undefined),
+  );
+  refuseStoredState(
+    circuit,
+    outputCols.map((c) => c.net),
+    seeded,
   );
   const rowCount = 2 ** inputPaths.length;
   const rows: BusValue[][] = [];

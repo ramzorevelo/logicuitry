@@ -33,10 +33,16 @@ const BOX_KINDS = [
   'dff',
   'dlatch',
   'register',
+  'srlatch',
+  'counter',
+  'shiftreg',
   'mux',
   'demux',
   'decoder',
   'encoder',
+  'adder',
+  'comparator',
+  'parity',
 ] as const;
 
 // Fixed 1G bubble diameter for box async pins: one bubble size, everywhere,
@@ -250,18 +256,20 @@ function drawClockWedge(
   ctx.stroke();
 }
 
+/** An active-low pin's name prints under a bar as well as behind its bubble. */
 function drawPinLabel(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
   placement: Placement,
-  text: string,
+  pin: ResolvedPin,
   x: number,
   y: number,
   inward: Vec2,
 ): void {
   ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
   ctx.fillStyle = theme.colors.ink;
-  drawUprightText(ctx, placement, text, { x, y }, inward);
+  const bar = pin.activeLow ? { overbarPx: theme.glyphText } : undefined;
+  drawUprightText(ctx, placement, pinLabelText(pin), { x, y }, inward, bar);
 }
 
 /** Draw a chip/dff/dlatch/register/mux box at a placement. `pinState` looks
@@ -324,12 +332,12 @@ export function drawBox(
       const tip = { x: 0, y: p.y };
       drawStub(ctx, theme, edge, tip, pinState?.(p.name));
       if (p.role === 'clock') drawClockWedge(ctx, theme, layout.boxLeft, p.y, true);
-      if (p.role === 'asyncSet' || p.role === 'asyncClear') {
+      if (p.activeLow) {
         const d = BOX_BUBBLE_SCALE * g;
         drawBubble(ctx, theme, { x: layout.boxLeft - d / 2, y: p.y }, d);
       }
       const inset = p.role === 'clock' ? 1.5 * g : 0.5 * g;
-      drawPinLabel(ctx, theme, placement, pinLabelText(p), layout.boxLeft + inset, p.y, {
+      drawPinLabel(ctx, theme, placement, p, layout.boxLeft + inset, p.y, {
         x: 1,
         y: 0,
       });
@@ -339,12 +347,12 @@ export function drawBox(
       const tip = { x: layout.width, y: p.y };
       drawStub(ctx, theme, edge, tip, pinState?.(p.name));
       if (p.role === 'clock') drawClockWedge(ctx, theme, layout.boxRight, p.y, false);
-      if (p.role === 'asyncSet' || p.role === 'asyncClear') {
+      if (p.activeLow) {
         const d = BOX_BUBBLE_SCALE * g;
         drawBubble(ctx, theme, { x: layout.boxRight + d / 2, y: p.y }, d);
       }
       const inset = p.role === 'clock' ? 1.5 * g : 0.5 * g;
-      drawPinLabel(ctx, theme, placement, pinLabelText(p), layout.boxRight - inset, p.y, {
+      drawPinLabel(ctx, theme, placement, p, layout.boxRight - inset, p.y, {
         x: -1,
         y: 0,
       });
@@ -356,13 +364,13 @@ export function drawBox(
       const edge = { x: p.x!, y: 0 };
       const tip = { x: p.x!, y: -2 * g };
       drawStub(ctx, theme, edge, tip, pinState?.(p.name));
-      drawPinLabel(ctx, theme, placement, pinLabelText(p), p.x!, 0.5 * g, { x: 0, y: 1 });
+      drawPinLabel(ctx, theme, placement, p, p.x!, 0.5 * g, { x: 0, y: 1 });
     }
     for (const p of layout.bottom) {
       const edge = { x: p.x!, y: layout.height };
       const tip = { x: p.x!, y: layout.height + 2 * g };
       drawStub(ctx, theme, edge, tip, pinState?.(p.name));
-      drawPinLabel(ctx, theme, placement, pinLabelText(p), p.x!, layout.height - 0.5 * g, {
+      drawPinLabel(ctx, theme, placement, p, p.x!, layout.height - 0.5 * g, {
         x: 0,
         y: -1,
       });

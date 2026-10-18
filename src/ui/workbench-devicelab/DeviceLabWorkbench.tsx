@@ -11,7 +11,7 @@ import {
 import { analyzeVtc } from '../../core/spice/vtcAnalysis';
 import type { InverterParams, Region, SweepResult } from '../../core/spice/types';
 import { useReferenceDrawer } from '../components/ReferenceDrawer';
-import { VtcPlot } from './VtcPlot';
+import { VtcPlaceholder, VtcPlot } from './VtcPlot';
 import { NoiseMarginDiagram } from './NoiseMarginDiagram';
 import { useCompact } from '../compact';
 import './devicelab.css';
@@ -84,6 +84,8 @@ function CmosLab({ toolField }: { toolField: ReactNode }) {
   const [wpwn, setWpwn] = useState(2);
   const [temperature, setTemperature] = useState(25);
   const [sweep, setSweep] = useState<SweepResult | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const ghost = useRef<SweepResult | null>(null);
   // Spawns the ngspice worker lazily on first sweep, i.e. when the CMOS lab opens.
   const spiceRef = useRef<EecircuitSpiceService | null>(null);
@@ -102,19 +104,39 @@ function CmosLab({ toolField }: { toolField: ReactNode }) {
 
   useEffect(() => {
     let live = true;
-    void spiceRef.current!.dcSweep(params).then((next) => {
-      if (!live) return;
-      // Capture the prior curve as the ghost via the updater, so the effect
-      // needs no dependency on the current sweep.
-      setSweep((prev) => {
-        ghost.current = prev;
-        return next;
-      });
-    });
+    spiceRef.current!.dcSweep(params).then(
+      (next) => {
+        if (!live) return;
+        setFailure(null);
+        // Capture the prior curve as the ghost via the updater, so the effect
+        // needs no dependency on the current sweep.
+        setSweep((prev) => {
+          ghost.current = prev;
+          return next;
+        });
+      },
+      (e: unknown) => {
+        if (live) setFailure(e instanceof Error ? e.message : String(e));
+      },
+    );
     return () => {
       live = false;
     };
-  }, [params]);
+  }, [params, attempt]);
+
+  const retry = (
+    <button
+      type="button"
+      className="tool-btn"
+      onClick={() => {
+        setFailure(null);
+        setAttempt((n) => n + 1);
+      }}
+    >
+      Try again
+    </button>
+  );
+  const failureText = failure && `The SPICE sweep failed: ${failure}`;
 
   const metrics = useMemo(() => (sweep ? analyzeVtc(sweep) : null), [sweep]);
 
@@ -144,8 +166,19 @@ function CmosLab({ toolField }: { toolField: ReactNode }) {
       </div>
 
       <div className="devicelab__main">
-        {sweep && metrics && (
+        {sweep && metrics ? (
           <VtcPlot sweep={sweep} ghost={ghost.current} metrics={metrics} vdd={vdd} />
+        ) : (
+          <VtcPlaceholder>
+            {failureText ? (
+              <>
+                <span className="vtc-plot__error">{failureText}</span>
+                {retry}
+              </>
+            ) : (
+              'Starting the SPICE engine...'
+            )}
+          </VtcPlaceholder>
         )}
         {metrics && (
           <div className="metrics-panel mono">
@@ -159,6 +192,12 @@ function CmosLab({ toolField }: { toolField: ReactNode }) {
           </div>
         )}
       </div>
+
+      {sweep && failureText && (
+        <div className="approx-flag mono">
+          {failureText} {retry}
+        </div>
+      )}
 
       {sweep?.engine === 'numeric' && (
         <div className="approx-flag mono">⚠ approximate model (SPICE unavailable)</div>
@@ -195,6 +234,13 @@ function TtlLab({ toolField }: { toolField: ReactNode }) {
   const d = families[driver]!;
   const r = families[receiver]!;
   const margins = interopMargins(d, r);
+  const [shown, setShown] = useState(false);
+  // A new pair is a new question: its margins stay hidden until revealed again.
+  const pickPair = (nextDriver: string, nextReceiver: string) => {
+    setDriver(nextDriver);
+    setReceiver(nextReceiver);
+    setShown(false);
+  };
 
   return (
     <div className="devicelab__ttl">
@@ -202,7 +248,11 @@ function TtlLab({ toolField }: { toolField: ReactNode }) {
         {toolField}
         <label className="field">
           driver
-          <select className="select" value={driver} onChange={(e) => setDriver(e.target.value)}>
+          <select
+            className="select"
+            value={driver}
+            onChange={(e) => pickPair(e.target.value, receiver)}
+          >
             {keys.map((k) => (
               <option key={k}>{k}</option>
             ))}
@@ -210,7 +260,11 @@ function TtlLab({ toolField }: { toolField: ReactNode }) {
         </label>
         <label className="field">
           receiver
-          <select className="select" value={receiver} onChange={(e) => setReceiver(e.target.value)}>
+          <select
+            className="select"
+            value={receiver}
+            onChange={(e) => pickPair(driver, e.target.value)}
+          >
             {keys.map((k) => (
               <option key={k}>{k}</option>
             ))}
@@ -221,10 +275,21 @@ function TtlLab({ toolField }: { toolField: ReactNode }) {
       {/* The diagram and the worked solution below already carry NMH/NML; a
           side metrics panel would be a third copy of the same two numbers. */}
       <div className="devicelab__main">
-        <NoiseMarginDiagram driver={d} receiver={r} maxV={Math.max(d.vohMin, r.vihMin, 5)} />
+        <NoiseMarginDiagram
+          driver={d}
+          receiver={r}
+          maxV={Math.max(d.vohMin, r.vihMin, 5)}
+          revealed={shown}
+        />
       </div>
 
-      <MarginWork driver={d} receiver={r} margins={margins} />
+      <MarginWork
+        driver={d}
+        receiver={r}
+        margins={margins}
+        shown={shown}
+        onToggle={() => setShown((v) => !v)}
+      />
     </div>
   );
 }
@@ -235,21 +300,19 @@ function MarginWork({
   driver,
   receiver,
   margins,
+  shown,
+  onToggle,
 }: {
   driver: LevelSet;
   receiver: LevelSet;
   margins: FamilyMargins;
+  shown: boolean;
+  onToggle: () => void;
 }) {
-  const [shown, setShown] = useState(false);
   const steps = marginSteps(driver, receiver);
   return (
     <div className="margin-work">
-      <button
-        type="button"
-        className="drawer-toggle"
-        aria-pressed={shown}
-        onClick={() => setShown((v) => !v)}
-      >
+      <button type="button" className="drawer-toggle" aria-pressed={shown} onClick={onToggle}>
         {shown ? 'Hide solution' : 'Show solution'}
       </button>
       {shown && (

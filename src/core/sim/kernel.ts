@@ -28,6 +28,8 @@ interface SimEvent {
   out: number;
   value: bv.BusValue;
   cause: CauseEdge;
+  /** Superseded by a later-issued drive of the same output; skipped on pop. */
+  cancelled?: boolean;
 }
 
 export interface NetChangeRecord {
@@ -75,6 +77,10 @@ export class Simulator {
   private readonly outputSlots: [number, number][][];
   /** Last value scheduled per output; suppresses redundant identical events. */
   private readonly lastScheduled: bv.BusValue[][];
+  /** Per output, its queued drives in ascending time: the transport rule
+   *  cancels from the tail, and the head is the next one to land. */
+  private readonly pendingDrives: SimEvent[][][];
+  private cancelledInQueue = 0;
   private readonly states: unknown[];
   private readonly lastInputs: bv.BusValue[][];
   private readonly pendingWake: number[];
@@ -107,6 +113,7 @@ export class Simulator {
         return bv.allZ(circuit.nets[net]!.width);
       }),
     );
+    this.pendingDrives = circuit.primitives.map((p) => p.outputs.map(() => []));
     this.states = circuit.primitives.map((p, pi) => this.specs[pi]!.init?.(p.params));
     this.lastInputs = circuit.primitives.map((p) =>
       p.inputs.map((net) => bv.allX(circuit.nets[net]!.width)),
@@ -121,6 +128,8 @@ export class Simulator {
     this.running = false;
     this.seq = 0;
     while (this.queue.size) this.queue.pop();
+    this.cancelledInQueue = 0;
+    for (const outs of this.pendingDrives) for (const pending of outs) pending.length = 0;
     this.trace.length = 0;
     this.traceHead = 0;
     this.traceCount = 0;
@@ -149,7 +158,7 @@ export class Simulator {
   /** Runs delta steps until quiet or the event budget blows: oscillation. */
   settle(limit = OSC_EVENT_LIMIT): SettleReport {
     let processed = 0;
-    while (this.queue.size > 0) {
+    while (this.liveEvents > 0) {
       const report = this.deltaStep();
       if (!report) break;
       processed += report.changedNets.length + report.evaluated.length;
@@ -170,7 +179,7 @@ export class Simulator {
    * apply drives, re-resolve dirty nets, evaluate affected primitives once.
    */
   deltaStep(): DeltaReport | null {
-    const first = this.queue.peek();
+    const first = this.peekLive();
     if (!first) return null;
     const t = first.time;
     this.time = t;
@@ -179,13 +188,14 @@ export class Simulator {
     const toEvaluate = new Set<number>();
     const causeByPrim = new Map<number, CauseEdge>();
 
-    while (this.queue.peek()?.time === t) {
+    while (this.peekLive()?.time === t) {
       const ev = this.queue.pop()!;
       if (ev.out === -1) {
         if (this.pendingWake[ev.prim] === ev.time) this.pendingWake[ev.prim] = -1;
         toEvaluate.add(ev.prim);
         if (!causeByPrim.has(ev.prim)) causeByPrim.set(ev.prim, ev.cause);
       } else {
+        this.pendingDrives[ev.prim]![ev.out]!.shift();
         const [net, slot] = this.outputSlots[ev.prim]![ev.out]!;
         // Same-time same-slot events apply in seq order: last writer wins.
         this.contributions[net]![slot] = ev.value;
@@ -226,7 +236,7 @@ export class Simulator {
    * clock edge on a clocked board.
    */
   stepToNextEvent(): DeltaReport | null {
-    if (this.queue.size === 0) {
+    if (this.liveEvents === 0) {
       this.stepping = true;
       try {
         this.circuit.primitives.forEach((_, pi) => this.scheduleWake(pi, this.time, NO_CAUSE));
@@ -244,7 +254,7 @@ export class Simulator {
   /** Whether stepToNextEvent can still move: something queued, or some source
    *  that will queue one. False on a settled purely combinational board. */
   get canStep(): boolean {
-    return this.queue.size > 0 || this.selfTimed.some(Boolean);
+    return this.liveEvents > 0 || this.selfTimed.some(Boolean);
   }
 
   /** Enters continuous run: wakes everything so clocks begin self-scheduling. */
@@ -263,7 +273,7 @@ export class Simulator {
   runUntil(targetPs: number, budget = OSC_EVENT_LIMIT * 10): number {
     let processed = 0;
     while (processed < budget) {
-      const next = this.queue.peek();
+      const next = this.peekLive();
       if (!next || next.time > targetPs) break;
       const report = this.deltaStep()!;
       processed += report.changedNets.length + report.evaluated.length;
@@ -359,21 +369,35 @@ export class Simulator {
   }
 
   get pendingEvents(): number {
-    return this.queue.size;
+    return this.liveEvents;
+  }
+
+  private get liveEvents(): number {
+    return this.queue.size - this.cancelledInQueue;
+  }
+
+  private peekLive(): SimEvent | undefined {
+    while (this.queue.peek()?.cancelled) {
+      this.queue.pop();
+      this.cancelledInQueue--;
+    }
+    return this.queue.peek();
   }
 
   private evaluate(pi: number, cause: CauseEdge): void {
     const prim = this.circuit.primitives[pi]!;
     const spec = this.specs[pi]!;
     const inputs = prim.inputs.map((net) => this.netValues[net]!);
+    const prevInputs = this.lastInputs[pi]!;
     const result = spec.evaluate({
       params: prim.params,
       state: this.states[pi],
       inputs,
-      prevInputs: this.lastInputs[pi]!,
+      prevInputs,
       time: this.time,
     });
     this.lastInputs[pi] = inputs;
+    let changedInputs: number[] | undefined;
     if ('state' in result) this.states[pi] = result.state;
 
     result.outputs.forEach((value, out) => {
@@ -381,14 +405,37 @@ export class Simulator {
       const prev = this.lastScheduled[pi]![out]!;
       if (bv.equal(value, prev)) return;
       this.lastScheduled[pi]![out] = value;
-      const delay = Math.max(1, Math.trunc(this.delay.delayPs(prim, out, prev, value)));
-      this.queue.push({ time: this.time + delay, seq: this.seq++, prim: pi, out, value, cause });
+      changedInputs ??= inputs.flatMap((v, i) => (bv.equal(v, prevInputs[i]!) ? [] : [i]));
+      const ps = this.delay.delayPs(prim, out, prev, value, changedInputs);
+      this.scheduleDrive(pi, out, this.time + Math.max(1, Math.trunc(ps)), value, cause);
     });
 
     if (result.nextWake !== undefined) {
       this.selfTimed[pi] = true;
       if (this.running || this.stepping) this.scheduleWake(pi, result.nextWake, cause);
     }
+  }
+
+  /**
+   * Transport delay, VHDL rule: a new drive cancels the output's drives queued
+   * at or after it, so the last-issued value wins even when tPLH != tPHL puts
+   * it ahead of an older one. Drives queued earlier still land: real glitches.
+   */
+  private scheduleDrive(
+    pi: number,
+    out: number,
+    time: number,
+    value: bv.BusValue,
+    cause: CauseEdge,
+  ): void {
+    const pending = this.pendingDrives[pi]![out]!;
+    while (pending.length && pending[pending.length - 1]!.time >= time) {
+      pending.pop()!.cancelled = true;
+      this.cancelledInQueue++;
+    }
+    const ev: SimEvent = { time, seq: this.seq++, prim: pi, out, value, cause };
+    pending.push(ev);
+    this.queue.push(ev);
   }
 
   private scheduleWake(pi: number, time: number, cause: CauseEdge): void {

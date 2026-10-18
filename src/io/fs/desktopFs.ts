@@ -162,6 +162,12 @@ export async function sameFile(a: DocFile, b: DocFile): Promise<boolean> {
   return located(a).path === located(b).path;
 }
 
+/** Every desktop document is a path the app can write. */
+export function docFileWritable(_file: DocFile): boolean {
+  void _file;
+  return true;
+}
+
 /** Native pickers are always there. */
 export function filePickersSupported(): boolean {
   return true;

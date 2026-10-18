@@ -397,3 +397,221 @@ describe('kernel: setPrimitiveParamsAt', () => {
     expect(() => sim.setPrimitiveParamsAt(99, { value: 0 })).toThrow();
   });
 });
+
+describe('kernel: same-timestamp inputs on a clocked primitive', () => {
+  // Two switches whose changes land in one time slice, in either queue order:
+  // the queue orders same-time events by primitive index, so the switch
+  // listed first is the one whose event is queued first.
+  function counterBoard(clockFirst: boolean) {
+    const clk = comp('clk', 'toggle', undefined, 'CLK');
+    const load = comp('ld', 'toggle', undefined, 'LOAD');
+    return board({
+      components: [
+        ...(clockFirst ? [clk, load] : [load, clk]),
+        comp('d', 'constant', { value: 9, width: 4 }),
+        comp('u', 'counter', { width: 4, clear: 'none', hasLoad: true }),
+        comp('p', 'probe', { width: 4 }, 'Q'),
+      ],
+      wires: [
+        wire('w1', ['clk', 'y'], ['u', 'clk']),
+        wire('w2', ['ld', 'y'], ['u', 'load']),
+        wire('w3', ['d', 'y'], ['u', 'd']),
+        wire('w4', ['u', 'q'], ['p', 'a']),
+      ],
+    });
+  }
+
+  for (const clockFirst of [true, false]) {
+    it(`samples load before the edge with the ${clockFirst ? 'clock' : 'load'} event first`, () => {
+      const sim = new Simulator(compile(counterBoard(clockFirst), lib()), idealDelay);
+      sim.powerOn();
+      sim.setToggle('main/LOAD', true);
+      sim.settle();
+      sim.setToggle('main/CLK', true);
+      sim.settle();
+      expect(toString(sim.netValueByPath('main/Q'), 4)).toBe('1001');
+
+      // Clock rises as load falls: load was still high just before the edge.
+      sim.setToggle('main/CLK', false);
+      sim.settle();
+      sim.setToggle('main/CLK', true);
+      sim.setToggle('main/LOAD', false);
+      sim.settle();
+      expect(toString(sim.netValueByPath('main/Q'), 4)).toBe('1001');
+
+      // Clock rises as load rises: load was low, so this edge counts.
+      sim.setToggle('main/CLK', false);
+      sim.settle();
+      sim.setToggle('main/LOAD', true);
+      sim.setToggle('main/CLK', true);
+      sim.settle();
+      expect(toString(sim.netValueByPath('main/Q'), 4)).toBe('1010');
+    });
+  }
+});
+
+describe('kernel: SR latch block', () => {
+  function srBlockBoard(form: 'nor' | 'nand') {
+    return board({
+      components: [
+        comp('s', 'toggle', undefined, 'S'),
+        comp('r', 'toggle', undefined, 'R'),
+        comp('u', 'srlatch', { form }),
+        comp('p1', 'probe', undefined, 'Q'),
+        comp('p2', 'probe', undefined, 'QN'),
+      ],
+      wires: [
+        wire('w1', ['s', 'y'], ['u', 's']),
+        wire('w2', ['r', 'y'], ['u', 'r']),
+        wire('w3', ['u', 'q'], ['p1', 'a']),
+        wire('w4', ['u', 'qn'], ['p2', 'a']),
+      ],
+    });
+  }
+
+  it('ideal mode: settles and single-steps to the set state', () => {
+    const sim = new Simulator(compile(srBlockBoard('nor'), lib()), idealDelay);
+    sim.powerOn();
+    expect(q(sim)).toBe('X');
+    sim.setToggle('main/S', true);
+    let steps = 0;
+    while (sim.stepToNextEvent()) steps++;
+    expect(steps).toBeGreaterThan(0);
+    expect([q(sim), qn(sim)]).toEqual(['1', '0']);
+  });
+
+  for (const [form, fall, rise] of [
+    ['nor', 10_000, 20_000],
+    ['nand', 19_000, 9_000],
+  ] as const) {
+    it(`datasheet mode, ${form} form: outputs move by the derived latch figures`, () => {
+      const compiled = compile(srBlockBoard(form), lib());
+      const sim = new Simulator(compiled, datasheetDelay('typ'));
+      sim.powerOn();
+      // Establish reset first, then set, timing the set from the S net edge.
+      const inactive = form === 'nand';
+      sim.setToggle('main/S', inactive);
+      sim.setToggle('main/R', !inactive);
+      sim.settle();
+      sim.setToggle('main/R', inactive);
+      sim.settle();
+      const from = sim.time;
+      sim.setToggle('main/S', !inactive);
+      sim.settle();
+      const sNet = compiled.pathToNet.get('main/S') ?? compiled.primitives[0]!.outputs[0]!;
+      const records = sim.traceRecords().filter((r) => r.time >= from);
+      const sEdge = records.find((r) => r.net === sNet)!.time;
+      const at = (path: string) =>
+        records.find((r) => r.net === compiled.pathToNet.get(path))!.time - sEdge;
+      expect(at('main/QN')).toBe(fall);
+      expect(at('main/Q')).toBe(rise);
+    });
+  }
+});
+
+describe('kernel: transport delay with tPLH != tPHL', () => {
+  function andBoard() {
+    return board({
+      components: [
+        comp('ta', 'toggle', undefined, 'A'),
+        comp('tb', 'toggle', undefined, 'B'),
+        comp('g', 'and'),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [
+        wire('w1', ['ta', 'y'], ['g', 'a']),
+        wire('w2', ['tb', 'y'], ['g', 'b']),
+        wire('w3', ['g', 'y'], ['p', 'a']),
+      ],
+    });
+  }
+
+  function pulseA(column: 'typ' | 'max', widthPs: number) {
+    const compiled = compile(andBoard(), lib());
+    const sim = new Simulator(compiled, datasheetDelay(column));
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    sim.setToggle('main/B', true);
+    sim.settle();
+    sim.runUntil(100_000);
+    sim.setToggle('main/A', false);
+    sim.runUntil(100_000 + widthPs);
+    sim.setToggle('main/A', true);
+    sim.runUntil(400_000);
+    const yNet = compiled.pathToNet.get('main/Y')!;
+    const edges = sim
+      .traceRecords()
+      .filter((r) => r.net === yNet && r.time >= 100_000)
+      .map((r) => [r.time, toString(r.value, 1)]);
+    return { y: toString(sim.netValueByPath('main/Y'), 1), edges, pending: sim.pendingEvents };
+  }
+
+  it('a pulse shorter than tPHL - tPLH leaves the output at its last-issued value', () => {
+    // max: tPHL 20 ns lands after tPLH 15 ns from 4 ns later; the stale 0 must not win.
+    expect(pulseA('max', 4_000)).toEqual({ y: '1', edges: [], pending: 0 });
+    expect(pulseA('typ', 1_000)).toEqual({ y: '1', edges: [], pending: 0 });
+  });
+
+  it('a pulse longer than the difference still shows as a real glitch', () => {
+    // typ: A moves 10 ns after each toggle (unbound fallback), then Y takes 10 / 8 ns.
+    expect(pulseA('typ', 3_000)).toEqual({
+      y: '1',
+      edges: [
+        [120_000, '0'],
+        [121_000, '1'],
+      ],
+      pending: 0,
+    });
+  });
+
+  it('replays identically', () => {
+    expect(pulseA('max', 4_000)).toEqual(pulseA('max', 4_000));
+  });
+});
+
+describe('kernel: datasheet delay follows the input that moved', () => {
+  // 74LS153 typ: data to Y 10 / 17 ns, select to Y 19 / 25 ns.
+  function muxBoard() {
+    return board({
+      components: [
+        comp('t0', 'toggle', undefined, 'D0'),
+        comp('t1', 'toggle', undefined, 'D1'),
+        comp('ts', 'toggle', undefined, 'S0'),
+        comp('ts1', 'toggle', undefined, 'S1'),
+        comp('m', 'mux', { selectBits: 2 }),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [
+        wire('w0', ['t0', 'y'], ['m', 'd0']),
+        wire('w1', ['t1', 'y'], ['m', 'd1']),
+        wire('ws', ['ts', 'y'], ['m', 's0']),
+        wire('ws1', ['ts1', 'y'], ['m', 's1']),
+        wire('wy', ['m', 'y'], ['p', 'a']),
+      ],
+    });
+  }
+
+  it('a data edge takes the data row, a select edge the select row', () => {
+    const compiled = compile(muxBoard(), lib());
+    const sim = new Simulator(compiled, datasheetDelay('typ'));
+    sim.powerOn();
+    sim.setToggle('main/S1', false);
+    sim.settle();
+    const yNet = compiled.pathToNet.get('main/Y')!;
+    const outNet = (path: string) =>
+      compiled.primitives[compiled.pathToPrimitive.get(path)!]!.outputs[0]!;
+    const edgeToY = (change: () => void, from: number) => {
+      const t0 = sim.time;
+      change();
+      sim.settle();
+      const recs = sim.traceRecords().filter((r) => r.time > t0);
+      return recs.find((r) => r.net === yNet)!.time - recs.find((r) => r.net === from)!.time;
+    };
+    // Y follows D0, then D1 once S0 rises, then D0 again.
+    expect(edgeToY(() => sim.setToggle('main/D0', true), outNet('main/D0'))).toBe(10_000);
+    expect(edgeToY(() => sim.setToggle('main/S0', true), outNet('main/S0'))).toBe(25_000);
+    expect(edgeToY(() => sim.setToggle('main/D1', true), outNet('main/D1'))).toBe(10_000);
+    expect(edgeToY(() => sim.setToggle('main/D1', false), outNet('main/D1'))).toBe(17_000);
+    expect(edgeToY(() => sim.setToggle('main/S0', false), outNet('main/S0'))).toBe(19_000);
+  });
+});

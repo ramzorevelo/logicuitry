@@ -77,6 +77,33 @@ export function onePinLane(name: string, dir: 'in' | 'out', params: Params): Pri
   return reindexPins(expanded ? expandPin(base, w) : [base]);
 }
 
+export function isPinExpanded(params: Params, name: string): boolean {
+  return pinViewOf(parsePinView(params), name, 'collapsed') === 'expanded';
+}
+
+/** One wide pin, or its lanes when the pinView expands it. */
+export function lanePins(base: PrimitivePin, params: Params): PrimitivePin[] {
+  return base.width > 1 && isPinExpanded(params, base.name) ? expandPin(base, base.width) : [base];
+}
+
+/** Reads input values in pins() order, a lane-expanded pin as one bus. A
+ *  short list (no previous evaluation yet) reads as X. */
+export class InputCursor {
+  private i = 0;
+  constructor(private readonly values: readonly BusValue[]) {}
+
+  one(): BusValue {
+    return this.values[this.i++] ?? bv.allX(1);
+  }
+
+  bus(width: number, expanded: boolean): BusValue {
+    if (!expanded || width === 1) return this.values[this.i++] ?? bv.allX(width);
+    const lanes = this.values.slice(this.i, this.i + width);
+    this.i += width;
+    return lanes.length === width ? assembleBus(lanes) : bv.allX(width);
+  }
+}
+
 /** Renumber `order` 0..n-1 in array order. */
 export function reindexPins(pins: PrimitivePin[]): PrimitivePin[] {
   return pins.map((p, i) => ({ ...p, order: i }));

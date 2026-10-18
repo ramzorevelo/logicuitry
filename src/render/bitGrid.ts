@@ -129,11 +129,20 @@ export interface BitRowDraw {
   caret?: number;
 }
 
-/** Extra top band height when weights or carries are drawn. */
+/** Extra top band height when weights or carries are drawn, at the default cell size. */
 export const topBandH = 16;
 
+/** Annotation text size as a share of the cell height. */
+const ANNOTATION_SCALE = 0.32;
+
+/** One annotation row for a cell this tall. The labels grow with the cell, so a fixed band clipped
+ *  presentation mode's weights and carries. */
+export function annotationRowH(cellH: number): number {
+  return Math.max(topBandH, Math.round(cellH * ANNOTATION_SCALE) + 4);
+}
+
 /** Borrow notation stacks two annotation rows over the digits. */
-export const borrowBandH = topBandH * 2;
+export const borrowBandH = (cellH: number): number => annotationRowH(cellH) * 2;
 
 /**
  * Whether decimal place values still clear the column pitch. Decided once for
@@ -219,7 +228,7 @@ export function drawBitRow(
   const fontPx = Math.max(theme.canvasTextMin, Math.round(cellH * 0.5));
   // Annotations track the cell rather than sitting at a fixed 13px, so
   // presentation mode enlarges the weights along with the digits they label.
-  const labelPx = Math.max(theme.canvasTextMin, Math.round(cellH * 0.32));
+  const labelPx = Math.max(theme.canvasTextMin, Math.round(cellH * ANNOTATION_SCALE));
   const width = layout.cells.length;
   const labelFont = `${labelPx}px ${theme.fonts.mono}`;
   // One decision for the whole row, from one measurement: place values as the
@@ -276,7 +285,7 @@ export function drawBitRow(
       for (const mark of stack) {
         if (mark === undefined || mark.trim() === '') continue;
         ctx.fillText(mark, rect.x + rect.w / 2, y);
-        y -= topBandH;
+        y -= annotationRowH(cellH);
       }
     } else if (opts.carries !== undefined) {
       // Book-style: only the 1s are written, above the column they carry into.

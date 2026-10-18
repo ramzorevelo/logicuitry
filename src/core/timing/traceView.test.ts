@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compile } from '../model/compile';
 import type { ChipLibrary } from '../model/types';
 import { board, comp, wire } from '../model/testFixtures';
+import { builtinChipLibrary } from '../parts/packages';
 import { NO_CAUSE, type NetChangeRecord } from '../sim/kernel';
 import * as bv from '../value/busValue';
 import {
@@ -526,6 +527,41 @@ describe('bands', () => {
     // Source-driven toggle track: toggle has no part -> fallback 10/3.5 ns eye.
     const sw = view.tracks.find((t) => t.path === 'main/sw')!;
     expect(sw.bands).toEqual([]);
+  });
+
+  it('looks through a DIP output buffer to the gate that times the edge', () => {
+    const b = board({
+      components: [
+        comp('sw', 'toggle'),
+        { ...comp('u1', 'chip', undefined, 'U1'), defId: '74LS00' },
+        comp('p1', 'probe', undefined, 'Y'),
+      ],
+      wires: [wire('w1', ['sw', 'y'], ['u1', '1A']), wire('w2', ['u1', '1Y'], ['p1', 'a'])],
+    });
+    const c = compile(b, builtinChipLibrary());
+    const net = trackList(b, c).find((t) => t.path === 'main/p1')!.net;
+    const records = [rec(0, net, bv.known(0, 1)), rec(50_000, net, bv.known(1, 1))];
+    const tr = buildTraceView(b, c, records, { column: 'typ' }).tracks.find(
+      (t) => t.path === 'main/p1',
+    )!;
+    // The gate's own 7 ns eye, not the unbound buffer's 6.5 ns.
+    expect(tr.bands).toEqual([{ t: 50_000, earliest: 43_000, estimated: true }]);
+  });
+
+  it("takes the arcs into the edge's own output, not the part's slowest ('283 carry out)", () => {
+    const b = board({
+      components: [comp('ad', 'adder'), comp('p1', 'probe', undefined, 'C')],
+      wires: [wire('w1', ['ad', 'cout'], ['p1', 'a'])],
+    });
+    const c = compile(b, noLib);
+    const net = trackList(b, c).find((t) => t.path === 'main/p1')!.net;
+    const records = [rec(0, net, bv.known(0, 1)), rec(50_000, net, bv.known(1, 1))];
+    const tr = buildTraceView(b, c, records, { column: 'typ' }).tracks.find(
+      (t) => t.path === 'main/p1',
+    )!;
+    // Into cout: a/b 11/12 and cin 11/11 ns -> t_pd 12, t_cd 4. The part's
+    // slowest arc (cin -> sum, 16 ns) would have widened it to 11 ns.
+    expect(tr.bands).toEqual([{ t: 50_000, earliest: 42_000, estimated: true }]);
   });
 
   it('eventTimes merges distinct times across tracks', () => {

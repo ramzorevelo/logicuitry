@@ -21,6 +21,24 @@
     },
 
     {
+      "part": "74LS02-SR",
+      "primitive": "srlatch",
+      "tplh": { "typ": 20, "max": 30 },
+      "tphl": { "typ": 10, "max": 15 },
+      "verified": true,
+      "source": "Derived, not a datasheet row: SR latch of two cross-coupled 74LS02 NOR gates (TI SN74LS02). The output that falls does so one tPHL after its input (10/15); the output that rises follows one tPLH later, tPHL + tPLH (10 + 10 / 15 + 15)"
+    },
+
+    {
+      "part": "74LS00-SR",
+      "primitive": "srlatch",
+      "tplh": { "typ": 9, "max": 15 },
+      "tphl": { "typ": 19, "max": 30 },
+      "verified": true,
+      "source": "Derived, not a datasheet row: /S-/R latch of two cross-coupled 74LS00 NAND gates (TI SN74LS00 SDLS025). The output that rises does so one tPLH after its input (9/15); the output that falls follows one tPHL later, tPLH + tPHL (9 + 10 / 15 + 15)"
+    },
+
+    {
       "part": "74LS04",
       "primitive": "not",
       "tplh": { "typ": 9, "max": 15 },
@@ -82,7 +100,57 @@
         }
       },
       "verified": true,
-      "source": "TI SN74LS283"
+      "source": "TI SDLS095A, October 1976, revised March 1988 (SN74LS283), switching characteristics, CL = 15 pF, RL = 2 kOhm, VCC = 5 V, TA = 25 C"
+    },
+
+    {
+      "part": "74LS85",
+      "primitive": "comparator4",
+      "paths": {
+        "ab_to_gt": {
+          "tplh": { "typ": 24, "max": 36 },
+          "tphl": { "typ": 20, "max": 30 }
+        },
+        "ab_to_lt": {
+          "tplh": { "typ": 24, "max": 36 },
+          "tphl": { "typ": 20, "max": 30 }
+        },
+        "ab_to_eq": {
+          "tplh": { "typ": 27, "max": 45 },
+          "tphl": { "typ": 23, "max": 45 }
+        },
+        "cascade_to_gt": {
+          "tplh": { "typ": 14, "max": 22 },
+          "tphl": { "typ": 11, "max": 17 }
+        },
+        "cascade_to_eq": {
+          "tplh": { "typ": 13, "max": 20 },
+          "tphl": { "typ": 13, "max": 26 }
+        },
+        "cascade_to_lt": {
+          "tplh": { "typ": 14, "max": 22 },
+          "tphl": { "typ": 11, "max": 17 }
+        }
+      },
+      "verified": true,
+      "source": "TI SDLS123, March 1974, revised March 1988 (SN74LS85), switching characteristics, CL = 15 pF, RL = 2 kOhm, VCC = 5 V, TA = 25 C. Data rows take the slowest published gate level (3 levels to A>B and A<B, 4 to A=B), the only ones with a max column; cascade rows are A<B or A=B to A>B, A=B to A=B, and A>B or A=B to A<B"
+    },
+
+    {
+      "part": "74LS280",
+      "primitive": "parity9",
+      "paths": {
+        "data_to_even": {
+          "tplh": { "typ": 33, "max": 50 },
+          "tphl": { "typ": 29, "max": 45 }
+        },
+        "data_to_odd": {
+          "tplh": { "typ": 23, "max": 35 },
+          "tphl": { "typ": 31, "max": 50 }
+        }
+      },
+      "verified": true,
+      "source": "TI SDLS152, December 1972, revised March 1988 (SN74LS280), switching characteristics, data to even and data to odd, CL = 15 pF, RL = 2 kOhm, inputs not under test at 0 V, VCC = 5 V, TA = 25 C"
     },
 
     {
@@ -124,13 +192,27 @@
       "primitive": "dff",
       "tplh_clk_q": { "typ": 13, "max": 25 },
       "tphl_clk_q": { "typ": 25, "max": 40 },
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 13, "max": 25 },
+          "tphl": { "typ": 25, "max": 40 }
+        },
+        "pre_to_q": {
+          "tplh": { "typ": 13, "max": 25 },
+          "tphl": { "typ": 25, "max": 40 }
+        },
+        "clr_to_q": {
+          "tplh": { "typ": 13, "max": 25 },
+          "tphl": { "typ": 25, "max": 40 }
+        }
+      },
       "setup_min": 20,
       "hold_min": 5,
       "fmax_min": 25,
       "fmax_typ": 33,
       "min_pulse_width_high": 25,
       "verified": true,
-      "source": "TI SN74LS74"
+      "source": "TI SDLS119, December 1983, revised March 1988 (SN74LS74A), switching characteristics, RL = 2 kOhm, CL = 15 pF: one row times CLR, PRE or CLK to Q or /Q, so all three arcs carry it; setup 20 ns for high and low data alike, hold 5 ns"
     },
 
     {
@@ -163,10 +245,13 @@
       "paths": {
         "data_to_y": { "tplh": { "typ": 20, "max": 32 }, "tphl": { "typ": 16, "max": 26 } },
         "sel_to_y": { "tplh": { "typ": 27, "max": 43 }, "tphl": { "typ": 18, "max": 30 } },
-        "en_to_y": { "tplh": { "typ": 26, "max": 42 }, "tphl": { "typ": 20, "max": 32 } }
+        "en_to_y": { "tplh": { "typ": 26, "max": 42 }, "tphl": { "typ": 20, "max": 32 } },
+        "data_to_w": { "tplh": { "typ": 13, "max": 21 }, "tphl": { "typ": 12, "max": 20 } },
+        "sel_to_w": { "tplh": { "typ": 14, "max": 23 }, "tphl": { "typ": 20, "max": 32 } },
+        "en_to_w": { "tplh": { "typ": 15, "max": 24 }, "tphl": { "typ": 18, "max": 30 } }
       },
       "verified": true,
-      "source": "TI SN74LS151 SDLS054 (Y-output rows only; the chip also has an inverted W output we don't model)"
+      "source": "TI SN74LS151 SDLS054, December 1972, revised March 1988 (Y and W output rows, direct per-arc; sel_to_y is the 4-level row, sel_to_w the 3-level row)"
     },
 
     {
@@ -209,10 +294,26 @@
         "i_to_valid": {
           "tplh": { "typ": 35, "max": 55 },
           "tphl": { "typ": 9, "max": 21 }
+        },
+        "i_to_eo": {
+          "tplh": { "typ": 7, "max": 18 },
+          "tphl": { "typ": 25, "max": 40 }
+        },
+        "ei_to_y": {
+          "tplh": { "typ": 16, "max": 25 },
+          "tphl": { "typ": 12, "max": 25 }
+        },
+        "ei_to_gs": {
+          "tplh": { "typ": 12, "max": 17 },
+          "tphl": { "typ": 14, "max": 36 }
+        },
+        "ei_to_eo": {
+          "tplh": { "typ": 12, "max": 21 },
+          "tphl": { "typ": 23, "max": 35 }
         }
       },
       "verified": true,
-      "source": "TI SN74LS148 SDLS053B (i_to_y worst of in-phase/out-of-phase A0-A2 rows; i_to_valid from the 0-7-to-GS in-phase row, no out-of-phase row given; GS stands in for our valid output)"
+      "source": "TI SN74LS148 SDLS053B, October 1976, revised May 2004 (i_to_y worst of in-phase/out-of-phase A0-A2 rows; i_to_valid from the 0-7-to-GS row, GS stands in for our valid output; i_to_eo from the 0-7-to-EO row; EI rows direct)"
     },
 
     {
@@ -237,16 +338,216 @@
       "primitive": "demux4to16",
       "paths": {
         "sel_to_y": {
-          "tplh": { "typ": 30, "max": 35 },
-          "tphl": { "typ": 30, "max": 35 }
+          "tplh": { "max": 30 },
+          "tphl": { "max": 30 }
         },
         "en_to_y": {
-          "tplh": { "typ": 20, "max": 25 },
-          "tphl": { "typ": 25, "max": 35 }
+          "tplh": { "max": 20 },
+          "tphl": { "max": 25 }
         }
       },
       "verified": true,
-      "source": "Fairchild/ON Semi DM74LS154 (real LS part exists -- supersedes the non-LS 74154 originally planned; datasheet's 'Data' row is this part's 4-line binary-select path -- A/B/C/D go through 2 levels of decode logic to one of 16 outputs, slower than the single-level active-low strobe path -- mapped to sel_to_y; 'Strobe' row mapped to en_to_y, which our demux's own data pin `d` also resolves to per codecPathKey, matching 74LS139/74LS138's real strobe-doubles-as-data-input electrical behavior)"
+      "source": "National DM74LS154 TL/F/6394 (May 1989) switching characteristics, RL = 2 kOhm, CL = 15 pF column; the datasheet publishes a max column only, so `typ` is absent (its 23 ns and 19 ns typicals appear only in the features list, not the table). The 'Data to Output' row is this part's 4-line binary-select path, mapped to sel_to_y; 'Strobe to Output' is mapped to en_to_y, which our demux's own data pin `d` also resolves to per codecPathKey, matching 74LS139/74LS138's real strobe-doubles-as-data-input behavior"
+    },
+
+    {
+      "part": "74LS75",
+      "primitive": "dlatch",
+      "paths": {
+        "data_to_q": {
+          "tplh": { "typ": 15, "max": 27 },
+          "tphl": { "typ": 9, "max": 17 }
+        },
+        "data_to_qn": {
+          "tplh": { "typ": 12, "max": 20 },
+          "tphl": { "typ": 7, "max": 15 }
+        },
+        "en_to_q": {
+          "tplh": { "typ": 15, "max": 27 },
+          "tphl": { "typ": 14, "max": 25 }
+        },
+        "en_to_qn": {
+          "tplh": { "typ": 16, "max": 30 },
+          "tphl": { "typ": 7, "max": 15 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 5,
+      "verified": true,
+      "source": "TI SDLS120, March 1974, revised March 1988 (SN74LS75), switching characteristics, CL = 15 pF, RL = 2 kOhm, 'LS75 column: D to Q, D to /Q, C to Q, C to /Q; C is the latch enable. Setup 20 ns, hold 5 ns"
+    },
+
+    {
+      "part": "74LS161",
+      "primitive": "counter4",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 13, "max": 24 },
+          "tphl": { "typ": 18, "max": 27 }
+        },
+        "clk_to_tc": {
+          "tplh": { "typ": 20, "max": 35 },
+          "tphl": { "typ": 18, "max": 35 }
+        },
+        "ent_to_tc": {
+          "tplh": { "typ": 9, "max": 14 },
+          "tphl": { "typ": 9, "max": 14 }
+        },
+        "clr_to_q": {
+          "tphl": { "typ": 20, "max": 28 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 3,
+      "setup": { "data": 20, "enable": 20, "load": 20 },
+      "verified": true,
+      "source": "TI SDLS060, October 1976, revised March 1988 (SN74LS161A), switching characteristics, CL = 15 pF, RL = 2 kOhm: clk_to_q is the worst of the LOAD-high and LOAD-low CLK to Q rows (they are equal); CLR to Q is published as tPHL only, measured from the clear input. Setup 20 ns for A-D, ENP or ENT and LOAD; hold 3 ns at any input"
+    },
+
+    {
+      "part": "74LS163",
+      "primitive": "counter4",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 13, "max": 24 },
+          "tphl": { "typ": 20, "max": 28 }
+        },
+        "clk_to_tc": {
+          "tplh": { "typ": 20, "max": 35 },
+          "tphl": { "typ": 18, "max": 35 }
+        },
+        "ent_to_tc": {
+          "tplh": { "typ": 9, "max": 14 },
+          "tphl": { "typ": 9, "max": 14 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 3,
+      "setup": { "data": 20, "enable": 20, "load": 20, "clear": 25 },
+      "verified": true,
+      "source": "TI SDLS060, October 1976, revised March 1988 (SN74LS163A), switching characteristics, CL = 15 pF, RL = 2 kOhm: the 'LS163A clear is synchronous and its CLR to Q tPHL (20/28) is measured from the clock, so clk_to_q tPHL is the worst of that row and the LOAD-high and LOAD-low CLK to Q rows (18/27). Setup 20 ns for A-D, ENP or ENT and LOAD; clear is the worse of CLR (20) and CLR inactive state (25); hold 3 ns at any input"
+    },
+
+    {
+      "part": "74LS164",
+      "primitive": "shiftreg8sipo",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 17, "max": 27 },
+          "tphl": { "typ": 21, "max": 32 }
+        },
+        "clr_to_q": {
+          "tphl": { "typ": 24, "max": 36 }
+        }
+      },
+      "setup_min": 15,
+      "hold_min": 5,
+      "verified": true,
+      "source": "TI SDLS061, March 1974, revised March 1988 (SN74LS164), switching characteristics, RL = 2 kOhm, CL = 15 pF: CLR to Q is published as tPHL only. Data setup 15 ns, data hold 5 ns"
+    },
+
+    {
+      "part": "74LS165",
+      "primitive": "shiftreg8piso",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 14, "max": 25 },
+          "tphl": { "typ": 16, "max": 25 }
+        },
+        "load_to_q": {
+          "tplh": { "typ": 21, "max": 35 },
+          "tphl": { "typ": 26, "max": 35 }
+        },
+        "data_to_q": {
+          "tplh": { "typ": 13, "max": 25 },
+          "tphl": { "typ": 24, "max": 30 }
+        },
+        "data_to_qn": {
+          "tplh": { "typ": 19, "max": 30 },
+          "tphl": { "typ": 17, "max": 25 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 0,
+      "verified": true,
+      "source": "TI SDLS062D, October 1976, revised February 2002 (SN74LS165A), switching characteristics, RL = 2 kOhm, CL = 15 pF: LD to any output, CLK to any output, H to QH and H to /QH. The only input sampled at the edge is SER, so setup is the serial input's 20 ns; hold 0 ns at any input"
+    },
+
+    {
+      "part": "74LS175",
+      "primitive": "dff4",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 13, "max": 25 },
+          "tphl": { "typ": 16, "max": 25 }
+        },
+        "clr_to_q": {
+          "tphl": { "typ": 20, "max": 30 }
+        },
+        "clr_to_qn": {
+          "tplh": { "typ": 20, "max": 30 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 5,
+      "verified": true,
+      "source": "TI SDLS068A, December 1972, revised October 2001 (SN74LS175), switching characteristics, CL = 15 pF, RL = 2 kOhm, 'LS175 column: clear publishes tPHL (Q falls) and tPLH (/Q rises) as separate rows, so each output carries only its own edge. Data setup 20 ns, data hold 5 ns"
+    },
+
+    {
+      "part": "74LS273",
+      "primitive": "dff8",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 17, "max": 27 },
+          "tphl": { "typ": 18, "max": 27 }
+        },
+        "clr_to_q": {
+          "tphl": { "typ": 18, "max": 27 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 5,
+      "verified": true,
+      "source": "TI SDLS090, October 1976, revised March 1988 (SN74LS273), switching characteristics, CL = 15 pF, RL = 2 kOhm: clear is published as tPHL only. Data setup 20 ns, data hold 5 ns"
+    },
+
+    {
+      "part": "74LS374",
+      "primitive": "dff8oe",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 15, "max": 28 },
+          "tphl": { "typ": 19, "max": 28 }
+        }
+      },
+      "enable": {
+        "tpzh": { "typ": 20, "max": 26 },
+        "tpzl": { "typ": 21, "max": 28 },
+        "tphz": { "typ": 15, "max": 28 },
+        "tplz": { "typ": 12, "max": 20 }
+      },
+      "setup_min": 20,
+      "hold_min": 5,
+      "verified": true,
+      "source": "TI SDLS165B, October 1975, revised August 2002 (SN74LS374), switching characteristics, RL = 667 Ohm, CL = 45 pF (5 pF for the disable times), 'LS374 column. Data setup 20 ns; data hold 5 ns: the SN74LS374 column's 0 ns holds only below 10 MHz, and the sheet asks for 5 ns above"
+    },
+
+    {
+      "part": "74LS377",
+      "primitive": "register8",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 17, "max": 27 },
+          "tphl": { "typ": 18, "max": 27 }
+        }
+      },
+      "setup_min": 20,
+      "hold_min": 5,
+      "setup": { "data": 20, "enable": 25 },
+      "hold": { "data": 5, "enable": 5 },
+      "verified": true,
+      "source": "TI SDLS167, October 1976, revised March 1988 (SN74LS377), switching characteristics, CL = 15 pF, RL = 2 kOhm. Setup 20 ns for data; enable is the worse of enable active-state (25) and inactive-state (10); hold 5 ns for data and enable"
     }
   ]
 }

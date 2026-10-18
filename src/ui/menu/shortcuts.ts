@@ -41,3 +41,14 @@ export const SHORTCUTS = {
 } as const;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
+
+type HistoryKeyEvent = Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'shiftKey'>;
+
+/** Which history step a key asks for. Ctrl+Y is the Windows redo, kept beside Ctrl+Shift+Z. */
+export function historyKey(e: HistoryKeyEvent): 'undo' | 'redo' | null {
+  if (!(e.ctrlKey || e.metaKey)) return null;
+  const key = e.key.toLowerCase();
+  if (key === 'z') return e.shiftKey ? 'redo' : 'undo';
+  if (key === 'y' && !e.shiftKey) return 'redo';
+  return null;
+}

@@ -16,6 +16,8 @@ export interface PrimitivePin {
    *  stays the plain concatenated wiring identifier, `d03`). Falls back to
    *  `name` when unset. */
   label?: string;
+  /** Asserted at 0. The box glyph draws its inversion bubble from this. */
+  activeLow?: boolean;
 }
 
 export type Params = Readonly<Record<string, ParamValue>>;

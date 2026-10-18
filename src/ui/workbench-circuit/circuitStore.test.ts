@@ -6,7 +6,8 @@ import {
   type ComponentPins,
   type ResolveWireEnd,
 } from './circuitStore';
-import type { Board, ChipDef, Point } from '../../core/model/types';
+import type { Board, ChipDef, Component, Point, WireEnd } from '../../core/model/types';
+import { builtinChipLibrary, isBuiltinChipDef } from '../../core/parts/packages';
 import { usePrefsStore } from '../prefs';
 import { pushOutputBackward } from '../../core/gates/transform';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
@@ -15,6 +16,14 @@ import { makeTestTheme } from '../../render/theme.fixture';
 import '../../render/glyphs/io'; // registers toggle/led/busdisplay geometry builders
 import '../../render/glyphs/gates'; // registers gate geometry builders
 import { collectPinTargets } from './pinTargets';
+import {
+  computeWireRoutes,
+  orthogonalPolyline,
+  polylineCrossesAny,
+  routeOverlapsWires,
+  segmentsIntersect,
+} from './wireGeom';
+import '../../render/glyphs/chip';
 import type { RoutablePin } from './autoRoute';
 
 // Real geometry-backed resolver, matching CircuitWorkbench.tsx's own
@@ -938,6 +947,79 @@ describe('circuitStore packaging + tabs', () => {
     expect(s.pinSignal(inst.id, 'y')).toBe('1');
   });
 
+  it('a user chip under a part number replaces the built-in and stays editable', () => {
+    useCircuitStore.setState({ chipLib: new Map(builtinChipLibrary()), error: null });
+    const s = useCircuitStore.getState();
+    const builtin = s.chipLib.get('74LS00')!;
+    expect(isBuiltinChipDef(builtin)).toBe(true);
+
+    const mine: ChipDef = { ...bufDef('74LS00'), name: '74LS00' };
+    expect(s.loadChipDefs([mine])).toEqual({ ok: true, count: 1 });
+    const after = useCircuitStore.getState();
+    expect(after.chipLib.get('74LS00')).toBe(mine);
+    expect(isBuiltinChipDef(after.chipLib.get('74LS00')!)).toBe(false);
+    expect(after.error).toBe('chips: your 74LS00 replaces the built-in part of the same name');
+
+    useCircuitStore.setState({ error: null });
+    s.loadChipDefs([{ ...mine }]);
+    expect(useCircuitStore.getState().error).toBeNull();
+
+    s.openDefTab('74LS00', '74LS00/', '74LS00');
+    const before = useCircuitStore.getState().activeCircuit().components.length;
+    useCircuitStore.getState().place('not', { x: 200, y: 200 }, 8);
+    expect(useCircuitStore.getState().error).toBeNull();
+    expect(useCircuitStore.getState().activeCircuit().components).toHaveLength(before + 1);
+  });
+
+  it('a gate copied out of a built-in part loses its no-delay mark', () => {
+    useCircuitStore.setState({ chipLib: new Map(builtinChipLibrary()), error: null });
+    const gate = builtinChipLibrary()
+      .get('74LS00')!
+      .components.find((c) => c.id === 'pwr_ok')!;
+    expect(gate.params).toEqual({ delay: 'none' });
+    useCircuitStore
+      .getState()
+      .commitDuplicate({ components: [gate], wires: [], junctions: [] }, { x: 0, y: 0 });
+    const pasted = useCircuitStore.getState().board.components.find((c) => c.kind === 'and')!;
+    expect(pasted.params?.['delay']).toBeUndefined();
+  });
+
+  it('a built-in part still refuses edits', () => {
+    useCircuitStore.setState({ chipLib: new Map(builtinChipLibrary()), error: null });
+    const s = useCircuitStore.getState();
+    s.openDefTab('74LS00', '74LS00/', '74LS00');
+    useCircuitStore.getState().place('not', { x: 200, y: 200 }, 8);
+    expect(useCircuitStore.getState().error).toBe('74LS00 is a built-in part and cannot be edited');
+    // A refused edit never reaches history: Undo stays off and closing asks nothing.
+    expect(useCircuitStore.getState().canUndo()).toBe(false);
+    const tabId = useCircuitStore.getState().activeTabId;
+    useCircuitStore.getState().closeTab(tabId);
+    expect(useCircuitStore.getState().pendingTabClose).toBeNull();
+    expect(useCircuitStore.getState().tabs.some((t) => t.id === tabId)).toBe(false);
+  });
+
+  it('half and full adder place from the palette, open to their gates and refuse edits', () => {
+    useCircuitStore.setState({ chipLib: new Map(builtinChipLibrary()), error: null });
+    for (const [defId, name, gates] of [
+      ['half-adder', 'Half adder', 2],
+      ['full-adder', 'Full adder', 5],
+    ] as const) {
+      const s = useCircuitStore.getState();
+      s.place('chip', { x: 0, y: 0 }, 8, undefined, undefined, defId);
+      expect(useCircuitStore.getState().board.components.some((c) => c.defId === defId)).toBe(true);
+      s.openDefTab(defId, `${defId}/`, name);
+      const inside = useCircuitStore.getState().activeCircuit().components;
+      expect(inside.filter((c) => ['xor', 'and', 'or'].includes(c.kind))).toHaveLength(gates);
+      useCircuitStore.getState().place('not', { x: 400, y: 400 }, 8);
+      expect(useCircuitStore.getState().error).toBe(
+        `${name} is a built-in part and cannot be edited`,
+      );
+      expect(useCircuitStore.getState().activeCircuit().components).toHaveLength(inside.length);
+      useCircuitStore.setState({ error: null });
+      useCircuitStore.getState().setActiveTab('board');
+    }
+  });
+
   it('commitNewChip rejects a self-referencing def', () => {
     const selfRef: ChipDef = {
       ...bufDef('loopy'),
@@ -1710,8 +1792,9 @@ describe('applyGroupRotate (Item 3, Shift+R)', () => {
       board: {
         ...st.board,
         components: [
-          ...st.board.components.filter((c) => c.id !== 'sw1'),
+          ...st.board.components.filter((c) => c.id !== 'sw1' && c.id !== 'g1'),
           { id: 'sw1', kind: 'toggle', pos: { x: 64, y: 72 }, params: { initial: false } },
+          { id: 'g1', kind: 'and', pos: { x: 160, y: 72 } },
         ],
         wires: [
           ...st.board.wires.filter((w) => w.id !== 'w1'),
@@ -1725,8 +1808,12 @@ describe('applyGroupRotate (Item 3, Shift+R)', () => {
       },
     }));
     const s = useCircuitStore.getState();
+    // Both ends of w1 turn with the group, so its turned bends are kept as given.
     s.applyGroupRotate({
-      components: [{ id: 'sw1', pos: { x: 8, y: -8 }, rot: 90 }],
+      components: [
+        { id: 'sw1', pos: { x: 8, y: -8 }, rot: 90 },
+        { id: 'g1', pos: { x: 160, y: 72 }, rot: 90 },
+      ],
       junctions: [],
       wires: [{ id: 'w1', points: [{ x: 1, y: 2 }] }],
     });
@@ -2565,6 +2652,59 @@ describe('label sharing (labelSync store hooks)', () => {
     const b = useCircuitStore.getState().board;
     expect(b.components.find((c) => c.id === 'sw1')!.label).toBe('Q');
     expect(b.components.find((c) => c.id === 'led1')!.label).toBe('Q');
+  });
+
+  it('renaming an input rewrites the expression an output is labelled with, in one undo step', () => {
+    setBoard();
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: st.board.components.map((c) =>
+          c.id === 'led1' ? { ...c, label: "A'S + S" } : c,
+        ),
+      },
+    }));
+    const led = () => useCircuitStore.getState().board.components.find((c) => c.id === 'led1')!;
+    expect(useCircuitStore.getState().renameComponent('in1', 'X')).toBe(true);
+    expect(led().label).toBe("X'S + S");
+    useCircuitStore.getState().undo();
+    expect(led().label).toBe("A'S + S");
+  });
+
+  it('renaming an input to a multi-letter name brackets it in the output label', () => {
+    setBoard();
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: st.board.components.map((c) =>
+          c.id === 'led1' ? { ...c, label: "A'S + S" } : c,
+        ),
+      },
+    }));
+    const led = () => useCircuitStore.getState().board.components.find((c) => c.id === 'led1')!;
+    expect(useCircuitStore.getState().renameComponent('in1', 'Sel')).toBe(true);
+    expect(led().label).toBe("[Sel]'S + S");
+    expect(useCircuitStore.getState().renameComponent('in1', 'En')).toBe(true);
+    expect(led().label).toBe("[En]'S + S");
+  });
+
+  it('renaming an input leaves word labels and bare shared names alone', () => {
+    setBoard();
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: [
+          ...st.board.components.filter((c) => c.id !== 'led1'),
+          { id: 'led1', kind: 'led' as const, pos: { x: 16, y: 0 }, label: 'Aout' },
+          { id: 'led2', kind: 'led' as const, pos: { x: 16, y: 8 }, label: 'A' },
+        ],
+      },
+    }));
+    expect(useCircuitStore.getState().renameComponent('in1', 'X')).toBe(true);
+    const label = (id: string) =>
+      useCircuitStore.getState().board.components.find((c) => c.id === id)!.label;
+    expect(label('led1')).toBe('Aout');
+    expect(label('led2')).toBe('A');
   });
 
   it('renaming into a net whose partner is already user-named raises a conflict', () => {
@@ -4054,6 +4194,57 @@ describe('setComponentParamsBatch', () => {
     expect(after.board.components.find((c) => c.id === dec!.id)!.params?.['width']).toBeUndefined();
   });
 
+  it('DFF clear toggle: removing the pin drops its wire, one undo and one redo each', () => {
+    const s = useCircuitStore.getState();
+    s.place('toggle', { x: 0, y: 0 }, 8);
+    s.place('dff', { x: 200, y: 0 }, 8, { asyncClear: true });
+    const [sw, ff] = useCircuitStore.getState().board.components;
+    s.addWire(
+      { kind: 'pin', component: sw!.id, pin: 'y' },
+      { kind: 'pin', component: ff!.id, pin: 'clr' },
+    );
+    const pinsOf = () =>
+      resolveComponentPins(
+        useCircuitStore.getState().board.components.find((c) => c.id === ff!.id)!,
+      ).map((p) => p.name);
+    const wireCount = () => useCircuitStore.getState().board.wires.length;
+    expect(pinsOf()).toContain('clr');
+    expect(wireCount()).toBe(1);
+
+    expect(s.setComponentParamsBatch([{ id: ff!.id, params: { asyncClear: false } }])).toBe(true);
+    expect(pinsOf()).not.toContain('clr');
+    expect(wireCount()).toBe(0);
+
+    useCircuitStore.getState().undo();
+    expect(pinsOf()).toContain('clr');
+    expect(wireCount()).toBe(1);
+    useCircuitStore.getState().redo();
+    expect(pinsOf()).not.toContain('clr');
+    expect(wireCount()).toBe(0);
+
+    expect(s.setComponentParamsBatch([{ id: ff!.id, params: { asyncSet: true } }])).toBe(true);
+    expect(pinsOf()).toContain('pre');
+    useCircuitStore.getState().undo();
+    expect(pinsOf()).not.toContain('pre');
+  });
+
+  it('counter and shift reg params reshape their pins', () => {
+    const s = useCircuitStore.getState();
+    s.place('counter', { x: 0, y: 0 }, 8, { width: 4 });
+    s.place('shiftreg', { x: 200, y: 0 }, 8, { width: 8 });
+    const [ctr, sr] = useCircuitStore.getState().board.components;
+    s.setComponentParamsBatch([
+      { id: ctr!.id, params: { clear: 'async', hasLoad: true, hasEnable: true } },
+      { id: sr!.id, params: { clear: 'sync', parallelOut: false } },
+    ]);
+    const pins = (id: string) =>
+      resolveComponentPins(
+        useCircuitStore.getState().board.components.find((c) => c.id === id)!,
+      ).map((p) => p.name);
+    expect(pins(ctr!.id)).toEqual(['clk', 'clr', 'load', 'd', 'en', 'q', 'tc']);
+    expect(pins(sr!.id)).toEqual(['clk', 'si', 'clr', 'so']);
+  });
+
   it('commits the whole batch as one undo step', () => {
     const s = useCircuitStore.getState();
     s.place('toggle', { x: 0, y: 0 }, 8);
@@ -4334,7 +4525,7 @@ describe('loadChipDefs (library folder -> chipLib)', () => {
     junctions: [],
   });
 
-  it('merges loaded defs over what is already in memory and bumps rev', () => {
+  it('merges loaded defs over what is already in memory without dirtying the board', () => {
     const s = useCircuitStore.getState();
     s.commitNewChip(def('packaged-not-yet-saved'));
     const revBefore = useCircuitStore.getState().rev;
@@ -4345,8 +4536,8 @@ describe('loadChipDefs (library folder -> chipLib)', () => {
     const lib = useCircuitStore.getState().chipLib;
     // The in-memory chip survives connecting a folder; the disk ones join it.
     expect([...lib.keys()].sort()).toEqual(['fromDisk1', 'fromDisk2', 'packaged-not-yet-saved']);
-    // rev must move or a load landing after first paint would never be drawn.
-    expect(useCircuitStore.getState().rev).toBeGreaterThan(revBefore);
+    // A library load is not a board change; the canvas redraws off chipLib instead.
+    expect(useCircuitStore.getState().rev).toBe(revBefore);
   });
 
   it('rejects a library that would form a def cycle, leaving chipLib alone', () => {
@@ -4429,6 +4620,20 @@ describe('loadBoard (session restore / File > Open)', () => {
     expect(after.selection.size).toBe(0);
     expect(after.powered).toBe(false);
     expect(after.activeTabId).toBe('board');
+  });
+
+  it("runs on the board's saved timing, whatever the new-board pref says", () => {
+    usePrefsStore.getState().setPref('timingModel', 'ideal');
+    const saved = { ...loaded(), timing: { mode: 'datasheet', datasheet: 'max' } as const };
+    useCircuitStore.getState().loadBoard(saved);
+    expect(useCircuitStore.getState().timing).toEqual({ mode: 'datasheet', datasheet: 'max' });
+
+    usePrefsStore.getState().setPref('timingModel', 'datasheet');
+    useCircuitStore.getState().loadBoard(loaded());
+    expect(useCircuitStore.getState().timing).toEqual({ mode: 'ideal', datasheet: 'typ' });
+    useCircuitStore.getState().loadBoard(starterBoard());
+    expect(useCircuitStore.getState().timing.mode).toBe('datasheet');
+    usePrefsStore.getState().setPref('timingModel', 'ideal');
   });
 });
 
@@ -4961,5 +5166,315 @@ describe('switch positions across a power cycle (opt-in pref)', () => {
     useCircuitStore.getState().power();
     expect(useCircuitStore.getState().powered).toBe(true);
     expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
+  });
+});
+
+describe('undo and redo prune the selection', () => {
+  beforeEach(() => {
+    useCircuitStore.getState().loadBoard(starterBoard());
+    reset();
+  });
+
+  const placeSelected = () => {
+    const s = useCircuitStore.getState();
+    s.place('and', { x: 400, y: 200 }, 8);
+    const id = useCircuitStore
+      .getState()
+      .board.components.find((c) => c.pos.x === 400 && c.pos.y === 200)!.id;
+    s.setSelection(new Set([id]));
+    return id;
+  };
+
+  it('drops a part that undo removed', () => {
+    placeSelected();
+    useCircuitStore.getState().undo();
+    expect(useCircuitStore.getState().selection.size).toBe(0);
+  });
+
+  it('drops a part that redo removed, and keeps ids still on the board', () => {
+    const id = placeSelected();
+    const keep = useCircuitStore.getState().board.components.find((c) => c.id !== id)!.id;
+    useCircuitStore.getState().deleteSelection(new Set([id]), geometryResolve);
+    useCircuitStore.getState().undo();
+    useCircuitStore.getState().setSelection(new Set([id, keep]));
+    useCircuitStore.getState().redo();
+    expect([...useCircuitStore.getState().selection]).toEqual([keep]);
+  });
+});
+
+describe('canUndo and canRedo', () => {
+  beforeEach(() => useCircuitStore.getState().loadBoard(starterBoard()));
+
+  it('follow the active tab history', () => {
+    const st = () => useCircuitStore.getState();
+    expect([st().canUndo(), st().canRedo()]).toEqual([false, false]);
+    st().place('and', { x: 400, y: 200 }, 8);
+    expect([st().canUndo(), st().canRedo()]).toEqual([true, false]);
+    st().undo();
+    expect([st().canUndo(), st().canRedo()]).toEqual([false, true]);
+  });
+});
+
+describe('rotating a part re-routes its wires apart', () => {
+  beforeEach(() => {
+    useCircuitStore.setState({ chipLib: new Map(builtinChipLibrary()), error: null });
+    useCircuitStore.getState().loadBoard(starterBoard());
+  });
+
+  const st = () => useCircuitStore.getState();
+  const symbolOf = (c: Component) =>
+    symbolBounds(c, testTheme, c.defId ? st().chipLib.get(c.defId) : undefined);
+  const rotate = (id: string) => {
+    const c = st().board.components.find((x) => x.id === id)!;
+    st().rotateSelection(
+      [{ id, bounds: symbolOf(c).bounds, rot: c.rot ?? 0 }],
+      testTheme.gridSchematic,
+    );
+  };
+  const routesNow = () => {
+    const board = st().board;
+    const parts = new Map(board.components.map((c) => [c.id, symbolOf(c)]));
+    const resolve = (end: WireEnd): Point | undefined =>
+      end.kind === 'pin'
+        ? parts.get(end.component)?.pins.get(end.pin)
+        : end.kind === 'junction'
+          ? board.junctions.find((j) => j.id === end.junction)?.pos
+          : end.pos;
+    const bounds = new Map([...parts].map(([id, sb]) => [id, sb.bounds]));
+    return computeWireRoutes(board.wires, resolve, bounds, testTheme.gridSchematic);
+  };
+  const crossings = (r: Point[], q: Point[]) =>
+    r
+      .slice(1)
+      .filter((end, i) => q.slice(1).some((e, j) => segmentsIntersect(r[i]!, end, q[j]!, e)))
+      .length;
+  const pointsOf = (id: string) => st().board.wires.find((w) => w.id === id)!.points;
+  const withBends = (bends: Record<string, Point[]>) =>
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        wires: s.board.wires.map((w) => (bends[w.id] ? { ...w, points: bends[w.id]! } : w)),
+      },
+    }));
+
+  it('keeps the two input wires of a gate turned to face up apart: no shared run, no crossing', () => {
+    rotate('g1');
+    expect(st().board.components.find((c) => c.id === 'g1')!.rot).toBe(90);
+    const routes = [...routesNow().values()];
+    routes.forEach((route, i) => {
+      const others = routes.filter((_, j) => j !== i);
+      expect(routeOverlapsWires(route, others)).toBe(false);
+      others.forEach((other) => expect(crossings(route, other)).toBe(0));
+    });
+  });
+
+  it('R four times gives back the original routes', () => {
+    const original = routesNow();
+    for (let i = 0; i < 4; i++) rotate('g1');
+    expect(routesNow()).toEqual(original);
+  });
+
+  it('clears the bends of attached wires, and undo and redo restore them exactly', () => {
+    withBends({
+      w1: [
+        { x: 140, y: 88 },
+        { x: 140, y: 104 },
+      ],
+      w3: [{ x: 280, y: 112 }],
+    });
+    const before = routesNow();
+    rotate('g1');
+    const after = routesNow();
+    expect(pointsOf('w1')).toEqual([]);
+    expect(pointsOf('w3')).toEqual([]);
+    st().undo();
+    expect(pointsOf('w1')).toEqual([
+      { x: 140, y: 88 },
+      { x: 140, y: 104 },
+    ]);
+    expect(pointsOf('w3')).toEqual([{ x: 280, y: 112 }]);
+    expect(routesNow()).toEqual(before);
+    st().redo();
+    expect(pointsOf('w1')).toEqual([]);
+    expect(routesNow()).toEqual(after);
+  });
+
+  it('leaves the bends of wires off the turned part, and of a tapped wire, alone', () => {
+    withBends({
+      w1: [
+        { x: 140, y: 88 },
+        { x: 140, y: 104 },
+      ],
+      w2: [
+        { x: 140, y: 160 },
+        { x: 140, y: 120 },
+      ],
+    });
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        wires: [
+          ...s.board.wires,
+          {
+            id: 'wt',
+            a: { kind: 'tap', wire: 'w2', range: { hi: 0, lo: 0 }, pos: { x: 140, y: 140 } },
+            b: { kind: 'free', pos: { x: 160, y: 200 } },
+            points: [],
+          },
+        ],
+      },
+    }));
+    rotate('sw1');
+    expect(pointsOf('w1')).toEqual([]);
+    expect(pointsOf('w2')).toEqual([
+      { x: 140, y: 160 },
+      { x: 140, y: 120 },
+    ]);
+    rotate('g1');
+    expect(pointsOf('w2')).toEqual([
+      { x: 140, y: 160 },
+      { x: 140, y: 120 },
+    ]);
+  });
+
+  it('two wires fanning out of one pin keep the bends drawn for them', () => {
+    const sw1 = { x: 104, y: 88 };
+    const fanBends = [
+      { x: 140, y: 88 },
+      { x: 140, y: 40 },
+    ];
+    withBends({
+      w1: [
+        { x: 140, y: 88 },
+        { x: 140, y: 104 },
+      ],
+    });
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        wires: [
+          ...s.board.wires,
+          {
+            id: 'wf',
+            a: { kind: 'pin', component: 'sw1', pin: 'y' },
+            b: { kind: 'free', pos: { x: 200, y: 40 } },
+            points: fanBends,
+          },
+        ],
+      },
+    }));
+    const routes = routesNow();
+    expect(routes.get('w1')).toEqual(
+      orthogonalPolyline(
+        sw1,
+        [
+          { x: 140, y: 88 },
+          { x: 140, y: 104 },
+        ],
+        { x: 176, y: 104 },
+      ),
+    );
+    expect(routes.get('wf')).toEqual(orthogonalPolyline(sw1, fanBends, { x: 200, y: 40 }));
+  });
+
+  it("Mirror drops the bends of the mirrored part's wires; undo restores them", () => {
+    const bends = [
+      { x: 140, y: 88 },
+      { x: 140, y: 104 },
+    ];
+    withBends({ w1: bends, w3: [{ x: 280, y: 112 }] });
+    st().mirrorSelection(new Set(['g1']));
+    expect(pointsOf('w1')).toEqual([]);
+    expect(pointsOf('w3')).toEqual([]);
+    st().undo();
+    expect(pointsOf('w1')).toEqual(bends);
+    expect(pointsOf('w3')).toEqual([{ x: 280, y: 112 }]);
+  });
+
+  it('a group rotate re-routes wires leaving the selection, not the ones it turned', () => {
+    const turned = [{ x: 120, y: 60 }];
+    withBends({
+      w1: [
+        { x: 140, y: 88 },
+        { x: 140, y: 104 },
+      ],
+      w3: [{ x: 280, y: 112 }],
+    });
+    const at = (id: string) => st().board.components.find((c) => c.id === id)!;
+    st().applyGroupRotate({
+      components: [
+        { id: 'sw1', pos: at('sw1').pos, rot: 90 },
+        { id: 'g1', pos: at('g1').pos, rot: 90 },
+      ],
+      junctions: [],
+      wires: [{ id: 'w1', points: turned }],
+    });
+    expect(pointsOf('w1')).toEqual(turned);
+    expect(pointsOf('w3')).toEqual([]);
+    st().undo();
+    expect(pointsOf('w3')).toEqual([{ x: 280, y: 112 }]);
+  });
+
+  it('a single-pin part hinging on its pin drops the bends of its wire', () => {
+    withBends({
+      w3: [
+        { x: 280, y: 112 },
+        { x: 280, y: 96 },
+      ],
+    });
+    const led = st().board.components.find((c) => c.id === 'led1')!;
+    const pin = symbolOf(led).pins.get('a')!;
+    st().rotateSelection(
+      [{ id: 'led1', bounds: symbolOf(led).bounds, rot: led.rot ?? 0, pivot: pin }],
+      testTheme.gridSchematic,
+    );
+    const turned = st().board.components.find((c) => c.id === 'led1')!;
+    expect(turned.rot).toBe(90);
+    expect(symbolOf(turned).pins.get('a')).toEqual(pin);
+    expect(pointsOf('w3')).toEqual([]);
+    const route = routesNow().get('w3')!;
+    expect(route[route.length - 1]).toEqual(pin);
+  });
+
+  it('a DIP turns with its wires re-routed clear of its body', () => {
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        components: [
+          ...s.board.components,
+          { id: 'u1', kind: 'chip', defId: '74LS00', pos: { x: 480, y: 64 } },
+        ],
+      },
+    }));
+    const dip = st().board.components.find((c) => c.id === 'u1')!;
+    const [p1, p2] = [...symbolOf(dip).pins.keys()];
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        wires: [
+          ...s.board.wires,
+          {
+            id: 'd1',
+            a: { kind: 'pin', component: 'u1', pin: p1! },
+            b: { kind: 'free', pos: { x: 400, y: 40 } },
+            points: [{ x: 400, y: 72 }],
+          },
+          {
+            id: 'd2',
+            a: { kind: 'pin', component: 'u1', pin: p2! },
+            b: { kind: 'free', pos: { x: 400, y: 200 } },
+            points: [{ x: 400, y: 88 }],
+          },
+        ],
+      },
+    }));
+    rotate('u1');
+    const turned = st().board.components.find((c) => c.id === 'u1')!;
+    expect(turned.rot).toBe(90);
+    expect([pointsOf('d1'), pointsOf('d2')]).toEqual([[], []]);
+    const body = symbolOf(turned).bounds;
+    const routes = routesNow();
+    expect(polylineCrossesAny(routes.get('d1')!, [body])).toBe(false);
+    expect(polylineCrossesAny(routes.get('d2')!, [body])).toBe(false);
   });
 });

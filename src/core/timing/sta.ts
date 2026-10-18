@@ -4,17 +4,20 @@
 // Delay conventions mirror sim/delay.ts exactly so overlay numbers match sim.
 
 import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
-import { getPrimitive } from '../sim/primitives/registry';
 import { intParam } from '../sim/primitives/types';
-import { FALLBACK_NS } from '../sim/delay';
+import { FALLBACK_NS, isStructuralHop, pinNamesOf, type PinNames } from '../sim/delay';
+import { arcFigure } from '../parts/arcs';
 import {
   column,
   contaminationNs,
+  estimatedContaminationNs,
   getPart,
   propagationNs,
+  setupHoldNs,
   typPublished,
   type DatasheetColumn,
 } from '../parts/partsDb';
+import { endpointPin, timingShape, type PinTiming, type TimingShape } from './shape';
 
 export class TimingError extends Error {
   constructor(
@@ -39,8 +42,9 @@ export interface TimingHop {
 }
 
 export interface PathTiming {
-  /** Endpoint path; a register capture endpoint is `<dffPath>.d`. */
+  /** Endpoint path; an input of a stateful primitive is `<path>.<capturePin>`. */
   endpoint: string;
+  capturePin?: string;
   /** Startpoint path of the critical (t_pd) chain. */
   startpoint: string;
   /** Startpoint path of the short (t_cd) chain; may differ from `startpoint`. */
@@ -56,6 +60,8 @@ export interface PathTiming {
 export interface SeqPathTiming {
   launch: string;
   capture: string;
+  /** The sampled pin this row times; lanes of one bus share a row. */
+  capturePin: string;
   clockPeriodPs: number;
   skewPs: number;
   tpcqPs: number;
@@ -84,41 +90,6 @@ export interface TimingReport {
 }
 
 const SOURCE_KINDS = new Set(['toggle', 'button', 'inport', 'constant', 'clock']);
-// SPEC: sequential launch/capture prims; dlatch stays combinationally
-// transparent until latch timing lands, so it is deliberately absent.
-const SEQUENTIAL_KINDS = new Set(['dff', 'register']);
-
-/** Per-part input-pin -> output-pin arc to datasheet `paths` key. */
-const PART_PATHS: Record<string, Record<string, string>> = {
-  '74LS283': {
-    'cin->cout': 'cin_to_cout',
-    'cin->sum': 'cin_to_sum',
-    'a->sum': 'ab_to_sum',
-    'b->sum': 'ab_to_sum',
-    'a->cout': 'ab_to_cout',
-    'b->cout': 'ab_to_cout',
-  },
-};
-
-// SPEC: decoder/encoder have too many pins (y0..y15, i0..i15) to enumerate per
-// PART_PATHS; every a/en/i<n> pin shares one arc regardless of index, so a
-// prefix match stands in for an explicit table.
-export function codecPathKey(inPin: string, outPin: string): string | undefined {
-  if ((inPin === 'a' || /^a\d+$/.test(inPin)) && outPin.startsWith('y')) return 'sel_to_y';
-  if (inPin === 'en' && outPin.startsWith('y')) return 'en_to_y';
-  if (/^i\d+$/.test(inPin) && (outPin === 'a' || /^a\d+$/.test(outPin))) return 'i_to_y';
-  if (/^i\d+$/.test(inPin) && outPin === 'valid') return 'i_to_valid';
-  // mux (M6.5): individual d<n>/s<n> lines share one arc per class, same
-  // reasoning as decoder/encoder's index-agnostic prefix match above.
-  if (/^d\d+$/.test(inPin) && outPin === 'y') return 'data_to_y';
-  if (/^s\d+$/.test(inPin) && outPin === 'y') return 'sel_to_y';
-  // demux (M6.6): mirror image of mux, but the datasheet-real parts (74LS139/
-  // 74LS138/74LS154) demux through their active-low strobe pin -- our 'd'
-  // pin maps to that same en_to_y arc, not a separate data arc.
-  if (inPin === 'd' && /^y\d+$/.test(outPin)) return 'en_to_y';
-  if (/^s\d+$/.test(inPin) && /^y\d+$/.test(outPin)) return 'sel_to_y';
-  return undefined;
-}
 
 const NS_TO_PS = 1000;
 const toPs = (ns: number) => Math.round(ns * NS_TO_PS);
@@ -145,6 +116,27 @@ export function partDelayPs(part: string | undefined, col: DatasheetColumn): Hop
   };
 }
 
+/**
+ * The figures behind one output, read the way the sim reads them: the slowest
+ * t_pd and fastest t_cd over the arcs ending there, or the part's single figure.
+ */
+export function outputDelayPs(
+  part: string | undefined,
+  ins: readonly string[],
+  outPin: string,
+  col: DatasheetColumn,
+): HopDelay {
+  const timed = part ? ins.filter((i) => arcFigure(part, i, outPin)) : [];
+  if (!timed.length) return partDelayPs(part, col);
+  const arcs = timed.map((i) => hopDelay(part, i, outPin, col));
+  return {
+    tpdPs: Math.max(...arcs.map((d) => d.tpdPs)),
+    tcdPs: Math.min(...arcs.map((d) => d.tcdPs)),
+    estimated: true,
+    ...(arcs.some((d) => d.typUnpublished) ? { typUnpublished: true } : {}),
+  };
+}
+
 function hopDelay(
   part: string | undefined,
   inPin: string,
@@ -152,14 +144,11 @@ function hopDelay(
   col: DatasheetColumn,
 ): HopDelay {
   if (part) {
-    const key = PART_PATHS[part]?.[`${inPin}->${outPin}`] ?? codecPathKey(inPin, outPin);
-    const fig = key ? getPart(part)?.paths?.[key] : undefined;
+    const fig = arcFigure(part, inPin, outPin);
     if (fig) {
-      const tpd = Math.max(column(fig.tplh, col), column(fig.tphl, col));
-      const tcd = Math.min(
-        Math.round(0.35 * column(fig.tplh, 'typ')),
-        Math.round(0.35 * column(fig.tphl, 'typ')),
-      );
+      const edges = [fig.tplh, fig.tphl].filter((e) => e !== undefined);
+      const tpd = Math.max(...edges.map((e) => column(e, col)));
+      const tcd = Math.min(...edges.map((e) => estimatedContaminationNs(column(e, 'typ'))));
       return {
         tpdPs: toPs(tpd),
         tcdPs: toPs(tcd),
@@ -171,26 +160,17 @@ function hopDelay(
   return partDelayPs(part, col);
 }
 
-type Role = 'source' | 'sink' | 'reg' | 'comb';
+// 'through' is a structural tristate (data passes at zero delay, no hop);
+// 'ignored' is the rest of a chip's power gate, which times nothing; 'reg' is
+// anything with a timing shape, a latch included: its outputs start paths.
+type Role = 'source' | 'sink' | 'reg' | 'comb' | 'through' | 'ignored';
 
 function roleOf(p: CompiledPrimitive): Role {
-  if (SEQUENTIAL_KINDS.has(p.kind)) return 'reg';
+  if (isStructuralHop(p)) return p.kind === 'tristate' ? 'through' : 'ignored';
+  if (timingShape(p.kind, p.params)) return 'reg';
   if (SOURCE_KINDS.has(p.kind)) return 'source';
   if (p.outputs.length === 0) return 'sink';
   return 'comb';
-}
-
-interface PinNames {
-  ins: string[];
-  outs: string[];
-}
-
-function pinNamesOf(p: CompiledPrimitive): PinNames {
-  const pins = getPrimitive(p.kind).pins(p.params);
-  return {
-    ins: pins.filter((x) => x.dir === 'in').map((x) => x.name),
-    outs: pins.filter((x) => x.dir === 'out').map((x) => x.name),
-  };
 }
 
 interface HopRef {
@@ -201,6 +181,9 @@ interface HopRef {
 interface NetArrival {
   maxPs: number;
   minPs: number;
+  /** The launch's own clk -> output figure inside maxPs and minPs; 0 off a sequential launch. */
+  maxStartPs: number;
+  minStartPs: number;
   maxHop: HopRef | null;
   minHop: HopRef | null;
   maxSource: string;
@@ -210,21 +193,36 @@ interface NetArrival {
 interface Analysis {
   roles: Role[];
   pinNames: PinNames[];
+  shapes: (TimingShape | null)[];
   order: number[]; // comb prim indices, topological
 }
 
 function buildAnalysis(c: CompiledCircuit): Analysis {
   const roles = c.primitives.map(roleOf);
   const pinNames = c.primitives.map(pinNamesOf);
+  const shapes = c.primitives.map((p, i) =>
+    roles[i] === 'reg' ? timingShape(p.kind, p.params) : null,
+  );
 
-  const comb = c.primitives.map((_, i) => i).filter((i) => roles[i] === 'comb');
+  // A stateful prim joins the graph only through its through arcs, so its
+  // stored outputs and its other inputs break the path: Q feeding its own /CLR or EN is no cycle.
+  const throughPins = (i: number, end: 'from' | 'to') =>
+    new Set(shapes[i]?.through.map((t) => t[end]) ?? []);
+  const fromPins = c.primitives.map((_, i) => (roles[i] === 'reg' ? throughPins(i, 'from') : null));
+  const toPins = c.primitives.map((_, i) => (roles[i] === 'reg' ? throughPins(i, 'to') : null));
+  const inGraph = (i: number) =>
+    roles[i] === 'comb' || roles[i] === 'through' || (fromPins[i]?.size ?? 0) > 0;
+  const comb = c.primitives.map((_, i) => i).filter(inGraph);
   const combSet = new Set(comb);
   const succ = new Map<number, number[]>(comb.map((i) => [i, []]));
   const indeg = new Map<number, number>(comb.map((i) => [i, 0]));
   for (const pi of comb) {
-    for (const net of c.primitives[pi]!.inputs) {
+    for (const [slot, net] of c.primitives[pi]!.inputs.entries()) {
+      if (roles[pi] === 'through' && pinNames[pi]!.ins[slot] !== 'a') continue;
+      if (fromPins[pi] && !fromPins[pi].has(pinNames[pi]!.ins[slot]!)) continue;
       for (const d of c.drivers[net] ?? []) {
         if (!combSet.has(d.prim)) continue;
+        if (toPins[d.prim] && !toPins[d.prim]!.has(pinNames[d.prim]!.outs[d.out]!)) continue;
         succ.get(d.prim)!.push(pi);
         indeg.set(pi, indeg.get(pi)! + 1);
       }
@@ -249,7 +247,7 @@ function buildAnalysis(c: CompiledCircuit): Analysis {
     const cyclePaths = findCycle(stuck, succ).map((i) => c.primitives[i]!.path);
     throw new TimingError(`combinational cycle: ${cyclePaths.join(' -> ')}`, cyclePaths);
   }
-  return { roles, pinNames, order };
+  return { roles, pinNames, shapes, order };
 }
 
 /** One cycle within the unresolved subgraph, in loop order. */
@@ -277,70 +275,88 @@ function findCycle(stuck: Set<number>, succ: Map<number, number[]>): number[] {
   for (const i of stuck) if (dfs(i)) break;
   return cycle;
 }
+interface Seed {
+  source: string;
+  maxPs: number;
+  minPs: number;
+}
 
 function propagate(
   c: CompiledCircuit,
   a: Analysis,
   col: DatasheetColumn,
-  seeds: Map<number, string>,
+  seeds: Map<number, Seed>,
 ): Map<number, NetArrival> {
   const arr = new Map<number, NetArrival>();
-  for (const [net, source] of seeds)
+  for (const [net, seed] of seeds)
     arr.set(net, {
-      maxPs: 0,
-      minPs: 0,
+      maxPs: seed.maxPs,
+      minPs: seed.minPs,
+      maxStartPs: seed.maxPs,
+      minStartPs: seed.minPs,
       maxHop: null,
       minHop: null,
-      maxSource: source,
-      minSource: source,
+      maxSource: seed.source,
+      minSource: seed.source,
     });
 
   for (const pi of a.order) {
     const p = c.primitives[pi]!;
     const names = a.pinNames[pi]!;
-    for (let o = 0; o < p.outputs.length; o++) {
-      const outNet = p.outputs[o]!;
-      for (let i = 0; i < p.inputs.length; i++) {
-        const from = arr.get(p.inputs[i]!);
-        if (!from) continue;
-        const d = hopDelay(p.part, names.ins[i]!, names.outs[o]!, col);
-        const hop: TimingHop = {
-          prim: pi,
-          path: p.path,
-          ...(p.part ? { part: p.part } : {}),
-          tpdPs: d.tpdPs,
-          tcdPs: d.tcdPs,
-          estimated: d.estimated,
-          ...(d.typUnpublished ? { typUnpublished: true } : {}),
-        };
-        const maxPs = from.maxPs + d.tpdPs;
-        const minPs = from.minPs + d.tcdPs;
-        const cur = arr.get(outNet);
-        if (!cur) {
-          arr.set(outNet, {
-            maxPs,
-            minPs,
-            maxHop: { hop, fromNet: p.inputs[i]! },
-            minHop: { hop, fromNet: p.inputs[i]! },
-            maxSource: from.maxSource,
-            minSource: from.minSource,
-          });
-        } else {
-          if (maxPs > cur.maxPs) {
-            cur.maxPs = maxPs;
-            cur.maxHop = { hop, fromNet: p.inputs[i]! };
-            cur.maxSource = from.maxSource;
-          }
-          if (minPs < cur.minPs) {
-            cur.minPs = minPs;
-            cur.minHop = { hop, fromNet: p.inputs[i]! };
-            cur.minSource = from.minSource;
-          }
-        }
-      }
+    if (a.roles[pi] === 'through') {
+      const from = arr.get(p.inputs[names.ins.indexOf('a')]!);
+      if (from) mergeArrival(arr, p.outputs[0]!, from);
+      continue;
+    }
+    const arcs: [number, number][] =
+      a.roles[pi] === 'reg'
+        ? a.shapes[pi]!.through.map((t) => [names.ins.indexOf(t.from), names.outs.indexOf(t.to)])
+        : p.outputs.flatMap((_, o) => p.inputs.map((_, i): [number, number] => [i, o]));
+    for (const [i, o] of arcs) {
+      const from = arr.get(p.inputs[i]!);
+      if (!from) continue;
+      const d = hopDelay(p.part, names.ins[i]!, names.outs[o]!, col);
+      const hop: TimingHop = {
+        prim: pi,
+        path: p.path,
+        ...(p.part ? { part: p.part } : {}),
+        tpdPs: d.tpdPs,
+        tcdPs: d.tcdPs,
+        estimated: d.estimated,
+        ...(d.typUnpublished ? { typUnpublished: true } : {}),
+      };
+      const ref = { hop, fromNet: p.inputs[i]! };
+      mergeArrival(arr, p.outputs[o]!, {
+        ...from,
+        maxPs: from.maxPs + d.tpdPs,
+        minPs: from.minPs + d.tcdPs,
+        maxHop: ref,
+        minHop: ref,
+      });
     }
   }
   return arr;
+}
+
+/** Keep the later of two max arrivals and the earlier of two min arrivals at one net. */
+function mergeArrival(arr: Map<number, NetArrival>, outNet: number, from: NetArrival): void {
+  const cur = arr.get(outNet);
+  if (!cur) {
+    arr.set(outNet, { ...from });
+    return;
+  }
+  if (from.maxPs > cur.maxPs) {
+    cur.maxPs = from.maxPs;
+    cur.maxStartPs = from.maxStartPs;
+    cur.maxHop = from.maxHop;
+    cur.maxSource = from.maxSource;
+  }
+  if (from.minPs < cur.minPs) {
+    cur.minPs = from.minPs;
+    cur.minStartPs = from.minStartPs;
+    cur.minHop = from.minHop;
+    cur.minSource = from.minSource;
+  }
 }
 
 function walkBack(arr: Map<number, NetArrival>, net: number, which: 'max' | 'min'): TimingHop[] {
@@ -355,21 +371,69 @@ function walkBack(arr: Map<number, NetArrival>, net: number, which: 'max' | 'min
   return hops;
 }
 
-function pathTiming(arr: Map<number, NetArrival>, net: number, endpoint: string): PathTiming {
-  const a = arr.get(net)!;
-  const critical = walkBack(arr, net, 'max');
-  const short = walkBack(arr, net, 'min');
+/** The lane arriving last carries the critical chain, the lane arriving first the short one. */
+interface Ends {
+  maxNet: number;
+  minNet: number;
+}
+
+function pathTiming(
+  arr: Map<number, NetArrival>,
+  ends: Ends,
+  endpoint: string,
+  capturePin?: string,
+): PathTiming {
+  const late = arr.get(ends.maxNet)!;
+  const early = arr.get(ends.minNet)!;
+  const critical = walkBack(arr, ends.maxNet, 'max');
+  const short = walkBack(arr, ends.minNet, 'min');
   return {
     endpoint,
-    startpoint: a.maxSource,
-    shortStartpoint: a.minSource,
-    totalTpdPs: a.maxPs,
-    totalTcdPs: a.minPs,
+    ...(capturePin ? { capturePin } : {}),
+    startpoint: late.maxSource,
+    shortStartpoint: early.minSource,
+    totalTpdPs: late.maxPs,
+    totalTcdPs: early.minPs,
     critical,
     short,
     estimated: critical.some((h) => h.estimated) || short.some((h) => h.estimated),
     typUnpublished: critical.some((h) => h.typUnpublished) || short.some((h) => h.typUnpublished),
   };
+}
+
+function endsOf(arr: Map<number, NetArrival>, nets: readonly number[]): Ends | undefined {
+  let ends: Ends | undefined;
+  for (const net of nets) {
+    const at = arr.get(net);
+    if (!at) continue;
+    if (!ends) ends = { maxNet: net, minNet: net };
+    else {
+      if (at.maxPs > arr.get(ends.maxNet)!.maxPs) ends.maxNet = net;
+      if (at.minPs < arr.get(ends.minNet)!.minPs) ends.minNet = net;
+    }
+  }
+  return ends;
+}
+
+interface InputGroup {
+  pin: string;
+  timing: PinTiming;
+  nets: number[];
+}
+
+/** A stateful prim's non-clock inputs, lanes of one bus gathered under its name, in pin order. */
+function inputGroups(c: CompiledCircuit, a: Analysis, pi: number): InputGroup[] {
+  const groups = new Map<string, InputGroup>();
+  const shape = a.shapes[pi]!;
+  a.pinNames[pi]!.ins.forEach((name, slot) => {
+    const timing = shape.pins.get(name)!;
+    if (timing === 'clock') return;
+    const pin = endpointPin(name);
+    const g = groups.get(pin) ?? { pin, timing, nets: [] };
+    g.nets.push(c.primitives[pi]!.inputs[slot]!);
+    groups.set(pin, g);
+  });
+  return [...groups.values()];
 }
 
 function pinNet(
@@ -394,7 +458,8 @@ interface ClockInfo {
 // the clock source; a gated or buffered clock reports no domain and its
 // register drops out of sequential analysis.
 function clockOf(c: CompiledCircuit, a: Analysis, reg: number): ClockInfo | null {
-  const net = pinNet(c, a, reg, 'clk', 'in');
+  const clockPin = a.shapes[reg]?.clock;
+  const net = clockPin === undefined ? undefined : pinNet(c, a, reg, clockPin, 'in');
   if (net === undefined) return null;
   for (const d of c.drivers[net] ?? []) {
     const p = c.primitives[d.prim]!;
@@ -405,6 +470,45 @@ function clockOf(c: CompiledCircuit, a: Analysis, reg: number): ClockInfo | null
       };
   }
   return null;
+}
+
+/** Each output of a launching prim starts at its own clk -> output figure. */
+function launchSeeds(
+  c: CompiledCircuit,
+  a: Analysis,
+  col: DatasheetColumn,
+  launch: number,
+): Map<number, Seed> {
+  const lp = c.primitives[launch]!;
+  const clockPin = a.shapes[launch]!.clock!;
+  const seeds = new Map<number, Seed>();
+  a.pinNames[launch]!.outs.forEach((out, o) => {
+    const d = clockToOutput(lp.part, clockPin, out, col);
+    seeds.set(lp.outputs[o]!, { source: lp.path, maxPs: d.tpcqPs, minPs: d.tccqPs });
+  });
+  return seeds;
+}
+
+// Not hopDelay's part-level fallback: an unbound launch keeps the unrounded
+// 0.35 x 10 ns t_ccq the sequential report has always shown.
+function clockToOutput(
+  part: string | undefined,
+  clockPin: string,
+  out: string,
+  col: DatasheetColumn,
+): { tpcqPs: number; tccqPs: number } {
+  if (part && arcFigure(part, clockPin, out)) {
+    const d = hopDelay(part, clockPin, out, col);
+    return { tpcqPs: d.tpdPs, tccqPs: d.tcdPs };
+  }
+  const lh = part ? (propagationNs(part, 'lh', col) ?? FALLBACK_NS) : FALLBACK_NS;
+  const hl = part ? (propagationNs(part, 'hl', col) ?? FALLBACK_NS) : FALLBACK_NS;
+  const clh = part ? contaminationNs(part, 'lh') : undefined;
+  const chl = part ? contaminationNs(part, 'hl') : undefined;
+  return {
+    tpcqPs: toPs(Math.max(lh, hl)),
+    tccqPs: toPs(Math.min(clh ?? 0.35 * FALLBACK_NS, chl ?? 0.35 * FALLBACK_NS)),
+  };
 }
 
 function sequentialTiming(
@@ -422,50 +526,48 @@ function sequentialTiming(
 
   const paths: SeqPathTiming[] = [];
   for (const launch of regs) {
-    const lp = c.primitives[launch]!;
     const lClk = clocks.get(launch);
     if (!lClk) continue;
-    const seeds = new Map(lp.outputs.map((net) => [net, lp.path]));
-    const arr = propagate(c, a, col, seeds);
+    const arr = propagate(c, a, col, launchSeeds(c, a, col, launch));
     for (const capture of regs) {
       const cClk = clocks.get(capture);
       if (!cClk || cClk.periodPs !== lClk.periodPs) continue;
-      const dNet = pinNet(c, a, capture, 'd', 'in');
-      if (dNet === undefined) continue;
-      const at = arr.get(dNet);
-      if (!at) continue;
-
-      const lhq = lp.part ? (propagationNs(lp.part, 'lh', col) ?? FALLBACK_NS) : FALLBACK_NS;
-      const hlq = lp.part ? (propagationNs(lp.part, 'hl', col) ?? FALLBACK_NS) : FALLBACK_NS;
-      const clh = lp.part ? contaminationNs(lp.part, 'lh') : undefined;
-      const chl = lp.part ? contaminationNs(lp.part, 'hl') : undefined;
-      const tpcqPs = toPs(Math.max(lhq, hlq));
-      const tccqPs = toPs(Math.min(clh ?? 0.35 * FALLBACK_NS, chl ?? 0.35 * FALLBACK_NS));
       const cap = c.primitives[capture]!;
-      const capEntry = cap.part ? getPart(cap.part) : undefined;
       // SPEC: unbound capture register contributes zero setup/hold.
-      const tsetupPs = toPs(capEntry?.setup_min ?? 0);
-      const tholdPs = toPs(capEntry?.hold_min ?? 0);
-      const skewPs = cClk.phasePs - lClk.phasePs;
-      const tpdCombPs = at.maxPs;
-      const tcdCombPs = at.minPs;
-      const minPeriodPs = tpcqPs + tpdCombPs + tsetupPs + skewPs;
-      paths.push({
-        launch: lp.path,
-        capture: cap.path,
-        clockPeriodPs: lClk.periodPs,
-        skewPs,
-        tpcqPs,
-        tccqPs,
-        tsetupPs,
-        tholdPs,
-        tpdCombPs,
-        tcdCombPs,
-        setupSlackPs: lClk.periodPs - minPeriodPs,
-        holdMarginPs: tccqPs + tcdCombPs - (tholdPs + skewPs),
-        minPeriodPs,
-        estimated: true,
-      });
+      const capEntry = cap.part ? getPart(cap.part) : undefined;
+      for (const g of inputGroups(c, a, capture)) {
+        if (typeof g.timing === 'string') continue;
+        const ends = endsOf(arr, g.nets);
+        if (!ends) continue;
+        const late = arr.get(ends.maxNet)!;
+        const early = arr.get(ends.minNet)!;
+        const { setupNs, holdNs } = setupHoldNs(capEntry, g.timing.sampled);
+        const tpcqPs = late.maxStartPs;
+        const tccqPs = early.minStartPs;
+        const tsetupPs = toPs(setupNs);
+        const tholdPs = toPs(holdNs);
+        const skewPs = cClk.phasePs - lClk.phasePs;
+        const tpdCombPs = late.maxPs - tpcqPs;
+        const tcdCombPs = early.minPs - tccqPs;
+        const minPeriodPs = tpcqPs + tpdCombPs + tsetupPs + skewPs;
+        paths.push({
+          launch: c.primitives[launch]!.path,
+          capture: cap.path,
+          capturePin: g.pin,
+          clockPeriodPs: lClk.periodPs,
+          skewPs,
+          tpcqPs,
+          tccqPs,
+          tsetupPs,
+          tholdPs,
+          tpdCombPs,
+          tcdCombPs,
+          setupSlackPs: lClk.periodPs - minPeriodPs,
+          holdMarginPs: tccqPs + tcdCombPs - (tholdPs + skewPs),
+          minPeriodPs,
+          estimated: true,
+        });
+      }
     }
   }
   return {
@@ -479,19 +581,22 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
   const a = buildAnalysis(c);
   const col = opts.column;
 
-  // Startpoints: source prims, register outputs, and undriven nets read by
+  // Startpoints: source prims, stateful outputs, and undriven nets read by
   // logic (top-level In labels compile to no primitive, only an aliased net).
-  const seeds = new Map<number, string>();
+  const seeds = new Map<number, Seed>();
+  const atZero = (source: string): Seed => ({ source, maxPs: 0, minPs: 0 });
   const regs: number[] = [];
   c.primitives.forEach((p, i) => {
     const role = a.roles[i]!;
     if (role === 'reg') regs.push(i);
-    if (role === 'source' || role === 'reg') for (const net of p.outputs) seeds.set(net, p.path);
+    if (role === 'source' || role === 'reg')
+      for (const net of p.outputs) seeds.set(net, atZero(p.path));
   });
-  c.primitives.forEach((p) => {
+  c.primitives.forEach((p, i) => {
+    if (a.roles[i] === 'ignored') return;
     for (const net of p.inputs)
       if (!seeds.has(net) && (c.drivers[net] ?? []).length === 0)
-        seeds.set(net, c.nets[net]!.paths[0]!);
+        seeds.set(net, atZero(c.nets[net]!.paths[0]!));
   });
 
   const arr = propagate(c, a, col, seeds);
@@ -506,10 +611,13 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
         if (!at) continue;
         if (best === undefined || at.maxPs > arr.get(best)!.maxPs) best = net;
       }
-      if (best !== undefined) endpoints.push(pathTiming(arr, best, p.path));
+      if (best !== undefined)
+        endpoints.push(pathTiming(arr, { maxNet: best, minNet: best }, p.path));
     } else if (a.roles[i] === 'reg') {
-      const dNet = pinNet(c, a, i, 'd', 'in');
-      if (dNet !== undefined && arr.has(dNet)) endpoints.push(pathTiming(arr, dNet, `${p.path}.d`));
+      for (const g of inputGroups(c, a, i)) {
+        const ends = endsOf(arr, g.nets);
+        if (ends) endpoints.push(pathTiming(arr, ends, `${p.path}.${g.pin}`, g.pin));
+      }
     }
   });
 

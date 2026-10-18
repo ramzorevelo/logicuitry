@@ -4,12 +4,14 @@ import type { TruthTable } from '../core/boolean/truthTable';
 import { buildKmap } from '../core/boolean/kmap';
 import {
   cornerPlan,
+  defaultKmapMetrics,
   fitKmapMetrics,
   groupBlocks,
   KMAP_FIT_MAX_CELL,
   KMAP_FIT_MIN_CELL,
   kmapCellAt,
   layoutKmap,
+  scaledKmapMetrics,
 } from './kmap';
 
 function table(inputPaths: string[], onesList: number[]): TruthTable {
@@ -122,5 +124,12 @@ describe('cornerPlan', () => {
     const plan = cornerPlan(big, px, 60, 156 + 4 * 120);
     expect(plan.nameY).not.toBeNull();
     expect(plan.nameY! + px / 2).toBeLessThanOrEqual(plan.colVarsY - px / 2 + 1);
+  });
+});
+
+describe('scaledKmapMetrics', () => {
+  it('scales every dimension of the default map together', () => {
+    expect(scaledKmapMetrics(1)).toEqual(defaultKmapMetrics);
+    expect(scaledKmapMetrics(1.35)).toEqual({ cell: 65, labelW: 86, labelH: 59 });
   });
 });

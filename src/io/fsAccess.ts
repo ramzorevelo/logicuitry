@@ -40,4 +40,5 @@ export const pickSavePath: typeof browser.pickSavePath = (name, startIn) =>
 export const readDocFile: typeof browser.readDocFile = (file) => fs().readDocFile(file);
 export const writeDocFile: typeof browser.writeDocFile = (file, text) =>
   fs().writeDocFile(file, text);
+export const docFileWritable: typeof browser.docFileWritable = (file) => fs().docFileWritable(file);
 export const sameFile: typeof browser.sameFile = (a, b) => fs().sameFile(a, b);

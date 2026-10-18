@@ -75,10 +75,16 @@ const BOX_SET = new Set([
   'dff',
   'dlatch',
   'register',
+  'srlatch',
+  'counter',
+  'shiftreg',
   'mux',
   'demux',
   'decoder',
   'encoder',
+  'adder',
+  'comparator',
+  'parity',
 ]);
 const SEGMENTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'dp'];
 

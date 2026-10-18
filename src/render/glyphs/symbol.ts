@@ -30,6 +30,7 @@ export interface ResolvedPin {
   /** Display text for the glyph label, when it differs from `name` (see
    *  PrimitivePin). Falls back to `name` when unset. */
   label?: string;
+  activeLow?: boolean;
 }
 
 /** Pin list for a primitive kind, straight from its PrimitiveSpec. */
@@ -45,6 +46,8 @@ export function chipPins(def: ChipDef): ResolvedPin[] {
     width: p.width,
     role: p.role,
     order: p.order,
+    // A boundary pin has no flag of its own; an async role is low-true by convention.
+    ...(p.role === 'asyncSet' || p.role === 'asyncClear' ? { activeLow: true } : {}),
   }));
 }
 
@@ -271,10 +274,16 @@ const FIXED_BODY_NAME_KINDS = new Set([
   'dff',
   'dlatch',
   'register',
+  'srlatch',
+  'counter',
+  'shiftreg',
   'mux',
   'demux',
   'decoder',
   'encoder',
+  'adder',
+  'comparator',
+  'parity',
 ]);
 
 /** The name drawn INSIDE a glyph's body -- distinct from the user's label,

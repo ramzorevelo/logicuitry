@@ -19,6 +19,24 @@ function inputFor(part: string): GeometryInput {
   };
 }
 
+/** A bare package of the right pin count; no shipped part is needed to lay one out. */
+function packageInput(pkg: string, pinName = 'P'): GeometryInput {
+  const count = dipPinCount(pkg);
+  return {
+    kind: 'chip',
+    params: {},
+    pins: Array.from({ length: count }, (_, i) => ({
+      name: `${pinName}${i + 1}`,
+      dir: 'in' as const,
+      width: 1,
+      role: 'data' as const,
+      order: i,
+    })),
+    name: 'WIDE',
+    package: pkg,
+  };
+}
+
 describe('isDipPackage', () => {
   it('accepts even-pin DIP names only', () => {
     expect(isDipPackage('DIP14')).toBe(true);
@@ -30,6 +48,13 @@ describe('isDipPackage', () => {
 
   it('reads the pin count out of the name', () => {
     expect(dipPinCount('DIP14')).toBe(14);
+    expect(dipPinCount('DIP24W')).toBe(24);
+  });
+
+  it('accepts the wide suffix and nothing else after the count', () => {
+    expect(isDipPackage('DIP24W')).toBe(true);
+    expect(isDipPackage('DIP24N')).toBe(false);
+    expect(isDipPackage('DIP23W')).toBe(false);
   });
 });
 
@@ -73,12 +98,36 @@ describe('DIP layout', () => {
     expect(l16.height).toBeGreaterThan(l14.height);
   });
 
-  it('is one width for every package, as a real 300-mil DIP is', () => {
-    const widths = [...lib.values()]
-      .filter((d) => isDipPackage(d.appearance?.package))
-      .map((d) => dipLayout(inputFor(d.id), theme).width);
-    expect(widths.length).toBeGreaterThan(6);
-    expect(new Set(widths).size).toBe(1);
+  it('is one width per row spacing: 13G for 300 mil, 19G for 600 mil', () => {
+    const g = theme.gridSchematic;
+    const dips = [...lib.values()].filter((d) => isDipPackage(d.appearance?.package));
+    expect(dips.length).toBeGreaterThan(6);
+    for (const d of dips) {
+      const wide = d.appearance?.package?.endsWith('W');
+      expect(dipLayout(inputFor(d.id), theme).width, d.id).toBe((wide ? 19 : 13) * g);
+    }
+    expect(dipLayout(packageInput('DIP20'), theme).width).toBe(13 * g);
+    const wide = dipLayout(packageInput('DIP24W'), theme);
+    expect(wide.width).toBe(19 * g);
+    expect(wide.boxRight - wide.boxLeft).toBe(15 * g);
+  });
+
+  it('keeps a wide package on the grid, twelve rows a side', () => {
+    const g = theme.gridSchematic;
+    const wide = dipLayout(packageInput('DIP24W'), theme);
+    expect(wide.left.map((r) => r.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(wide.right[0]!.number).toBe(24);
+    for (const [name, p] of wide.pins) {
+      expect(p.x % g, name).toBe(0);
+      expect(p.y % g, name).toBe(0);
+    }
+    expect(dipLayout(packageInput('DIP24'), theme).height).toBe(wide.height);
+  });
+
+  it('gives a wide body its extra width as room for pin names', () => {
+    const narrow = dipLayout(packageInput('DIP24', 'LONGNAME'), theme);
+    const wide = dipLayout(packageInput('DIP24W', 'LONGNAME'), theme);
+    expect(wide.left[0]!.fontPx).toBeGreaterThan(narrow.left[0]!.fontPx);
   });
 
   it("keeps every pin name out of the part number's lane", () => {

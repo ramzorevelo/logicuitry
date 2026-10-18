@@ -5,6 +5,76 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.5.0] - 2026-10-19
+
+### Added
+
+- Circuit palette: an Arithmetic group (Half adder, Full adder, 4-bit Adder,
+  4-bit Comparator) and, under Sequential, an SR latch, D latch, Register,
+  Counter and Shift register. Width keys resize the Counter, Shift register,
+  Register, D latch and flip-flop.
+- Nineteen more 74LS packages, 27 in all: 74LS138, 139, 148, 151, 153, 154
+  and 157; 74LS283, 85 and 280; 74LS74, 161, 163, 164, 165, 175, 273, 374
+  and 377. Each has its datasheet pin-out, function table and timing.
+- Static timing and waveform shading cover the Register, Counter and Shift
+  register, with setup and hold for each kind of input.
+- The 74 series group sorts parts under function headings, each with a
+  one-line description.
+- Find part at the top of the palette matches names, part numbers ('138,
+  7400, LS 138), descriptions and other names such as flip-flop or shift
+  register. On a phone it is the first tab.
+- The Half adder and Full adder open read-only to their gates with
+  Shift+double-click.
+- Examples: Ripple-carry adder, Mod-10 counter, Shift register.
+
+### Changed
+
+- A 74LS gate in a package adds only its datasheet delay: a 74LS00 measured
+  19 ns instead of 9 ns.
+- On datasheet timing, an output change takes the delay of the input that
+  moved: 74LS161 ENT to RCO is 9 ns, not 20 ns.
+- The 74LS374 /OC enables and disables the outputs after the datasheet times.
+- An output stays known where an unknown input cannot change it: a clock going
+  from X to 0, an unselected 74LS138 output, 74LS85 A=B with a known
+  difference.
+- Flip-flop preset and clear follow the datasheet: both low drives Q and Q-bar
+  high, and releasing both together leaves the output unknown.
+- Analyze and bubble verify name the outputs that hold state and still work on
+  the rest.
+- Rotating a part re-routes its wires; Undo restores the old bends.
+- Turning a phone between portrait and landscape fits the board to the view.
+- The palette is wider and wraps long names.
+- What's new shows the latest release; earlier versions open on a click or
+  tap, and Close stays in view.
+
+### Fixed
+
+- A pulse shorter than the gap between a gate's rise and fall delays no longer
+  leaves its output at the old value for good.
+- A board opens on its saved timing model.
+- The Mod-10 counter and Shift register examples run on datasheet timing.
+- An edit refused inside a built-in part no longer enables Undo or asks to
+  save on close; loading the chip library no longer marks the board unsaved.
+- Back keeps working after two layers close at once, and Esc closes only the
+  top dialog.
+- Rotate group and Mirror re-route the wires leaving the selection.
+- A second finger cancels a one-finger drag.
+- Running the simulation no longer marks a saved board unsaved.
+- On a phone, Back closes an open part editor instead of leaving the app.
+- On a phone: touch wiring shows its ghost and cancels cleanly, parts land
+  centred under the finger, Back closes the open layer, the banner no longer
+  hides the bottom bar, and decimal fields open the number keypad.
+- Files open without a file picker, a restored unsaved session stays unsaved,
+  and Undo and redo no longer leave deleted parts selected.
+- Presentation mode scales bit grids, Analyze and the Device Lab plots.
+- The K-map product dots, overbar outline and simulation time units display
+  correctly.
+- Ctrl+Y redoes, the Device Lab noise margins hide when the gate pair changes,
+  and the installed app opens files from the system.
+- Saving by download marks the board saved.
+- Desktop app: Help > Check for updates finds new releases instead of
+  reporting a failure.
+
 ## [0.4.3] - 2026-10-05
 
 ### Fixed

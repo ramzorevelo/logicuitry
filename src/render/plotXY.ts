@@ -115,6 +115,8 @@ export function drawPlot(ctx: CanvasRenderingContext2D, theme: Theme, spec: Plot
     ctx.moveTo(area.x, sy);
     ctx.lineTo(area.x + area.w, sy);
     ctx.stroke();
+    // The bottom label sits above its line: centred on it, it ran into the x axis's own first label.
+    ctx.textBaseline = i === 0 ? 'bottom' : 'middle';
     ctx.fillText(vy.toFixed(1), area.x - 4, sy);
   }
 

@@ -1,5 +1,6 @@
 import type { GroupDiagnosis, KmapPolarity } from '../../core/boolean/kmap';
 import type { FunctionIndices } from '../../core/boolean/canonical';
+import { productNeedsDot } from '../../core/boolean/expr';
 
 // Wording for the Analyze drawer's K-map: the problem statement, the
 // grouping-rules tip, refusals, and the SOP-versus-POS comparison.
@@ -15,6 +16,15 @@ export function functionLine(name: string, idx: FunctionIndices, polarity: KmapP
   }
   const d = idx.dontCares.length > 0 ? ` · ΠD(${list(idx.dontCares)})` : '';
   return `${name} = ΠM(${list(idx.zeros)})${d}`;
+}
+
+/** What goes before each literal of a drawn product: `·` where juxtaposed names would fuse, as
+ *  `sw1sw2` did, by the same rule the As built line uses. */
+export function productJoins(names: readonly string[]): string[] {
+  const asVar = (name: string) => ({ kind: 'var', name }) as const;
+  return names.map((name, i) =>
+    i > 0 && productNeedsDot(asVar(names[i - 1]!), asVar(name)) ? '·' : '',
+  );
 }
 
 /** The six H&H grouping rules, in the book's order, worded for what is grouped. */

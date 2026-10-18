@@ -34,10 +34,12 @@ import {
   kmapCellAt,
   kmapGroupAt,
   layoutKmap,
+  scaledKmapMetrics,
   type KmapGroupDraw,
   type KmapLayout,
 } from '../../render/kmap';
 import { readTheme } from '../../render/theme';
+import { useThemeRevision } from '../theme/useThemeRevision';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { isFullyKnown } from '../../core/value/busValue';
 import { LONG_PRESS_MS, TAP_SLOP } from './touchGestures';
@@ -51,6 +53,7 @@ import {
   dontCareDisagreements,
   functionLine,
   groupingRules,
+  productJoins,
   refusalMessage,
   summarizeForm,
 } from './kmapText';
@@ -148,9 +151,11 @@ function Term({
   sum?: boolean;
 }) {
   if (term.length === 0) return <span>{sum ? '0' : '1'}</span>;
+  const joins = sum ? [] : productJoins(term.map((l) => nameOf(l.var)));
   const lits = term.map((l, i) => (
     <span key={i}>
       {sum && i > 0 && ' + '}
+      {joins[i]}
       <span style={l.negated ? { textDecoration: 'overline' } : undefined}>{nameOf(l.var)}</span>
     </span>
   ));
@@ -172,7 +177,7 @@ export function AnalyzeDrawer({
   onBuild,
 }: {
   onClose: () => void;
-  onBuild?: (expression: string) => void;
+  onBuild?: (expression?: string) => void;
 }) {
   const rev = useCircuitStore((s) => s.rev);
   const board = useCircuitStore((s) => s.board);
@@ -402,15 +407,23 @@ export function AnalyzeDrawer({
     Math.max(0, layouts.length - 1),
   );
 
+  // The map is drawn in px, so it follows presentation's root font scale by hand.
+  const themeRev = useThemeRevision();
+  const chromeScale = useMemo(() => {
+    void themeRev;
+    return parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
+  }, [themeRev]);
   const layout: KmapLayout | null = useMemo(() => {
     if (!kmapEligible || !table) return null;
     const grid = buildKmap(table, 0, layouts[layoutIdx], myDcs);
     const metrics =
       maximized && maxBox
         ? fitKmapMetrics(grid.colCodes.length, grid.rowCodes.length, maxBox.w, maxBox.h)
-        : undefined;
+        : chromeScale !== 1
+          ? scaledKmapMetrics(chromeScale)
+          : undefined;
     return layoutKmap(grid, 0, 0, metrics);
-  }, [kmapEligible, table, layouts, layoutIdx, maximized, maxBox, myDcs]);
+  }, [kmapEligible, table, layouts, layoutIdx, maximized, maxBox, myDcs, chromeScale]);
 
   const primeGroups = useMemo(
     () => (stage >= 1 && kmapEligible && table ? primeImplicants(table, 0, myDcs, polarity) : []),
@@ -1029,6 +1042,11 @@ export function AnalyzeDrawer({
         {sourcePicker}
         {outputPicker}
         <p className="analyze-error">analyze: {current?.error ?? analyses.error}</p>
+        {onBuild && (
+          <button type="button" className="tool-btn" onClick={() => onBuild()}>
+            Build circuit...
+          </button>
+        )}
         {comparePanel}
       </div>
     );

@@ -7,6 +7,7 @@ import {
   parseExpr,
   printExpr,
   productNeedsDot,
+  renameVarInExprText,
   truthTableOfExpr,
 } from './expr';
 import * as bv from '../value/busValue';
@@ -126,5 +127,45 @@ describe('productNeedsDot', () => {
     expect(productNeedsDot(v('A'), { kind: 'const', value: 1 })).toBe(true);
     expect(productNeedsDot(v('Cin'), v('A'))).toBe(true);
     expect(productNeedsDot(v('A'), { kind: 'not', a: v('U3.13') })).toBe(true);
+  });
+});
+
+describe('bracketed names', () => {
+  it('parse as one variable and print back with their brackets', () => {
+    expect(printExpr(parseExpr("[Cin]A + [Cin]'B"))).toBe("[Cin]A + [Cin]'B");
+    expect(() => parseExpr('[Cin')).toThrow(ExprError);
+    expect(() => parseExpr('[]')).toThrow(ExprError);
+  });
+});
+
+describe('renameVarInExprText', () => {
+  const ABC = new Set(['A', 'B', 'C']);
+
+  it('renames every use and keeps the typed spelling', () => {
+    expect(renameVarInExprText("A'B + BC + A", 'A', 'X', ABC)).toBe("X'B + BC + X");
+    expect(renameVarInExprText('A1 * B', 'A1', 'C', new Set(['A1', 'B']))).toBe('C * B');
+  });
+
+  it('leaves text that is not an expression using the variable', () => {
+    expect(renameVarInExprText('Built circuit', 'A', 'X', ABC)).toBeNull();
+    expect(renameVarInExprText('A +', 'A', 'X', ABC)).toBeNull();
+    expect(renameVarInExprText('B + C', 'A', 'X', ABC)).toBeNull();
+  });
+
+  it('spells a multi-letter name in brackets so it stays one variable', () => {
+    expect(renameVarInExprText("A'B + BC", 'A', 'Sel', ABC)).toBe("[Sel]'B + BC");
+    const names = new Set(['Sel', 'B']);
+    expect(renameVarInExprText("[Sel]'B", 'Sel', 'En', names)).toBe("[En]'B");
+    expect(renameVarInExprText("[Sel]'B", 'Sel', 'X', names)).toBe("X'B");
+    expect(exprVars(parseExpr("[Sel]'B + [Sel]"))).toEqual(['B', 'Sel']);
+  });
+
+  it('leaves a word label whose letters are not all inputs', () => {
+    expect(renameVarInExprText('Cout', 'C', 'D', ABC)).toBeNull();
+    expect(renameVarInExprText('Sum', 'S', 'X', new Set(['S']))).toBeNull();
+  });
+
+  it('refuses a name that would merge or misread', () => {
+    expect(renameVarInExprText('A + B', 'A', 'B', ABC)).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import type { ChipDef, ChipLibrary, Component, Wire } from '../../core/model/typ
 import type { Vec2 } from '../../render/scene';
 import { compile, type CompiledCircuit } from '../../core/model/compile';
 import { EXAMPLES, type Example } from '../../examples/index';
+import { builtinChipLibrary } from '../../core/parts/packages';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
 import { makeTestTheme } from '../../render/theme.fixture';
 import { autoRoute, type RoutableComponent, type RoutablePin } from './autoRoute';
@@ -18,11 +19,15 @@ import '../../core/sim/primitives/registry';
 import '../../render/glyphs/gates';
 import '../../render/glyphs/io';
 import '../../render/glyphs/chip';
+import '../../render/glyphs/power';
 
 const theme = makeTestTheme();
 
 function libraryOf(e: Example): ChipLibrary {
-  return new Map<string, ChipDef>((e.chips ?? []).map((d) => [d.id, d]));
+  return new Map<string, ChipDef>([
+    ...builtinChipLibrary(),
+    ...(e.chips ?? []).map((d): [string, ChipDef] => [d.id, d]),
+  ]);
 }
 
 function routableOf(c: Component, lib: ChipLibrary): RoutableComponent {

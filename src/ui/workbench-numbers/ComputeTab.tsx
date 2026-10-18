@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { known, xor, type BusValue } from '../../core/value/busValue';
 import {
   add,
@@ -311,21 +311,30 @@ export function ComputeTab() {
                 borrows={resultBorrows}
               />
               <div className="result-row__readout mono">
-                {renderDec(computed.result, width, interp)}
-                {` · 0x${renderHex(computed.result, width)}`}
-                {/* One flag per interpretation: Cout is the unsigned story, V the
-                    signed one; showing both misreads as "two overflows". */}
-                {computed.carryOut !== undefined &&
-                  interp === 'unsigned' &&
-                  ` · ${coutAnnotation(operator, computed.carryOut)}`}
-                {computed.borrowOut !== undefined &&
-                  interp === 'unsigned' &&
-                  (computed.borrowOut === 1 ? ' · borrow out (A < B)' : ' · no borrow (A ≥ B)')}
-                {overflow && ' · V=1 overflow'}
-                {computed.overflow === false && interp === 'twos' && ' · V=0'}
-                {computed.shiftedOut &&
-                  computed.shiftedOut.length > 0 &&
-                  ` · out=${computed.shiftedOut.join('')}`}
+                {[
+                  renderDec(computed.result, width, interp),
+                  `0x${renderHex(computed.result, width)}`,
+                  // One flag per interpretation: Cout is the unsigned story, V the
+                  // signed one; showing both misreads as "two overflows".
+                  computed.carryOut !== undefined &&
+                    interp === 'unsigned' &&
+                    coutAnnotation(operator, computed.carryOut),
+                  computed.borrowOut !== undefined &&
+                    interp === 'unsigned' &&
+                    (computed.borrowOut === 1 ? 'borrow out (A < B)' : 'no borrow (A ≥ B)'),
+                  overflow && 'V=1 overflow',
+                  computed.overflow === false && interp === 'twos' && 'V=0',
+                  computed.shiftedOut &&
+                    computed.shiftedOut.length > 0 &&
+                    `out=${computed.shiftedOut.join('')}`,
+                ]
+                  .filter((part): part is string => typeof part === 'string')
+                  .map((part, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && ' · '}
+                      <span className="result-row__part">{part}</span>
+                    </Fragment>
+                  ))}
               </div>
             </>
           ) : (

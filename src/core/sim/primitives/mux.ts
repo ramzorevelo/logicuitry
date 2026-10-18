@@ -50,6 +50,10 @@ function muxDefaultPart(params: Params): string | undefined {
  * per `selSide`); optional active-high `en`. SPEC: ideal H&H-style, not
  * pin-for-pin faithful (real chips use an active-low strobe).
  *
+ * Hidden params make it the core of a real part: `strobeLow` turns `en` into
+ * the active-low strobe ('151, '153, '157), `invertedOut` adds `w`, the
+ * complement of `y` ('151). Strobed off drives y = 0 and w = 1.
+ *
  * `pinView` controls per-pin bus expand/collapse: select collapses into one
  * k-wide `s` pin (bit i = si); data collapses into one n-wide `d` pin only
  * when width === 1, otherwise each `di` stays its own lane and can itself
@@ -61,7 +65,8 @@ export const mux: PrimitiveSpec = {
     const k = muxSelectBits(params);
     const n = 1 << k;
     const w = widthParam(params);
-    const hasEnable = boolParam(params, 'hasEnable', false);
+    const strobeLow = boolParam(params, 'strobeLow', false);
+    const hasEnable = strobeLow || boolParam(params, 'hasEnable', false);
     const view = parsePinView(params);
     const pins: PrimitivePin[] = [];
 
@@ -82,11 +87,21 @@ export const mux: PrimitiveSpec = {
         pins.push({ name: `s${i}`, dir: 'in', width: 1, role: 'select', order: 0 });
     }
 
-    if (hasEnable) pins.push({ name: 'en', dir: 'in', width: 1, role: 'enable', order: 0 });
+    if (hasEnable)
+      pins.push({
+        name: 'en',
+        dir: 'in',
+        width: 1,
+        role: 'enable',
+        order: 0,
+        ...(strobeLow ? { activeLow: true } : {}),
+      });
 
     const yBase: PrimitivePin = { name: 'y', dir: 'out', width: w, role: 'data', order: 0 };
     const yExpanded = w > 1 && pinViewOf(view, 'y', 'collapsed') === 'expanded';
     pins.push(...(yExpanded ? expandPin(yBase, w) : [yBase]));
+    if (boolParam(params, 'invertedOut', false))
+      pins.push({ name: 'w', dir: 'out', width: w, role: 'data', order: 0 });
 
     return reindexPins(pins);
   },
@@ -94,7 +109,9 @@ export const mux: PrimitiveSpec = {
     const k = muxSelectBits(ctx.params);
     const n = 1 << k;
     const w = widthParam(ctx.params);
-    const hasEnable = boolParam(ctx.params, 'hasEnable', false);
+    const strobeLow = boolParam(ctx.params, 'strobeLow', false);
+    const hasEnable = strobeLow || boolParam(ctx.params, 'hasEnable', false);
+    const invertedOut = boolParam(ctx.params, 'invertedOut', false);
     const view = parsePinView(ctx.params);
     let cursor = 0;
 
@@ -126,11 +143,12 @@ export const mux: PrimitiveSpec = {
 
     const yExpanded = w > 1 && pinViewOf(view, 'y', 'collapsed') === 'expanded';
     const withY = (y: bv.BusValue): EvalResult => ({
-      outputs: yExpanded ? splitBus(y, w) : [y],
+      outputs: [...(yExpanded ? splitBus(y, w) : [y]), ...(invertedOut ? [bv.not(y, w)] : [])],
     });
 
     if (en) {
-      if (bv.isFullyKnown(en, 1) && (en.v & 1) === 0) return withY(bv.known(0, w));
+      const off = strobeLow ? 1 : 0;
+      if (bv.isFullyKnown(en, 1) && (en.v & 1) === off) return withY(bv.known(0, w));
       if (!bv.isFullyKnown(en, 1)) return withY(bv.allX(w));
     }
     if (sel.some((s) => !bv.isFullyKnown(s, 1))) return withY(bv.allX(w));

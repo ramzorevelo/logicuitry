@@ -25,13 +25,16 @@ import {
   tunnel,
   vccRail,
 } from './structural';
-import { dff, dlatch, register } from './sequential';
+import { dff, dlatch, register, srlatch } from './sequential';
+import { counter } from './counter';
+import { shiftreg } from './shiftreg';
 import { clock, led, probe, pushButton, toggleSwitch } from './stimulus';
 import { mux } from './mux';
 import { demux } from './demux';
 import { busdisplay, ledmatrix, sevenseg } from './display';
 import { decoder, encoder } from './coder';
 import { bcd7seg } from './bcd7seg';
+import { adder, comparator, parity } from './arith';
 
 const specs = new Map<string, PrimitiveSpec>();
 
@@ -79,6 +82,9 @@ for (const spec of [
   dff,
   dlatch,
   register,
+  srlatch,
+  counter,
+  shiftreg,
   mux,
   demux,
   clock,
@@ -92,6 +98,9 @@ for (const spec of [
   decoder,
   encoder,
   bcd7seg,
+  adder,
+  comparator,
+  parity,
 ]) {
   registerPrimitive(spec);
 }

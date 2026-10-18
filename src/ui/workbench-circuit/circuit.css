@@ -96,7 +96,9 @@
   flex-direction: column;
   gap: 2px;
   flex: none;
-  width: 116px;
+  /* Wide enough that every label's longest word fits its two lines whole (Comparator, 7-seg
+     (cathode)); narrower broke words mid-way. Drag still goes down to the minimum. */
+  width: 160px;
   padding: var(--space-unit);
   overflow-y: auto;
 }
@@ -129,6 +131,91 @@
   display: none;
 }
 
+.palette-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Three classes: the compact sheet re-declares an item's display at two. */
+.circuit-palette .palette-item[hidden],
+.circuit-palette .palette-subhead[hidden] {
+  display: none;
+}
+
+.palette-subhead {
+  font: 500 var(--text-secondary) / 1.2 var(--font-ui);
+  color: var(--muted);
+  padding: var(--space-unit) 2px 2px;
+}
+
+.palette-find {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  flex: none;
+  padding: 0 var(--space-unit);
+  color: var(--muted);
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--chrome-radius);
+}
+
+.palette-find:focus-within {
+  border-color: var(--accent);
+}
+
+.palette-find .tool-icon {
+  flex: none;
+}
+
+.palette-find__input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-unit) 0;
+  font: var(--text-secondary) / 1.2 var(--font-mono);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.palette-find__input::placeholder {
+  color: var(--muted);
+}
+
+/* Dimmed as a whole, like the items below it; the field's own disabled
+   opacity would compound with this. */
+.palette-find:has(.palette-find__input:disabled) {
+  opacity: 0.4;
+}
+
+.palette-find__input:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.palette-find__clear {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.palette-find__clear:hover {
+  color: var(--ink);
+}
+
+.palette-empty {
+  margin: 0;
+  padding: calc(var(--space-unit) * 2) 2px;
+  font: var(--text-secondary) / 1.3 var(--font-ui);
+  color: var(--muted);
+}
+
 .palette-item {
   display: flex;
   align-items: center;
@@ -147,10 +234,31 @@
   flex: none;
 }
 
-.palette-item__label {
+/* Two lines, broken between words: cut at one, look-alike pairs such as the two LED parts read
+   the same. */
+.palette-item__label,
+.palette-item__caption {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.palette-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.palette-item__caption {
+  font: var(--text-secondary) / 1.15 var(--font-ui);
+  color: var(--muted);
+}
+
+.palette-item--active .palette-item__caption {
+  color: var(--accent);
 }
 
 .palette-item:hover {
@@ -425,7 +533,7 @@
 }
 .analyze-drawer h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .analyze-error {
   color: var(--warn);
@@ -452,7 +560,7 @@
   border: none;
   background: none;
   color: var(--muted);
-  font: 11px var(--font-mono);
+  font: 0.6875rem var(--font-mono);
   padding: 0 2px;
   cursor: pointer;
 }
@@ -473,7 +581,7 @@
 .analyze-table {
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .analyze-table th,
 .analyze-table td {
@@ -493,7 +601,7 @@
   align-items: baseline;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .analyze-asbuilt .boolexpr {
   font-size: inherit;
@@ -511,7 +619,7 @@
 }
 .analyze-compare p {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 /* The verdict column carries the words; the token only reinforces them. */
 .analyze-compare__differs {
@@ -545,12 +653,12 @@
 }
 .analyze-sop {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .analyze-status,
 .analyze-muted {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .analyze-reveal {
   display: flex;
@@ -563,7 +671,7 @@
 }
 .analyze-refusal {
   color: var(--warn);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .analyze-check,
 .analyze-compare {
@@ -571,10 +679,10 @@
   flex-direction: column;
   gap: 2px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .analyze-rules {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 .analyze-rules summary {
@@ -591,7 +699,7 @@
 }
 .analyze-typed__input {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1149,7 +1257,8 @@
 }
 
 .app-shell--compact .palette-tabs,
-.app-shell--compact .palette-group {
+.app-shell--compact .palette-strip,
+.app-shell--compact .palette-chips {
   display: flex;
   flex-direction: row;
   gap: var(--space-unit);
@@ -1159,8 +1268,42 @@
 }
 
 .app-shell--compact .palette-tabs::-webkit-scrollbar,
-.app-shell--compact .palette-group::-webkit-scrollbar {
+.app-shell--compact .palette-strip::-webkit-scrollbar,
+.app-shell--compact .palette-chips::-webkit-scrollbar {
   display: none;
+}
+
+/* In a sideways strip a sub-heading is a divider between runs of parts. */
+.app-shell--compact .palette-subhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 calc(var(--space-unit) * 1.5);
+  white-space: nowrap;
+  border-left: var(--stroke-min) solid var(--line);
+}
+
+.app-shell--compact .palette-chip {
+  flex: 0 0 auto;
+  min-height: var(--touch-h);
+  padding: 0 calc(var(--space-unit) * 2.5);
+  font: var(--text-secondary) / 1 var(--font-ui);
+  color: var(--ink);
+  white-space: nowrap;
+  background: var(--paper);
+  border: var(--stroke-min) solid var(--line);
+  border-radius: var(--chrome-radius);
+  cursor: pointer;
+}
+
+.app-shell--compact .palette-chip[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.app-shell--compact .palette-find {
+  min-height: var(--touch-h);
 }
 
 /* The parts row is a drawer over the board, not a row above it: opening a
@@ -1168,6 +1311,9 @@
    pointed at, and on a phone it is most of the visible board. Above the quick
    panel deliberately, so the drawer covers it while open. */
 .app-shell--compact .palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
   position: absolute;
   top: 100%;
   left: 0;
@@ -1275,6 +1421,12 @@
   flex-wrap: nowrap;
   max-height: calc(100% - var(--space-unit) * 2);
   overflow-y: auto;
+}
+
+/* The column draws above the action bar, so the bar starts past it: overlapping, Redo sat on
+   Delete's edge and took its taps. */
+.app-shell--landscape .selection-actions {
+  left: calc(var(--touch-h) + var(--space-unit) * 4 + var(--stroke-min) * 2);
 }
 
 /* Power, Run, Undo and Redo live in the floating quick panel on a phone.

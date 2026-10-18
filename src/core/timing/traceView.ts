@@ -4,11 +4,12 @@
 
 import * as bv from '../value/busValue';
 import type { Board } from '../model/types';
-import type { CompiledCircuit } from '../model/compile';
+import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
 import { componentPaths } from '../model/compile';
 import type { NetChangeRecord } from '../sim/kernel';
 import type { DatasheetColumn } from '../parts/partsDb';
-import { partDelayPs } from './sta';
+import { isStructuralHop, pinNamesOf } from '../sim/delay';
+import { outputDelayPs } from './sta';
 import { hasPrimitive, getPrimitive } from '../sim/primitives/registry';
 
 /** Kinds that get a waveform track (owner decision: probes + clocks + top-level I/O). */
@@ -246,6 +247,31 @@ export function expandTrackByBit(track: Track): Track[] {
   return lanes;
 }
 
+interface TimedDriver {
+  prim: CompiledPrimitive;
+  out: number;
+}
+
+/** A net's drivers that carry a delay: a structural buffer stands for whatever drives its data input. */
+function timedDrivers(
+  circuit: CompiledCircuit,
+  net: number,
+  seen = new Set<number>(),
+): TimedDriver[] {
+  if (seen.has(net)) return [];
+  seen.add(net);
+  const timed: TimedDriver[] = [];
+  for (const d of circuit.drivers[net] ?? []) {
+    const prim = circuit.primitives[d.prim]!;
+    if (!isStructuralHop(prim)) timed.push({ prim, out: d.out });
+    else if (prim.kind === 'tristate') {
+      const dataNet = prim.inputs[pinNamesOf(prim).ins.indexOf('a')];
+      if (dataNet !== undefined) timed.push(...timedDrivers(circuit, dataNet, seen));
+    }
+  }
+  return timed;
+}
+
 /**
  * Uncertainty band per value-change edge. The trace's `cause` is a net edge,
  * not a primitive, so the delay figure comes from the net's drivers.
@@ -257,12 +283,13 @@ function buildBands(
   net: number,
   column: DatasheetColumn,
 ): EdgeBand[] {
-  const drivers = circuit.drivers[net] ?? [];
+  const drivers = timedDrivers(circuit, net);
   if (!drivers.length) return [];
   let spread = 0;
   let estimated = false;
-  for (const d of drivers) {
-    const del = partDelayPs(circuit.primitives[d.prim]!.part, column);
+  for (const { prim, out } of drivers) {
+    const names = pinNamesOf(prim);
+    const del = outputDelayPs(prim.part, names.ins, names.outs[out]!, column);
     spread = Math.max(spread, del.tpdPs - del.tcdPs);
     estimated ||= del.estimated;
   }

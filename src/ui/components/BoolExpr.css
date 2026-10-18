@@ -24,8 +24,10 @@
   cursor: pointer;
 }
 
+/* Offset, or the outline lands exactly on the top overbar in the same colour and A' reads as A. */
 .boolexpr__node--target {
   outline: 1px solid var(--accent);
+  outline-offset: 0.2em;
 }
 
 .boolexpr__node--marked {

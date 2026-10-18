@@ -17,6 +17,16 @@ export interface KmapMetrics {
 
 export const defaultKmapMetrics: KmapMetrics = { cell: 48, labelW: 64, labelH: 44 };
 
+/** The default map at `k` times its size, for presentation mode's larger chrome. */
+export function scaledKmapMetrics(k: number): KmapMetrics {
+  const m = defaultKmapMetrics;
+  return {
+    cell: Math.round(m.cell * k),
+    labelW: Math.round(m.labelW * k),
+    labelH: Math.round(m.labelH * k),
+  };
+}
+
 const LABEL_W_PER_CELL = 1.3;
 const LABEL_H_PER_CELL = 0.9;
 export const KMAP_FIT_MAX_CELL = 160;

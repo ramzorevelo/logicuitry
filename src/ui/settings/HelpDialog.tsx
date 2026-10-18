@@ -136,6 +136,16 @@ const SECTIONS: Section[] = [
         keys: 'Ctrl+click on the drop',
         touch: 'Long press in the palette',
       },
+      {
+        what: 'Find a part in the palette',
+        keys: 'Type in Find part, Esc clears',
+        touch: 'Find tab, then type',
+      },
+      {
+        what: 'Narrow the 74 series to one function',
+        touch: 'Function chips in the 74 series tab',
+      },
+      { what: 'Look inside a chip, such as a Half adder', keys: 'Shift+double-click' },
     ],
   },
   {

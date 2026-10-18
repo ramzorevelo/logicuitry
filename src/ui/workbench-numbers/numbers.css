@@ -31,6 +31,8 @@
 .numbers-workbench__body {
   min-height: 0;
   overflow: auto;
+  /* A revealed result can make the body scroll; the scrollbar appearing re-centred the column. */
+  scrollbar-gutter: stable;
 }
 
 .mono {
@@ -150,6 +152,18 @@
   max-width: 100%;
 }
 
+/* Narration and readouts wrap inside the column the instruments set. Sized by their own text,
+   they widened and re-centred the column whenever a step appeared or the operator changed. */
+:is(.convert-tab__group, .compute-tab__group) > :is(.steps-panel, .result-row, .solution) {
+  contain: inline-size;
+}
+
+/* The plate keeps its own width, so containment would collapse it. A negative end margin takes it
+   out of the column's width instead, and it draws past the column's edge when wider. */
+.convert-tab__group > .final-plate {
+  margin-right: -100vw;
+}
+
 /* Secondary panel: separated by spacing + a subtle top rule, not a full box
    (design-system: only the primary instrument gets the border/surface box). */
 .steps-panel {
@@ -266,6 +280,11 @@
 .result-row__readout {
   color: var(--ink);
   font-size: var(--text-data-large);
+}
+
+/* The readout wraps between its parts, never inside one: "no / borrow" split a flag in two. */
+.result-row__part {
+  white-space: nowrap;
 }
 
 /* Masked-result placeholder; the head's single Show/Hide button does the work. */

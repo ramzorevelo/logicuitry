@@ -26,6 +26,7 @@ function isInstalled(): boolean {
 }
 
 export function UpdateBanner({ presentation }: { presentation: boolean }) {
+  const stopChecks = useRef<(() => void) | null>(null);
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     offlineReady: [offlineReady, setOfflineReady],
@@ -37,12 +38,19 @@ export function UpdateBanner({ presentation }: { presentation: boolean }) {
       const id = window.setInterval(check, UPDATE_CHECK_MS);
       // Coming back to the tab is the other natural moment to look, and the
       // one that catches a machine that was asleep between lectures.
-      document.addEventListener('visibilitychange', () => {
+      const onVisible = () => {
         if (document.visibilityState === 'visible') check();
-      });
-      return () => window.clearInterval(id);
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      // The plugin ignores a cleanup returned from here, so the unmount effect below runs it.
+      stopChecks.current?.();
+      stopChecks.current = () => {
+        window.clearInterval(id);
+        document.removeEventListener('visibilitychange', onVisible);
+      };
     },
   });
+  useEffect(() => () => stopChecks.current?.(), []);
 
   // Whether anyone has touched this page yet. A pointer or a key is the signal
   // rather than the board's revision, because loading the autosaved board

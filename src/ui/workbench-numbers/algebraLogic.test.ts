@@ -94,6 +94,31 @@ describe('step menu', () => {
   });
 });
 
+describe('step menu with a bar nested in the term', () => {
+  const nested = e("B'((AB))'");
+
+  it('lists the De Morgan that breaks the inner bar before merging a sibling under it', () => {
+    for (const at of [[], [0], [1]]) {
+      const menu = stepsForSelection(nested, { at });
+      expect(menu.inner.map((s) => `${citeStep(s)} ${printExpr(s.to)}`)).toEqual([
+        "9a (De Morgan's theorem) B'(A' + B')",
+      ]);
+      expect(menu.shorter.map((s) => printExpr(s.to))).toContain("(B + AB)'");
+    }
+  });
+
+  it('has no inner group when no bar sits inside the selection', () => {
+    expect(stepsForSelection(e("A'B + C"), { at: [] }).inner).toEqual([]);
+  });
+
+  it('lists a step once even when the selection is the barred term itself', () => {
+    const menu = stepsForSelection(nested, { at: [1] });
+    expect([...menu.shorter, ...menu.others].map((s) => s.law + s.direction)).not.toContain(
+      '9altr',
+    );
+  });
+});
+
 describe('is it simplified', () => {
   it('says so for a minimum, and gives counts only when not', () => {
     const vars = ['A', 'B', 'C', 'D'];

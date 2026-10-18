@@ -1,0 +1,464 @@
+{
+  "format": "lcir.chip",
+  "formatVersion": 5,
+  "id": "full-adder",
+  "name": "Full adder",
+  "version": 1,
+  "pins": [
+    {
+      "id": "pin-in_a",
+      "name": "A",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 0,
+      "boundComponent": "in_a"
+    },
+    {
+      "id": "pin-in_b",
+      "name": "B",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 1,
+      "boundComponent": "in_b"
+    },
+    {
+      "id": "pin-in_cin",
+      "name": "Cin",
+      "dir": "in",
+      "width": 1,
+      "role": "data",
+      "order": 2,
+      "boundComponent": "in_cin"
+    },
+    {
+      "id": "pin-out_s",
+      "name": "S",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 0,
+      "boundComponent": "out_s"
+    },
+    {
+      "id": "pin-out_cout",
+      "name": "Cout",
+      "dir": "out",
+      "width": 1,
+      "role": "data",
+      "order": 1,
+      "boundComponent": "out_cout"
+    }
+  ],
+  "components": [
+    {
+      "id": "in_a",
+      "kind": "inport",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "label": "A",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "in_b",
+      "kind": "inport",
+      "pos": {
+        "x": 48,
+        "y": 112
+      },
+      "label": "B",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "in_cin",
+      "kind": "inport",
+      "pos": {
+        "x": 48,
+        "y": 208
+      },
+      "label": "Cin",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "g_ab_xor",
+      "kind": "xor",
+      "pos": {
+        "x": 152,
+        "y": 64
+      }
+    },
+    {
+      "id": "g_sum",
+      "kind": "xor",
+      "pos": {
+        "x": 272,
+        "y": 96
+      }
+    },
+    {
+      "id": "g_cin_and",
+      "kind": "and",
+      "pos": {
+        "x": 272,
+        "y": 192
+      }
+    },
+    {
+      "id": "g_ab_and",
+      "kind": "and",
+      "pos": {
+        "x": 152,
+        "y": 112
+      }
+    },
+    {
+      "id": "g_carry",
+      "kind": "or",
+      "pos": {
+        "x": 392,
+        "y": 200
+      }
+    },
+    {
+      "id": "out_s",
+      "kind": "outport",
+      "pos": {
+        "x": 392,
+        "y": 104
+      },
+      "label": "S",
+      "params": {
+        "width": 1
+      }
+    },
+    {
+      "id": "out_cout",
+      "kind": "outport",
+      "pos": {
+        "x": 496,
+        "y": 208
+      },
+      "label": "Cout",
+      "params": {
+        "width": 1
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "in_a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": [
+        {
+          "x": 96,
+          "y": 56
+        },
+        {
+          "x": 96,
+          "y": 72
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_ab_xor",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_ab_and",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 112
+        },
+        {
+          "x": 144,
+          "y": 112
+        },
+        {
+          "x": 144,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "g_ab_xor",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 144,
+          "y": 88
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "in_b",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_ab_and",
+        "pin": "b"
+      },
+      "points": [
+        {
+          "x": 144,
+          "y": 136
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "pin",
+        "component": "g_ab_xor",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "points": [
+        {
+          "x": 264,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_sum",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_cin_and",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 264,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "w14",
+      "a": {
+        "kind": "pin",
+        "component": "g_sum",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "id": "w15",
+      "a": {
+        "kind": "pin",
+        "component": "in_cin",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "points": []
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_cin_and",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "g_cin_and",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_carry",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w13",
+      "a": {
+        "kind": "pin",
+        "component": "g_ab_and",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "g_carry",
+        "pin": "b"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 128
+        },
+        {
+          "x": 232,
+          "y": 240
+        },
+        {
+          "x": 384,
+          "y": 240
+        },
+        {
+          "x": 384,
+          "y": 224
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "g_sum",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "out_s",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "g_carry",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "out_cout",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j2",
+      "pos": {
+        "x": 128,
+        "y": 72
+      }
+    },
+    {
+      "id": "j1",
+      "pos": {
+        "x": 144,
+        "y": 120
+      }
+    },
+    {
+      "id": "j3",
+      "pos": {
+        "x": 264,
+        "y": 104
+      }
+    },
+    {
+      "id": "j4",
+      "pos": {
+        "x": 248,
+        "y": 216
+      }
+    }
+  ]
+}

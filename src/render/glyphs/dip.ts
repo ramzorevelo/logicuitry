@@ -24,9 +24,10 @@ const NOTCH_R = 0.75; // * G
 /** Clear lane down the middle for the part number, as a fraction of its font
  *  size: a rotated line costs its cap height in width, not its length. */
 const NAME_LANE = 0.8;
-/** Every package is one body width, as every real 300-mil DIP is: a part's
- *  pin names are fitted to the body, never the body to its longest name. */
-const BODY_W = 9; // * G
+/** One body width per row spacing, as real DIPs are: a part's pin names are
+ *  fitted to the body, never the body to its longest name. */
+const BODY_W = 9; // * G, 300 mil
+const BODY_W_WIDE = 15; // * G, 600 mil
 /** Pin name inset from the body edge. */
 const NAME_INSET = 0.6; // * G
 
@@ -71,7 +72,12 @@ export function dipPinCount(pkg: string): number {
 }
 
 export function isDipPackage(pkg: string | undefined): boolean {
-  return pkg !== undefined && /^DIP\d+$/.test(pkg) && dipPinCount(pkg) % 2 === 0;
+  return pkg !== undefined && /^DIP\d+W?$/.test(pkg) && dipPinCount(pkg) % 2 === 0;
+}
+
+/** A trailing W is the 600 mil row spacing ('DIP24W'), the count still the digits. */
+function bodyWidth(pkg: string | undefined): number {
+  return pkg !== undefined && isDipPackage(pkg) && pkg.endsWith('W') ? BODY_W_WIDE : BODY_W;
 }
 
 /**
@@ -92,7 +98,8 @@ export function dipLayout(input: GeometryInput, theme: Theme): DipLayout {
   const END_PAD = ROW_PITCH * g;
   const rowY = (i: number) => END_PAD + i * ROW_PITCH * g;
   // Each name gets the half body left beside the part number's lane.
-  const column = (BODY_W * g - NAME_LANE * nameFontPx) / 2 - NAME_INSET * g;
+  const bodyW = bodyWidth(input.package) * g;
+  const column = (bodyW - NAME_LANE * nameFontPx) / 2 - NAME_INSET * g;
   const row = (pin: ResolvedPin, number: number, y: number): DipRow => {
     const { text, bar } = dipPinText(pin.label ?? pin.name);
     const fit = column / measureMonoText(text, 1);
@@ -105,7 +112,7 @@ export function dipLayout(input: GeometryInput, theme: Theme): DipLayout {
     .map((pin, i) => row(pin, ordered.length - i, rowY(i)));
 
   const boxLeft = STUB * g;
-  const boxRight = boxLeft + BODY_W * g;
+  const boxRight = boxLeft + bodyW;
   const width = boxRight + STUB * g;
   const height = perSide * ROW_PITCH * g + END_PAD;
 

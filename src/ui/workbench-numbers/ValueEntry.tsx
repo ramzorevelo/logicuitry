@@ -85,6 +85,8 @@ export function ValueEntry({
             <input
               className="field__input mono"
               value={renderDec(value, width, interp)}
+              // A two's complement value needs its minus sign, which an iPhone's digit pad lacks.
+              inputMode={interp === 'unsigned' ? 'numeric' : 'text'}
               spellCheck={false}
               onChange={(e) => onChange(parseDec(e.target.value, width))}
             />

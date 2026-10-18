@@ -31,6 +31,8 @@ interface Token {
   kind: TokenKind;
   text: string;
   offset: number;
+  /** One past the last source character, since a bracketed name's text is shorter than its spelling. */
+  end: number;
 }
 
 const WORDS: Record<string, TokenKind> = {
@@ -58,6 +60,9 @@ const SYMBOLS: Record<string, TokenKind> = {
   ')': ')',
 };
 
+/** A multi-letter name is written `[Sel]` so it reads as one variable. */
+const BRACKET_NAME = /^[A-Za-z][\w.]*$/;
+
 const isLetter = (c: string): boolean => /[A-Za-z]/.test(c);
 const isDigit = (c: string): boolean => /[0-9]/.test(c);
 
@@ -74,13 +79,21 @@ export function tokenize(src: string): Token[] {
     }
     const sym = SYMBOLS[c];
     if (sym) {
-      out.push({ kind: sym, text: c, offset: i });
+      out.push({ kind: sym, text: c, offset: i, end: i + 1 });
       i++;
+      continue;
+    }
+    if (c === '[') {
+      const close = src.indexOf(']', i);
+      const name = close < 0 ? '' : src.slice(i + 1, close);
+      if (!BRACKET_NAME.test(name)) throw new ExprError('a [name] needs a name and a closing ]', i);
+      out.push({ kind: 'var', text: name, offset: i, end: close + 1 });
+      i = close + 1;
       continue;
     }
     if (isDigit(c)) {
       if (c !== '0' && c !== '1') throw new ExprError(`only 0 and 1 are constants, not ${c}`, i);
-      out.push({ kind: 'const', text: c, offset: i });
+      out.push({ kind: 'const', text: c, offset: i, end: i + 1 });
       i++;
       continue;
     }
@@ -88,13 +101,13 @@ export function tokenize(src: string): Token[] {
       const word = /^[A-Za-z]+/.exec(src.slice(i))![0];
       const op = WORDS[word.toUpperCase()];
       if (op) {
-        out.push({ kind: op, text: word, offset: i });
+        out.push({ kind: op, text: word, offset: i, end: i + word.length });
         i += word.length;
         continue;
       }
       let j = i + 1;
       while (j < src.length && isDigit(src[j]!)) j++;
-      out.push({ kind: 'var', text: src.slice(i, j), offset: i });
+      out.push({ kind: 'var', text: src.slice(i, j), offset: i, end: j });
       i = j;
       continue;
     }
@@ -277,7 +290,7 @@ export function printExpr(e: Expr): string {
     case 'const':
       return String(e.value);
     case 'var':
-      return e.name;
+      return SIMPLE_NAME.test(e.name) ? e.name : `[${e.name}]`;
     case 'not':
       return `${wrap(e.a, PRECEDENCE.not)}'`;
     case 'and':
@@ -293,16 +306,44 @@ export function printExpr(e: Expr): string {
   }
 }
 
+const SIMPLE_NAME = /^[A-Za-z][0-9]*$/;
+
 /** A name that is not one letter plus digits (`Cin`, `U3.13`) fuses with its
- *  neighbour when juxtaposed, so a product of it needs a dot. */
+ *  neighbour when juxtaposed, so a drawn product of it needs a dot. */
 function isCompoundName(e: Expr): boolean {
   while (e.kind === 'not') e = e.a;
-  return e.kind === 'var' && !/^[A-Za-z][0-9]*$/.test(e.name);
+  return e.kind === 'var' && !SIMPLE_NAME.test(e.name);
 }
 
 /** Whether a drawn product puts `·` between `prev` and `next`. */
 export function productNeedsDot(prev: Expr, next: Expr): boolean {
   return next.kind === 'const' || isCompoundName(prev) || isCompoundName(next);
+}
+
+/** `src` with every `from` variable spelled `to` (bracketed when it is longer
+ *  than one letter plus digits), or null when `src` is not an expression over
+ *  `names`, never uses `from`, or `to` would merge with a variable already
+ *  there. `names` is what stops a word like `Cout` (C*o*u*t) counting.
+ *  Token-wise, so the rest of the text keeps the spelling the user typed. */
+export function renameVarInExprText(
+  src: string,
+  from: string,
+  to: string,
+  names: ReadonlySet<string>,
+): string | null {
+  if (!BRACKET_NAME.test(to)) return null;
+  const spelled = SIMPLE_NAME.test(to) ? to : `[${to}]`;
+  try {
+    const vars = exprVars(parseExpr(src));
+    if (vars.includes(to) || !vars.every((v) => names.has(v))) return null;
+    const hits = tokenize(src).filter((t) => t.kind === 'var' && t.text === from);
+    if (hits.length === 0) return null;
+    let out = src;
+    for (const t of hits.reverse()) out = out.slice(0, t.offset) + spelled + out.slice(t.end);
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** Disables the NAND-only option, the same restriction Logisim applies. */

@@ -116,7 +116,8 @@ export async function importDocFromFile(file: File): Promise<LibraryDoc> {
 }
 
 export function exportDoc(doc: LibraryDoc, filename: string): void {
-  const blob = new Blob([serializeDocument(doc)], { type: 'application/json' });
+  // Not application/json: Android Chrome appends .json to a JSON download's name.
+  const blob = new Blob([serializeDocument(doc)], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -155,13 +156,38 @@ export function filePickersSupported(): boolean {
 
 export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | undefined> {
   const show = filePicker().showOpenFilePicker;
-  if (!show) return undefined;
+  if (!show) return chooseUploadedFile();
   try {
     const handles = await show({ types: DOC_TYPES, ...(startIn ? { startIn } : {}) });
     return handles[0];
   } catch {
     return undefined; // dismissed
   }
+}
+
+/** The browser's own chooser, for phones and non-Chromium. Must run inside the click that asked
+ *  for it, so nothing may be awaited before `input.click()`. */
+function chooseUploadedFile(): Promise<DocFile | undefined> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = `${BOARD_EXT},${CHIP_EXT}`;
+    input.hidden = true;
+    const done = (file?: File) => {
+      input.remove();
+      resolve(file);
+    };
+    input.addEventListener('change', () => done(input.files?.[0]));
+    input.addEventListener('cancel', () => done());
+    // Older Safari ignores click() on an input that is not in the document.
+    document.body.append(input);
+    input.click();
+  });
+}
+
+/** An uploaded File is a read-only snapshot: it can be opened, never saved back to. */
+export function docFileWritable(file: DocFile): boolean {
+  return !(file instanceof File);
 }
 
 export async function pickSavePath(
@@ -178,6 +204,7 @@ export async function pickSavePath(
 }
 
 export async function readDocFile(file: DocFile): Promise<string> {
+  if (file instanceof File) return file.text();
   return (await asFile(file).getFile()).text();
 }
 

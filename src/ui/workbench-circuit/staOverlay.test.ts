@@ -53,4 +53,30 @@ describe('buildStaOverlay', () => {
     expect(sel.criticalWires).toEqual(new Set(['w1', 'w2', 'w3']));
     expect(sel.criticalWires.has('w4')).toBe(false);
   });
+
+  it("shows a selected register's slowest capture pin, whatever its suffix", () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('t', 'toggle'),
+        comp('n1', 'not'),
+        comp('n2', 'not'),
+        comp('rg', 'register'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['rg', 'clk']),
+        wire('w2', ['t', 'y'], ['rg', 'd']),
+        wire('w3', ['t', 'y'], ['n1', 'a']),
+        wire('w4', ['n1', 'y'], ['n2', 'a']),
+        wire('w5', ['n2', 'y'], ['rg', 'en']),
+      ],
+    });
+    const compiled = compile(b, noLib);
+    const report = analyzeTiming(compiled, { column: 'typ' });
+    const sel = buildStaOverlay(b, compiled, report, new Set(['rg']))!;
+    expect(sel.path.endpoint).toBe('main/rg.en');
+    expect(sel.path.capturePin).toBe('en');
+    expect(sel.criticalWires.has('w5')).toBe(true);
+    expect(sel.labels.get('n2')).toBe('+10 ns');
+  });
 });

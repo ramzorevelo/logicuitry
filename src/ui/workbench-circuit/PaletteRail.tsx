@@ -5,11 +5,29 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
 import { useCompact } from '../compact';
+import { useBackLayer } from '../backStack';
 import { useCoarsePointer } from '../pointerKind';
-import { isBuiltinChipId } from '../../core/parts/packages';
+import { isBuiltinChipDef } from '../../core/parts/packages';
 import { LONG_PRESS_MS } from './touchGestures';
-import { PALETTE, PALETTE_GROUPS, PARTS_GROUP } from './palette';
-import { PaletteGlyph } from './PaletteGlyph';
+import {
+  PALETTE,
+  PALETTE_CHIP_IDS,
+  PALETTE_GROUPS,
+  PARTS_GROUP,
+  findAliases,
+  matchesFind,
+  partCaption,
+  partRows,
+  type PaletteItem,
+} from './palette';
+import { DIP_BOX_W, PaletteGlyph } from './PaletteGlyph';
+import { ToolIcon } from '../components/ToolIcon';
+import type { ChipDef } from '../../core/model/types';
+
+const MY_CHIPS = 'My chips';
+/** Phone only: a tab ahead of the groups whose drawer holds the field. */
+const FIND_TAB = 'Find';
+const ALL_PARTS = 'All';
 
 interface Props {
   paletteRef: React.RefObject<HTMLElement>;
@@ -37,24 +55,23 @@ export function PaletteRail({ paletteRef, width }: Props) {
   // has none of, and an arbitrary default group is the wrong one most of the
   // time. Tapping the open tab closes it again.
   const [openGroup, setOpenGroup] = useState<string>('');
-  const isOpen = useCallback(
-    (group: string) => (compact ? openGroup === group : !collapsed.has(group)),
-    [compact, openGroup, collapsed],
-  );
-  const toggleGroup = useCallback(
-    (group: string) => {
-      if (compact) {
-        setOpenGroup((cur) => (cur === group ? '' : group));
-        return;
-      }
-      setCollapsed((cur) => {
-        const next = new Set(cur);
-        if (!next.delete(group)) next.add(group);
-        return next;
-      });
-    },
-    [compact],
-  );
+  const [query, setQuery] = useState('');
+  const [partsSub, setPartsSub] = useState<string>(ALL_PARTS);
+  const findRef = useRef<HTMLInputElement>(null);
+  const filtering = query.trim() !== '';
+  // On a phone the query lives in the Find drawer alone; the groups there are
+  // never filtered.
+  const filterRail = filtering && !compact;
+
+  // Leaving the Find drawer must not leave behind a filter nobody can see.
+  useEffect(() => {
+    if (compact && openGroup !== FIND_TAB) setQuery('');
+  }, [compact, openGroup]);
+  useEffect(() => {
+    if (compact && openGroup === FIND_TAB) findRef.current?.focus();
+  }, [compact, openGroup]);
+
+  useBackLayer(compact && openGroup ? () => setOpenGroup('') : null);
 
   // The drawer floats over the board, so a press anywhere else is a press
   // outside the menu and dismisses it. Deliberately not consumed: the tool a
@@ -109,17 +126,153 @@ export function PaletteRail({ paletteRef, width }: Props) {
   // "My chips" is whatever this board's author packaged.
   const [parts, chips] = useMemo(() => {
     const all = [...chipLib.values()].sort((a, b) => a.name.localeCompare(b.name));
-    return [all.filter((d) => isBuiltinChipId(d.id)), all.filter((d) => !isBuiltinChipId(d.id))];
+    return [
+      all.filter((d) => isBuiltinChipDef(d) && !PALETTE_CHIP_IDS.has(d.id)),
+      all.filter((d) => !isBuiltinChipDef(d)),
+    ];
   }, [chipLib]);
 
-  // Groups stay mounted and are hidden instead of unmounted: re-expanding one
-  // otherwise rebuilds a canvas per item, and each of those is a full
-  // schematic draw.
-  const groups = [
-    ...PALETTE_GROUPS,
-    ...(parts.length > 0 ? [PARTS_GROUP] : []),
-    ...(chips.length > 0 ? ['My chips'] : []),
-  ];
+  const sections = useMemo<Section[]>(
+    () => [
+      ...PALETTE_GROUPS.map((group) => ({
+        group,
+        rows: [{ entries: PALETTE.filter((i) => i.group === group).map(blockEntry) }],
+      })),
+      ...(parts.length > 0
+        ? [
+            {
+              group: PARTS_GROUP,
+              rows: partRows(parts).map((row) => ({
+                sub: row.sub,
+                entries: row.defs.map(partEntry),
+              })),
+            },
+          ]
+        : []),
+      ...(chips.length > 0 ? [{ group: MY_CHIPS, rows: [{ entries: chips.map(chipEntry) }] }] : []),
+    ],
+    [parts, chips],
+  );
+
+  const matches = (e: Entry) =>
+    matchesFind(query, e.label, e.defId, e.caption, ...findAliases(e.label));
+  const hasMatch = (section: Section) => section.rows.some((r) => r.entries.some(matches));
+  const isOpen = (section: Section) =>
+    compact
+      ? openGroup === section.group
+      : filterRail
+        ? hasMatch(section)
+        : !collapsed.has(section.group);
+  const toggleGroup = (group: string) => {
+    if (compact) {
+      setOpenGroup((cur) => (cur === group ? '' : group));
+      return;
+    }
+    // Every match shows while filtering, and the open state underneath is what
+    // clearing the field returns to, so a click must not change it.
+    if (filterRail) return;
+    setCollapsed((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(group)) next.add(group);
+      return next;
+    });
+  };
+  const offChip = (group: string, sub: string | undefined) =>
+    compact && group === PARTS_GROUP && partsSub !== ALL_PARTS && sub !== partsSub;
+
+  const renderItem = (e: Entry, hidden: boolean) => {
+    const place = (repeat: boolean) =>
+      store.getState().setTool({
+        kind: 'place',
+        componentKind: e.kind,
+        ...(e.params ? { params: e.params } : {}),
+        ...(e.defId ? { defId: e.defId } : {}),
+        ...(repeat ? { repeat: true } : {}),
+      });
+    const active =
+      tool.kind === 'place' &&
+      tool.componentKind === e.kind &&
+      tool.params === e.params &&
+      tool.defId === e.defId;
+    return (
+      <button
+        key={e.key}
+        type="button"
+        hidden={hidden}
+        className={`palette-item${
+          active ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}` : ''
+        }`}
+        disabled={mode === 'bubble'}
+        title={`${e.caption ? `${e.label}, ${e.caption}` : e.label} (${keepPlacing})`}
+        {...holdProps(
+          () => place(false),
+          () => place(true),
+        )}
+      >
+        <PaletteGlyph
+          kind={e.kind}
+          chipLib={chipLib}
+          defId={e.defId}
+          params={e.params}
+          boxWidth={e.glyphWidth}
+        />
+        {e.caption ? (
+          <span className="palette-item__text">
+            <span className="palette-item__label">{e.label}</span>
+            <span className="palette-item__caption">{e.caption}</span>
+          </span>
+        ) : (
+          <span className="palette-item__label">{e.label}</span>
+        )}
+      </button>
+    );
+  };
+
+  const findField = (
+    <div className="palette-find">
+      <ToolIcon name="find" />
+      <input
+        ref={findRef}
+        type="text"
+        className="palette-find__input"
+        placeholder="Find part"
+        aria-label="Find part"
+        autoComplete="off"
+        spellCheck={false}
+        value={query}
+        disabled={mode === 'bubble'}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          // Hands the keys back to the board without cancelling an armed
+          // tool: the second Esc, now on the board, is what cancels.
+          if (e.key !== 'Escape') return;
+          e.preventDefault();
+          setQuery('');
+          e.currentTarget.blur();
+        }}
+      />
+      {query && (
+        <button
+          type="button"
+          className="palette-find__clear"
+          aria-label="Clear filter"
+          title="Clear filter"
+          disabled={mode === 'bubble'}
+          onClick={() => {
+            setQuery('');
+            findRef.current?.focus();
+          }}
+        >
+          <ToolIcon name="cancel" />
+        </button>
+      )}
+    </div>
+  );
+
+  const found =
+    compact && filtering
+      ? sections.flatMap((s) => s.rows.flatMap((r) => r.entries.filter(matches)))
+      : [];
 
   return (
     <aside
@@ -127,11 +280,12 @@ export function PaletteRail({ paletteRef, width }: Props) {
       ref={paletteRef}
       style={width === null ? undefined : { width: `${width}px` }}
     >
-      {/* Compact only: the collapsible headings become a tab row, so all five
-          groups are visible at once and exactly one is open. */}
+      {!compact && findField}
+      {/* Compact only: the collapsible headings become a tab row, so every
+          group is a tap away and exactly one is open. */}
       {compact && (
         <div className="palette-tabs" role="tablist">
-          {groups.map((group) => (
+          {[FIND_TAB, ...sections.map((s) => s.group)].map((group) => (
             <button
               key={group}
               type="button"
@@ -145,90 +299,104 @@ export function PaletteRail({ paletteRef, width }: Props) {
           ))}
         </div>
       )}
-      {PALETTE_GROUPS.map((group) => (
-        <Fragment key={group}>
-          <PaletteSection label={group} open={isOpen(group)} onToggle={() => toggleGroup(group)} />
-          <div className="palette-group" hidden={!isOpen(group)}>
-            {PALETTE.filter((item) => item.group === group).map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className={`palette-item${
-                  tool.kind === 'place' &&
-                  tool.componentKind === item.kind &&
-                  tool.params === item.params
-                    ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}`
-                    : ''
-                }`}
-                disabled={mode === 'bubble'}
-                title={`${item.label} (${keepPlacing})`}
-                {...holdProps(
-                  () =>
-                    store.getState().setTool({
-                      kind: 'place',
-                      componentKind: item.kind,
-                      ...(item.params ? { params: item.params } : {}),
-                    }),
-                  () =>
-                    store.getState().setTool({
-                      kind: 'place',
-                      componentKind: item.kind,
-                      ...(item.params ? { params: item.params } : {}),
-                      repeat: true,
-                    }),
-                )}
-              >
-                <PaletteGlyph kind={item.kind} chipLib={chipLib} params={item.params} />
-                <span className="palette-item__label">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </Fragment>
-      ))}
-      {[[PARTS_GROUP, parts] as const, ['My chips', chips] as const].map(([label, defs]) =>
-        defs.length === 0 ? null : (
-          <Fragment key={label}>
-            <PaletteSection
-              label={label}
-              open={isOpen(label)}
-              onToggle={() => toggleGroup(label)}
-            />
-            <div className="palette-group" hidden={!isOpen(label)}>
-              {defs.map((def) => (
-                <button
-                  key={def.id}
-                  type="button"
-                  className={`palette-item${
-                    tool.kind === 'place' && tool.componentKind === 'chip' && tool.defId === def.id
-                      ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}`
-                      : ''
-                  }`}
-                  disabled={mode === 'bubble'}
-                  title={`${def.name} (${keepPlacing})`}
-                  {...holdProps(
-                    () =>
-                      store
-                        .getState()
-                        .setTool({ kind: 'place', componentKind: 'chip', defId: def.id }),
-                    () =>
-                      store.getState().setTool({
-                        kind: 'place',
-                        componentKind: 'chip',
-                        defId: def.id,
-                        repeat: true,
-                      }),
-                  )}
-                >
-                  <PaletteGlyph kind="chip" chipLib={chipLib} defId={def.id} />
-                  <span className="palette-item__label">{def.name}</span>
-                </button>
-              ))}
+      {compact && (
+        <div className="palette-group" hidden={openGroup !== FIND_TAB}>
+          {findField}
+          {found.length > 0 ? (
+            <div className="palette-strip">{found.map((e) => renderItem(e, false))}</div>
+          ) : (
+            <p className="palette-empty">
+              {filtering ? 'No part matches.' : 'Type a part number or a function.'}
+            </p>
+          )}
+        </div>
+      )}
+      {/* Groups stay mounted and are hidden instead of unmounted: re-expanding
+          one otherwise rebuilds a canvas per item. */}
+      {sections.map((section) => {
+        const { group, rows } = section;
+        const open = isOpen(section);
+        return (
+          <Fragment key={group}>
+            {(!filterRail || open) && (
+              <PaletteSection label={group} open={open} onToggle={() => toggleGroup(group)} />
+            )}
+            <div className="palette-group" hidden={!open}>
+              {compact && group === PARTS_GROUP && (
+                <div className="palette-chips" role="group" aria-label="Function">
+                  {[ALL_PARTS, ...rows.flatMap((r) => (r.sub ? [r.sub] : []))].map((sub) => (
+                    <button
+                      key={sub}
+                      type="button"
+                      className="palette-chip"
+                      aria-pressed={partsSub === sub}
+                      onClick={() => setPartsSub(sub)}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="palette-strip">
+                {rows.map((row) => {
+                  const off = offChip(group, row.sub);
+                  return (
+                    <Fragment key={row.sub ?? group}>
+                      {row.sub && (
+                        <div
+                          className="palette-subhead"
+                          hidden={off || (filterRail && !row.entries.some(matches))}
+                        >
+                          {row.sub}
+                        </div>
+                      )}
+                      {row.entries.map((e) => renderItem(e, off || (filterRail && !matches(e))))}
+                    </Fragment>
+                  );
+                })}
+              </div>
             </div>
           </Fragment>
-        ),
+        );
+      })}
+      {filterRail && !sections.some(hasMatch) && (
+        <p className="palette-empty">No part matches. Esc clears the filter.</p>
       )}
     </aside>
   );
+}
+
+interface Entry {
+  key: string;
+  kind: PaletteItem['kind'];
+  label: string;
+  caption?: string | undefined;
+  params?: PaletteItem['params'];
+  defId?: string | undefined;
+  glyphWidth?: number | undefined;
+}
+
+interface Section {
+  group: string;
+  rows: { sub?: string; entries: Entry[] }[];
+}
+
+function blockEntry(item: PaletteItem): Entry {
+  return {
+    key: `block:${item.label}`,
+    kind: item.kind,
+    label: item.label,
+    params: item.params,
+    defId: item.defId,
+  };
+}
+
+function chipEntry(def: ChipDef): Entry {
+  return { key: `chip:${def.id}`, kind: 'chip', label: def.name, defId: def.id };
+}
+
+function partEntry(def: ChipDef): Entry {
+  return { ...chipEntry(def), caption: partCaption(def), glyphWidth: DIP_BOX_W };
 }
 
 function PaletteSection(props: { label: string; open: boolean; onToggle: () => void }) {

@@ -21,7 +21,7 @@ import {
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
 import { Simulator } from '../../core/sim/kernel';
-import { builtinChipLibrary, isBuiltinChipId } from '../../core/parts/packages';
+import { builtinChipLibrary, isBuiltinChipDef, isBuiltinChipId } from '../../core/parts/packages';
 import { idealDelay, datasheetDelay } from '../../core/sim/delay';
 import * as bv from '../../core/value/busValue';
 import { busSignalState, type SignalState } from '../../render/theme';
@@ -80,7 +80,12 @@ import {
   withOutputBubble,
   type GateFamilyKind,
 } from '../../core/gates/bubbleModel';
-import { boardDiffRows } from '../../core/gates/verify';
+import { renameVarInExprText } from '../../core/boolean/expr';
+import {
+  boardDiffRows,
+  INPUT_TERMINAL_KINDS,
+  OUTPUT_TERMINAL_KINDS,
+} from '../../core/gates/verify';
 import { commitPush, previewPush, type PushMove, type PushPreview } from './bubble/pushController';
 import type { NetChangeRecord } from '../../core/sim/kernel';
 import { buildReplayIndex, replayNetValue, type ReplayIndex } from '../../core/timing/traceView';
@@ -364,6 +369,11 @@ interface CircuitState {
   setSelection: (ids: Set<string>) => void;
   /** The circuit body of the active tab: the board, or an open ChipDef. */
   activeCircuit: () => Circuit;
+  /** Whether the active tab's history has a step to undo or redo. Read on render, which `rev` drives. */
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  /** Some open chip tab holds edits its history could undo; replacing the board closes them all. */
+  hasTabEdits: () => boolean;
   openDefTab: (defId: string, prefix: string, breadcrumb: string) => void;
   /** No-op (dialog opens instead) when the tab's own undo history has at
    *  least one committed command -- see `resolveTabClose`. */
@@ -380,9 +390,9 @@ interface CircuitState {
   /** Adds a freshly built def to the in-memory library; rejects a cycle. */
   commitNewChip: (def: ChipDef) => { ok: true } | { ok: false; error: string };
   /** Bulk-load defs read from the library folder. Merges over what is already
-   *  in memory (a packaged-but-unsaved chip must survive connecting a folder)
-   *  and bumps `rev`, since the canvas redraw effect watches `rev` and a load
-   *  that lands after first paint would otherwise draw nothing. */
+   *  in memory (a packaged-but-unsaved chip must survive connecting a folder).
+   *  Leaves `rev` alone: a library load is not a board change, so nothing
+   *  watching `rev` (autosave) need run. The canvas redraws off `chipLib`. */
   loadChipDefs: (
     defs: readonly ChipDef[],
   ) => { ok: true; count: number } | { ok: false; error: string };
@@ -709,6 +719,57 @@ let replayIdx: ReplayIndex | null = null;
 const delayFor = (t: TimingSetting) =>
   t.mode === 'datasheet' ? datasheetDelay(t.datasheet) : idealDelay;
 
+/** Ids among `incoming` that take a built-in part's place for the first time. */
+function shadowedBuiltins(lib: ChipLibrary, incoming: readonly ChipDef[]): string[] {
+  return incoming
+    .filter((def) => {
+      const current = lib.get(def.id);
+      return isBuiltinChipId(def.id) && current !== undefined && isBuiltinChipDef(current);
+    })
+    .map((def) => def.id);
+}
+
+/**
+ * Bends drawn for a part's old pin side no longer lead anywhere sensible once
+ * it turns or mirrors, so its wires re-route from the new side. A tapped wire
+ * keeps its bends (its taps sit on them), and so does one in `moved`, whose
+ * bends the caller turned along with the part.
+ */
+function clearTurnedBends(
+  d: Circuit,
+  turned: (componentId: string) => boolean,
+  moved: ReadonlySet<string> = new Set(),
+): void {
+  const onTurned = (end: WireEnd) => end.kind === 'pin' && turned(end.component);
+  const tapped = new Set(
+    d.wires.flatMap((w) => [w.a, w.b].flatMap((e) => (e.kind === 'tap' ? [e.wire] : []))),
+  );
+  d.wires = d.wires.map((w) =>
+    w.points.length > 0 && (onTurned(w.a) || onTurned(w.b)) && !tapped.has(w.id) && !moved.has(w.id)
+      ? { ...w, points: [] }
+      : w,
+  );
+}
+
+const STRUCTURAL_KEYS = new Set(['delay', 'enableTiming']);
+
+/**
+ * A copy taken out of an opened built-in part is an ordinary gate: it must
+ * not keep the mark that exempts the part's power gate from any delay.
+ */
+function withoutStructuralMark(c: Component): Component {
+  if (c.params?.['delay'] === undefined) return c;
+  const params = Object.fromEntries(
+    Object.entries(c.params).filter(([key]) => !STRUCTURAL_KEYS.has(key)),
+  );
+  return { ...c, params };
+}
+
+function shadowNotice(ids: readonly string[]): { error?: string } {
+  if (ids.length === 0) return {};
+  return { error: `chips: your ${ids.join(', ')} replaces the built-in part of the same name` };
+}
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function omitPos(v: Record<string, unknown>): Record<string, unknown> {
@@ -822,18 +883,34 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     return get().chipLib.get(tab.defId) ?? { components: [], wires: [], junctions: [] };
   };
 
+  // Undo can remove what was selected, and a stale id keeps the phone action bar up with dead
+  // buttons.
+  const dropStaleSelection = () => {
+    const { selection } = get();
+    const c = activeCircuit();
+    const live = new Set([
+      ...c.components.map((x) => x.id),
+      ...c.wires.map((x) => x.id),
+      ...c.junctions.map((x) => x.id),
+      ...(c.groups ?? []).map((x) => x.id),
+    ]);
+    if ([...selection].every((id) => live.has(id))) return;
+    set({ selection: new Set([...selection].filter((id) => live.has(id))) });
+  };
+
   // Re-derive a def's boundary pins after an edit, reject the edit if it would
   // introduce a chip-def reference cycle, and detach any wire the removal of a
   // pin stranded (across the board and every other def in the library).
-  const commitDefEdit = (defId: string, draft: Circuit) => {
+  /** False when the edit is refused, so the caller keeps it out of history. */
+  const commitDefEdit = (defId: string, draft: Circuit): boolean => {
     const st = get();
     const def = st.chipLib.get(defId);
-    if (!def) return;
+    if (!def) return false;
     // A built-in part is generated from its datasheet pinout: opening one to
     // see why the rails matter is the point, editing it is not.
-    if (isBuiltinChipId(defId)) {
-      set({ error: `${defId} is a built-in part and cannot be edited` });
-      return;
+    if (isBuiltinChipDef(def)) {
+      set({ error: `${def.name} is a built-in part and cannot be edited` });
+      return false;
     }
     const { pins, removed, renamed } = derivePins(def.pins, draft.components);
     // A rename derivePins couldn't apply (collision with another surviving
@@ -857,7 +934,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const cycleError = findCycle(candidateLib);
     if (cycleError) {
       set({ error: cycleError });
-      return;
+      return false;
     }
 
     let board = st.board;
@@ -897,6 +974,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       rev: s.rev + 1,
     }));
     sim = null;
+    return true;
   };
 
   // A transient error (`label:`, `timing:`, `bubble mode:`) is a one-shot
@@ -941,55 +1019,53 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     collapseJunctions(draft, () => genId('w'), resolveEnd);
     const cmd = diffCircuits(before, draft, label);
     if (cmd.items.length === 0) return;
+    if (tab.kind !== 'board') {
+      if (commitDefEdit(tab.defId, draft)) historyFor(tab.id).commit(cmd);
+      return;
+    }
     historyFor(tab.id).commit(cmd);
-    if (tab.kind === 'board') {
-      // A pure-position diff (drag) never touches connectivity, so leave a
-      // live sim powered and running through it (P0.4). A render-only param
-      // (an LED's colour) is the same case: nothing compiled reads it. A
-      // stimulus param is applied by patching the live sim instead. Only a
-      // real topology change (place/delete/rewire/width/arity) resets power.
-      const effects = cmd.items.map(simEffectOfItem);
-      const topologyChanged = effects.includes('topology');
-      const liveParamItems = topologyChanged
-        ? []
-        : cmd.items.filter((_, i) => effects[i] === 'live');
-      set((s) => ({
-        board: { ...s.board, ...draft },
-        powered: topologyChanged ? false : s.powered,
-        // STA overlay is view-state over a specific compile; a topology edit
-        // invalidates it (spec choice: clear, don't auto-recompute).
-        staReport: topologyChanged ? null : s.staReport,
-        replayTimePs: topologyChanged ? null : s.replayTimePs,
-        rev: s.rev + 1,
-      }));
-      if (!topologyChanged && liveParamItems.length > 0 && sim) {
-        // Params evaluate() re-reads: patch the compiled primitive and wake it,
-        // the same path a switch flip takes, so the board stays powered.
-        for (const item of liveParamItems) {
-          const after = item.after as unknown as Component | undefined;
-          if (!after) continue;
-          const pi = sim.compiled.componentToPrimitive.get(`main/${after.id}`);
-          if (pi === undefined) continue;
-          sim.sim.setPrimitiveParamsAt(pi, (after.params ?? {}) as never);
-        }
-        replayIdx = null;
-        if (!get().running) sim.sim.settle();
-        set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+    // A pure-position diff (drag) never touches connectivity, so leave a
+    // live sim powered and running through it (P0.4). A render-only param
+    // (an LED's colour) is the same case: nothing compiled reads it. A
+    // stimulus param is applied by patching the live sim instead. Only a
+    // real topology change (place/delete/rewire/width/arity) resets power.
+    const effects = cmd.items.map(simEffectOfItem);
+    const topologyChanged = effects.includes('topology');
+    const liveParamItems = topologyChanged ? [] : cmd.items.filter((_, i) => effects[i] === 'live');
+    set((s) => ({
+      board: { ...s.board, ...draft },
+      powered: topologyChanged ? false : s.powered,
+      // STA overlay is view-state over a specific compile; a topology edit
+      // invalidates it (spec choice: clear, don't auto-recompute).
+      staReport: topologyChanged ? null : s.staReport,
+      replayTimePs: topologyChanged ? null : s.replayTimePs,
+      rev: s.rev + 1,
+    }));
+    if (!topologyChanged && liveParamItems.length > 0 && sim) {
+      // Params evaluate() re-reads: patch the compiled primitive and wake it,
+      // the same path a switch flip takes, so the board stays powered.
+      for (const item of liveParamItems) {
+        const after = item.after as unknown as Component | undefined;
+        if (!after) continue;
+        const pi = sim.compiled.componentToPrimitive.get(`main/${after.id}`);
+        if (pi === undefined) continue;
+        sim.sim.setPrimitiveParamsAt(pi, (after.params ?? {}) as never);
       }
-      if (topologyChanged) {
-        captureSwitchState();
-        sim = null;
-        replayIdx = null;
-        // A stale mismatch/compile-error from an earlier edit shouldn't
-        // outlive this one -- re-validate against the real (just-committed)
-        // board instead of optimistically clearing, so a delete/rewire that
-        // *doesn't* actually fix the underlying problem doesn't silently
-        // drop the warning either. Covers every topology-changing action
-        // generically (place/delete/rewire/param), not just width edits.
-        checkWidthMismatch('');
-      }
-    } else {
-      commitDefEdit(tab.defId, draft);
+      replayIdx = null;
+      if (!get().running) sim.sim.settle();
+      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+    }
+    if (topologyChanged) {
+      captureSwitchState();
+      sim = null;
+      replayIdx = null;
+      // A stale mismatch/compile-error from an earlier edit shouldn't
+      // outlive this one -- re-validate against the real (just-committed)
+      // board instead of optimistically clearing, so a delete/rewire that
+      // *doesn't* actually fix the underlying problem doesn't silently
+      // drop the warning either. Covers every topology-changing action
+      // generically (place/delete/rewire/param), not just width edits.
+      checkWidthMismatch('');
     }
   };
 
@@ -1967,6 +2043,23 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         else next.label = trimmed;
         return next;
       });
+      // A built output is labelled with its expression, which would otherwise
+      // keep the old input name after the rename.
+      if (trimmed && comp.label && INPUT_TERMINAL_KINDS.has(comp.kind)) {
+        const inputNames = new Set(
+          d.components
+            .filter((c) => INPUT_TERMINAL_KINDS.has(c.kind) && c.group === comp.group && c.label)
+            .map((c) => c.label!),
+        );
+        inputNames.add(comp.label);
+        d.components = d.components.map((c) => {
+          if (!OUTPUT_TERMINAL_KINDS.has(c.kind) || c.group !== comp.group) return c;
+          // A bare name is a shared net label, not a built expression.
+          if (!c.label || c.label === comp.label) return c;
+          const next = renameVarInExprText(c.label, comp.label!, trimmed, inputNames);
+          return next === null ? c : { ...c, label: next };
+        });
+      }
       const dataPin = dataPinOf(comp.kind);
       if (trimmed && dataPin) conflict = syncLabels(d, [{ component: id, pin: dataPin }]);
       else if (trimmed) conflict = syncOutputLabels(d, id, trimmed);
@@ -2111,6 +2204,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     setTool: (tool) => set({ tool }),
     setSelection: (selection) => set({ selection }),
     activeCircuit,
+    canUndo: () => historyFor(activeTab().id).canUndo,
+    canRedo: () => historyFor(activeTab().id).canRedo,
+    hasTabEdits: () =>
+      get().tabs.some((t) => t.kind === 'def' && historyByTab.get(t.id)?.canUndo === true),
 
     openDefTab: (defId, prefix, breadcrumb) => {
       const existing = get().tabs.find(
@@ -2178,6 +2275,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       replayIdx = null;
       set((st) => ({
         board,
+        // The saved timing wins; the pref only seeds a New board.
+        timing: board.timing,
         tabs: [{ id: 'board', kind: 'board' }],
         activeTabId: 'board',
         selection: new Set<string>(),
@@ -2201,7 +2300,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       candidateLib.set(def.id, def);
       const cycleError = findCycle(candidateLib);
       if (cycleError) return { ok: false, error: cycleError };
-      set({ chipLib: candidateLib });
+      const shadowed = shadowedBuiltins(get().chipLib, [def]);
+      set({ chipLib: candidateLib, ...shadowNotice(shadowed) });
       return { ok: true };
     },
 
@@ -2211,7 +2311,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       for (const def of defs) candidateLib.set(def.id, def);
       const cycleError = findCycle(candidateLib);
       if (cycleError) return { ok: false, error: cycleError };
-      set((st) => ({ chipLib: candidateLib, rev: st.rev + 1 }));
+      const shadowed = shadowedBuiltins(get().chipLib, defs);
+      set({ chipLib: candidateLib, ...shadowNotice(shadowed) });
       return { ok: true, count: defs.length };
     },
 
@@ -2400,7 +2501,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         };
         for (const c of slice.components)
           d.components.push({
-            ...c,
+            ...withoutStructuralMark(c),
             id: idMap.get(c.id)!,
             ...(c.label && c.kind !== 'netlabel' ? { label: relabel(c.label) } : {}),
             pos: { x: c.pos.x + offset.x, y: c.pos.y + offset.y },
@@ -2451,6 +2552,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           const r = results.get(c.id);
           return r ? { ...c, pos: r.pos, rot: r.rot } : c;
         });
+        clearTurnedBends(d, (id) => results.has(id));
       });
     },
 
@@ -2481,6 +2583,13 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           if (!u) return w;
           return { ...w, points: u.points, ...(u.a ? { a: u.a } : {}), ...(u.b ? { b: u.b } : {}) };
         });
+        // A wire with both ends inside the selection turned rigidly with it; one leaving it re-routes.
+        const inside = (e: WireEnd) =>
+          e.kind === 'pin'
+            ? compById.has(e.component)
+            : e.kind !== 'junction' || juncById.has(e.junction);
+        const rigid = d.wires.filter((w) => wireById.has(w.id) && inside(w.a) && inside(w.b));
+        clearTurnedBends(d, (id) => compById.has(id), new Set(rigid.map((w) => w.id)));
       });
     },
 
@@ -2523,6 +2632,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (sel.size === 0) return;
       edit('mirror', (d) => {
         d.components = d.components.map((c) => (sel.has(c.id) ? { ...c, mirror: !c.mirror } : c));
+        clearTurnedBends(d, (id) => sel.has(id));
       });
     },
 
@@ -3192,6 +3302,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       } else {
         commitDefEdit(tab.defId, draft);
       }
+      dropStaleSelection();
     },
 
     redo: () => {
@@ -3207,6 +3318,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       } else {
         commitDefEdit(tab.defId, draft);
       }
+      dropStaleSelection();
     },
 
     setTiming: (t) => {

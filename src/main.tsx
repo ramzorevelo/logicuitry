@@ -15,8 +15,10 @@ import { MenuProvider } from './ui/menu/MenuProvider';
 import { applyTheme } from './render/theme';
 import { getPrefs } from './ui/prefs';
 import { installErrorLog } from './ui/report/errorLog';
+import { initBackStack } from './ui/backStack';
 
 installErrorLog();
+initBackStack();
 
 // Before first paint, so a non-default theme never flashes the light palette.
 applyTheme(getPrefs().defaultTheme);

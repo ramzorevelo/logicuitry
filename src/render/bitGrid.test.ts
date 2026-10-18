@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  annotationRowH,
+  borrowBandH,
+  topBandH,
   bitAtPoint,
   columnAtPoint,
   defaultMetrics,
@@ -121,5 +124,13 @@ describe('weightLabel', () => {
     expect(nibble).toEqual(['8', '4', '2', '1', '8', '4', '2', '1']);
     const triplet = [5, 4, 3, 2, 1, 0].map((b) => weightLabel(b, 'triplet', true));
     expect(triplet).toEqual(['4', '2', '1', '4', '2', '1']);
+  });
+});
+
+describe('annotationRowH', () => {
+  it('keeps the default band and grows with a presentation-size cell', () => {
+    expect(annotationRowH(defaultMetrics.cellH)).toBe(topBandH);
+    expect(annotationRowH(defaultMetrics.cellH * 2)).toBeGreaterThan(22);
+    expect(borrowBandH(68)).toBe(annotationRowH(68) * 2);
   });
 });

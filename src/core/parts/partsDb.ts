@@ -7,6 +7,20 @@ export interface TypMax {
   max: number;
 }
 
+/** One arc's figures. An async arc may publish one edge only (CLR to Q falls, never rises). */
+export interface ArcRow {
+  tplh?: TypMax;
+  tphl?: TypMax;
+}
+
+/** A 3-state output's enable (Z to a level) and disable (a level to Z) times. */
+export interface EnableRow {
+  tpzh: TypMax;
+  tpzl: TypMax;
+  tphz: TypMax;
+  tplz: TypMax;
+}
+
 export interface PartEntry {
   part: string;
   primitive: string;
@@ -16,9 +30,13 @@ export interface PartEntry {
   tphl_worst?: TypMax;
   tplh_clk_q?: TypMax;
   tphl_clk_q?: TypMax;
-  paths?: Record<string, { tplh: TypMax; tphl: TypMax }>;
+  paths?: Record<string, ArcRow>;
+  enable?: EnableRow;
   setup_min?: number;
   hold_min?: number;
+  /** Per-class minimums where the datasheet splits them; a missing class takes `setup_min`. */
+  setup?: Partial<Record<SetupClass, number>>;
+  hold?: Partial<Record<SetupClass, number>>;
   verified: boolean;
   source: string;
 }
@@ -28,6 +46,9 @@ export interface PartsDb {
   levels: { vcc: number; vohMin: number; volMax: number; vihMin: number; vilMax: number };
   parts: PartEntry[];
 }
+
+/** Which setup and hold row a sampled pin is held to. */
+export type SetupClass = 'data' | 'enable' | 'load' | 'clear';
 
 export type DatasheetColumn = 'typ' | 'max';
 export type OutputEdge = 'lh' | 'hl';
@@ -46,6 +67,14 @@ export function partsDb(): PartsDb {
 
 export function getPart(part: string): PartEntry | undefined {
   return byPart.get(part);
+}
+
+/**
+ * A primitive's datasheet binding, only once the part's row is in the table:
+ * an unlisted part would label a fallback figure with a real part number.
+ */
+export function listedPart(part: string): string | undefined {
+  return byPart.has(part) ? part : undefined;
 }
 
 /**
@@ -68,8 +97,10 @@ export function propagationNs(
   if (chosen) return column(chosen, col);
   if (p.paths) {
     let slowest = 0;
-    for (const path of Object.values(p.paths))
-      slowest = Math.max(slowest, column(edge === 'lh' ? path.tplh : path.tphl, col));
+    for (const path of Object.values(p.paths)) {
+      const fig = edge === 'lh' ? path.tplh : path.tphl;
+      if (fig) slowest = Math.max(slowest, column(fig, col));
+    }
     return slowest || undefined;
   }
   return undefined;
@@ -89,6 +120,22 @@ export function typPublished(part: string): boolean {
   return present.length === 0 || present.some((f) => f.typ !== undefined);
 }
 
+/** Setup and hold minimums in ns for one class of sampled pin; 0 when unpublished. */
+export function setupHoldNs(
+  entry: PartEntry | undefined,
+  cls: SetupClass,
+): { setupNs: number; holdNs: number } {
+  return {
+    setupNs: entry?.setup?.[cls] ?? entry?.setup_min ?? 0,
+    holdNs: entry?.hold?.[cls] ?? entry?.hold_min ?? 0,
+  };
+}
+
+/** 0.35 x typ in whole ns, or to 0.1 ns where whole ns would round a real delay to zero. */
+export function estimatedContaminationNs(typNs: number): number {
+  return Math.round(0.35 * typNs) || Math.round(3.5 * typNs) / 10;
+}
+
 /**
  * Contamination delay in ns. 74LS datasheets guarantee no minimums, so the
  * documented estimate is 0.35 x typical propagation; surfaces with an
@@ -97,5 +144,5 @@ export function typPublished(part: string): boolean {
  */
 export function contaminationNs(part: string, edge: OutputEdge): number | undefined {
   const tpd = propagationNs(part, edge, 'typ');
-  return tpd === undefined ? undefined : Math.round(0.35 * tpd);
+  return tpd === undefined ? undefined : estimatedContaminationNs(tpd);
 }

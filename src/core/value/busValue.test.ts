@@ -100,3 +100,12 @@ describe('slice / concat', () => {
     ).toThrow();
   });
 });
+
+describe('agree (outcomes tried both ways)', () => {
+  const s = bv.fromString;
+  it('keeps the bits every value holds known and equal, X elsewhere', () => {
+    expect(bv.toString(bv.agree([s('1010'), s('1001')], 4), 4)).toBe('10XX');
+    expect(bv.toString(bv.agree([s('1010')], 4), 4)).toBe('1010');
+    expect(bv.toString(bv.agree([s('1X10'), s('1010'), s('Z010')], 4), 4)).toBe('XX10');
+  });
+});

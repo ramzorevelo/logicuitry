@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { comp, wire, board } from '../model/testFixtures';
-import type { ChipLibrary } from '../model/types';
+import type { ChipLibrary, Component } from '../model/types';
 import { analysisTablesOf, boardDiffRows, truthTableOf } from './verify';
 
 const noLib: ChipLibrary = new Map();
@@ -151,4 +151,47 @@ describe('analysisTablesOf across a net-label name join', () => {
     expect(analysisTablesOf(split, noLib)[0]!.table!.inputPaths.length).toBe(2);
     expect(analysisTablesOf(joined, noLib)[0]!.table!.inputPaths.length).toBe(1);
   });
+});
+
+describe('stored state refuses a truth table', () => {
+  const stateful: [string, string, string][] = [
+    ['dff', 'd', 'q'],
+    ['dlatch', 'd', 'q'],
+    ['register', 'd', 'q'],
+    ['srlatch', 's', 'q'],
+    ['counter', 'clk', 'tc'],
+    ['shiftreg', 'si', 'so'],
+  ];
+
+  for (const [kind, inPin, outPin] of stateful) {
+    // A gate beside the stateful part, on its own output, must still analyze.
+    const b = board({
+      components: [
+        comp('a', 'toggle', undefined, 'A'),
+        comp('b', 'toggle', undefined, 'B'),
+        comp('u', kind as Component['kind']),
+        comp('g', 'not'),
+        comp('l1', 'led', undefined, 'Y1'),
+        comp('l2', 'led', undefined, 'Y2'),
+      ],
+      wires: [
+        wire('w1', ['a', 'y'], ['u', inPin]),
+        wire('w2', ['u', outPin], ['l1', 'a']),
+        wire('w3', ['b', 'y'], ['g', 'a']),
+        wire('w4', ['g', 'y'], ['l2', 'a']),
+      ],
+    });
+
+    it(`${kind}: Analyze refuses the output it feeds and keeps the other`, () => {
+      const [fed, other] = analysisTablesOf(b, noLib);
+      expect(fed!.table).toBeNull();
+      expect(fed!.error).toBe('not purely combinational: main/u stores state');
+      expect(other!.error).toBeNull();
+      expect(other!.table!.rows.length).toBe(2);
+    });
+
+    it(`${kind}: bubble verify refuses the board`, () => {
+      expect(() => boardDiffRows(b, b, noLib)).toThrow(/stores state/);
+    });
+  }
 });

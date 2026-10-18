@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { familyLevels, interopMargins, marginSteps, selfMargins } from './noiseMargins';
+import {
+  familyLevels,
+  formatVolts,
+  interopMargins,
+  marginSteps,
+  selfMargins,
+} from './noiseMargins';
 
 describe('noiseMargins', () => {
   it('computes 74LS self margins from the parts DB levels', () => {
@@ -79,5 +85,19 @@ describe('marginSteps', () => {
   it('marks the failing term when 74LS drives 74HC, and passes into 74HCT', () => {
     expect(marginSteps(f['74LS']!, f['74HC']!).find((s) => s.label === 'NMH')!.ok).toBe(false);
     expect(marginSteps(f['74LS']!, f['74HCT']!).every((s) => s.ok)).toBe(true);
+  });
+});
+
+describe('formatVolts', () => {
+  it('writes a negative margin with the minus sign, not a hyphen', () => {
+    expect(formatVolts(-0.8)).toBe('−0.80 V');
+    expect(formatVolts(1)).toBe('1.00 V');
+    expect(formatVolts(-0.001)).toBe('0.00 V');
+  });
+
+  it('is what a failing worked step prints', () => {
+    const f = familyLevels();
+    const nmh = marginSteps(f['74LS']!, f['74HC']!).find((s) => s.label === 'NMH')!;
+    expect(nmh.result.startsWith('−')).toBe(true);
   });
 });

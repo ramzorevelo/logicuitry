@@ -57,6 +57,24 @@
   border-radius: var(--radius);
 }
 
+.vtc-plot--pending {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: calc(var(--space-unit) * 2);
+  box-sizing: border-box;
+  padding: calc(var(--space-unit) * 3);
+  max-width: 100%;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  text-align: center;
+  border-style: dashed;
+}
+
+.vtc-plot__error {
+  color: var(--warn);
+}
+
 /* Secondary panel: spacing + a subtle side rule, not a full box (design-system:
    only the primary instrument gets the border/surface box). */
 .metrics-panel {
@@ -227,6 +245,11 @@
 
 /* A drag on the canvas zooms and pans the plot rather than scrolling the page,
    which is what keeps the controls around it still. */
+/* Shares the row with the metrics panel and takes what is left, which is the room a plot grows into. */
+.devicelab__main > .plot-box {
+  flex: 1 1 0;
+}
+
 .plot-box canvas {
   touch-action: none;
 }

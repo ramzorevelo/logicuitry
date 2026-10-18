@@ -7,7 +7,6 @@
 
 import { useSyncExternalStore } from 'react';
 
-let revision = 0;
 let observer: MutationObserver | null = null;
 const subscribers = new Set<() => void>();
 
@@ -15,7 +14,6 @@ function subscribe(onChange: () => void): () => void {
   subscribers.add(onChange);
   if (!observer) {
     observer = new MutationObserver(() => {
-      revision++;
       for (const s of [...subscribers]) s();
     });
     observer.observe(document.documentElement, {
@@ -32,10 +30,13 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-export function themeRevision(): number {
-  return revision;
+/** Read from the attributes themselves, not counted by the observer: a count missed every
+ *  change made while nothing was subscribed, such as T pressed on another workbench. */
+export function themeRevision(): string {
+  const root = document.documentElement;
+  return `${root.getAttribute('data-theme') ?? ''}|${root.className}`;
 }
 
-export function useThemeRevision(): number {
+export function useThemeRevision(): string {
   return useSyncExternalStore(subscribe, themeRevision, themeRevision);
 }

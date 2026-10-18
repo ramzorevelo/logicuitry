@@ -55,6 +55,33 @@ describe('pinViewGroupsFor', () => {
     expect(pinViewGroupsFor('encoder', { addressBits: 2 }).map((g) => g.key)).toEqual(['i', 'a']);
   });
 
+  it('adder expands a, b and sum; comparator a and b; both start collapsed', () => {
+    expect(pinViewGroupsFor('adder', {}).map((g) => g.key)).toEqual(['a', 'b', 'sum']);
+    expect(pinViewGroupsFor('comparator', {}).map((g) => g.key)).toEqual(['a', 'b']);
+    expect(currentPinView('adder', {})).toEqual({
+      a: 'collapsed',
+      b: 'collapsed',
+      sum: 'collapsed',
+    });
+    expect(currentPinView('comparator', { pinView: 'a=expanded' })).toEqual({
+      a: 'expanded',
+      b: 'collapsed',
+    });
+  });
+
+  it('counter and shift reg expand d (with load) and q (when it exists) to lanes', () => {
+    const keys = (kind: string, p: Record<string, number | boolean>) =>
+      pinViewGroupsFor(kind, p).map((g) => g.key);
+    expect(keys('counter', { width: 4 })).toEqual(['q']);
+    expect(keys('counter', { width: 4, hasLoad: true })).toEqual(['d', 'q']);
+    expect(keys('counter', { width: 1, hasLoad: true })).toEqual([]);
+    expect(keys('shiftreg', { width: 8, hasLoad: true, parallelOut: false })).toEqual(['d']);
+    expect(currentPinView('counter', { width: 4, hasLoad: true, pinView: 'q=expanded' })).toEqual({
+      d: 'collapsed',
+      q: 'expanded',
+    });
+  });
+
   it('non-pinView kinds get no groups', () => {
     expect(pinViewGroupsFor('constant', { width: 4 })).toEqual([]);
     expect(pinViewGroupsFor('chip', {})).toEqual([]);
