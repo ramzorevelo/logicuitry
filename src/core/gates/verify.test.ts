@@ -185,7 +185,7 @@ describe('stored state refuses a truth table', () => {
     it(`${kind}: Analyze refuses the output it feeds and keeps the other`, () => {
       const [fed, other] = analysisTablesOf(b, noLib);
       expect(fed!.table).toBeNull();
-      expect(fed!.error).toBe('not purely combinational: main/u stores state');
+      expect(fed!.error).toBe('Y1 depends on a flip-flop or latch, so it has no truth table');
       expect(other!.error).toBeNull();
       expect(other!.table!.rows.length).toBe(2);
     });
@@ -194,4 +194,89 @@ describe('stored state refuses a truth table', () => {
       expect(() => boardDiffRows(b, b, noLib)).toThrow(/stores state/);
     });
   }
+});
+
+describe('analysisTablesOf keeps unwired inputs of the output group', () => {
+  const inGroup = (c: Component, group: string): Component => ({ ...c, group });
+
+  it('a built four-input table whose output is D analyses over A, B, C and D', () => {
+    const b = board({
+      groups: [{ id: 'g1', name: 'Built' }],
+      components: [
+        ...['A', 'B', 'C', 'D'].map((n) =>
+          inGroup(comp(n.toLowerCase(), 'toggle', undefined, n), 'g1'),
+        ),
+        inGroup(comp('y', 'led', undefined, 'D out'), 'g1'),
+      ],
+      wires: [wire('w1', ['d', 'y'], ['y', 'a'])],
+    });
+    const [only] = analysisTablesOf(b, noLib);
+    expect(only!.table!.inputPaths).toEqual([
+      'main/Built/A',
+      'main/Built/B',
+      'main/Built/C',
+      'main/Built/D',
+    ]);
+    expect(only!.table!.rows.map((r) => r[0]!.v)).toEqual(
+      Array.from({ length: 16 }, (_, m) => m & 1),
+    );
+  });
+
+  it('an input driving only the first output of a group stays out of the second', () => {
+    const b = board({
+      groups: [{ id: 'g1', name: 'Pair' }],
+      components: [
+        inGroup(comp('a', 'toggle', undefined, 'A'), 'g1'),
+        inGroup(comp('b', 'toggle', undefined, 'B'), 'g1'),
+        inGroup(comp('c', 'toggle', undefined, 'C'), 'g1'),
+        inGroup(comp('ga', 'buf'), 'g1'),
+        inGroup(comp('gb', 'buf'), 'g1'),
+        inGroup(comp('y1', 'led', undefined, 'Y1'), 'g1'),
+        inGroup(comp('y2', 'led', undefined, 'Y2'), 'g1'),
+      ],
+      wires: [
+        wire('w1', ['a', 'y'], ['ga', 'a']),
+        wire('w2', ['ga', 'y'], ['y1', 'a']),
+        wire('w3', ['b', 'y'], ['gb', 'a']),
+        wire('w4', ['gb', 'y'], ['y2', 'a']),
+      ],
+    });
+    const [y1, y2] = analysisTablesOf(b, noLib);
+    expect(y1!.table!.inputPaths).toEqual(['main/Pair/A', 'main/Pair/C']);
+    expect(y2!.table!.inputPaths).toEqual(['main/Pair/B', 'main/Pair/C']);
+  });
+
+  it('a stray unwired switch on the board joins a board output, not a grouped one', () => {
+    const b = board({
+      groups: [{ id: 'g1', name: 'Other' }],
+      components: [
+        comp('a', 'toggle', undefined, 'A'),
+        comp('s', 'toggle', undefined, 'S'),
+        comp('g', 'not'),
+        comp('y', 'led', undefined, 'Y'),
+        inGroup(comp('z', 'toggle', undefined, 'Z'), 'g1'),
+      ],
+      wires: [wire('w1', ['a', 'y'], ['g', 'a']), wire('w2', ['g', 'y'], ['y', 'a'])],
+    });
+    expect(analysisTablesOf(b, noLib)[0]!.table!.inputPaths).toEqual(['main/A', 'main/S']);
+  });
+
+  it('an output nothing drives is not connected, even beside an unwired switch', () => {
+    const b = board({
+      components: [comp('s', 'toggle', undefined, 'S'), comp('y', 'led', undefined, 'Y')],
+    });
+    expect(analysisTablesOf(b, noLib)[0]!.error).toBe('Y is not connected to any input');
+  });
+
+  it('counts unwired inputs against the five-input limit', () => {
+    const names = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const b = board({
+      components: [
+        ...names.map((n) => comp(n, 'toggle', undefined, n)),
+        comp('y', 'led', undefined, 'Y'),
+      ],
+      wires: [wire('w1', ['A', 'y'], ['y', 'a'])],
+    });
+    expect(analysisTablesOf(b, noLib)[0]!.error).toBe('Y reads 6 inputs; Analyze handles up to 5');
+  });
 });

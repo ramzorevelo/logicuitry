@@ -491,7 +491,8 @@ interface CircuitState {
   /** Duplicate commit / paste: remaps a slice's ids fresh and offsets it in. */
   commitDuplicate: (slice: Circuit, offset: Point) => void;
   /** Build from an expression or a truth table: drops a synthesized slice on
-   *  the board as its own group, one undo step. Returns the new group's id. */
+   *  the board as its own group, one undo step. Returns the new group's id, or
+   *  null when nothing was committed (off the board tab, powered, bubble mode). */
   commitSynthesis: (slice: Circuit, groupName: string) => string | null;
   /** `R`: rotates each item individually about its OWN centre (caller-resolved
    *  bounds, same contract as `applyGroupRotate` -- the store never reaches
@@ -2642,6 +2643,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     // building twice from the same expression never collides.
     commitSynthesis: (slice, groupName) => {
       if (slice.components.length === 0) return null;
+      const st = get();
+      if (activeTab().kind !== 'board' || st.mode === 'bubble' || st.powered) return null;
+      const revBefore = st.rev;
       const groupId = genId('g');
       const idMap = new Map<string, string>();
       edit('place', (d) => {
@@ -2672,6 +2676,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             points: w.points.map((p) => ({ ...p })),
           });
       });
+      if (get().rev === revBefore) return null;
       set({ selection: new Set(idMap.values()) });
       return groupId;
     },

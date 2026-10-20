@@ -23,17 +23,20 @@ export function TypedEntry({ typed }: { typed: TypedState }) {
             </option>
           ))}
         </select>
-        <select
-          aria-label="Variables"
-          value={typed.varCount}
-          onChange={(e) => typed.setVarCount(Number(e.target.value))}
-        >
-          {[2, 3, 4].map((k) => (
-            <option key={k} value={k}>
-              {`${k} variables`}
-            </option>
-          ))}
-        </select>
+        {/* An expression's own variables set the count, so the select would only restart it. */}
+        {typed.mode !== 'expr' && (
+          <select
+            aria-label="Variables"
+            value={typed.varCount}
+            onChange={(e) => typed.setVarCount(Number(e.target.value))}
+          >
+            {[2, 3, 4].map((k) => (
+              <option key={k} value={k}>
+                {`${k} variables`}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       {typed.mode !== 'table' && (
         <input

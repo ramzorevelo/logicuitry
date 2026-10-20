@@ -4,11 +4,13 @@ import {
   evalExpr,
   exprVars,
   hasXor,
+  naturalCompare,
   parseExpr,
   printExpr,
   productNeedsDot,
   renameVarInExprText,
   truthTableOfExpr,
+  type Expr,
 } from './expr';
 import * as bv from '../value/busValue';
 import type { BusValue } from '../value/busValue';
@@ -167,5 +169,40 @@ describe('renameVarInExprText', () => {
 
   it('refuses a name that would merge or misread', () => {
     expect(renameVarInExprText('A + B', 'A', 'B', ABC)).toBeNull();
+  });
+});
+
+describe('bracketed names hold any label', () => {
+  const v = (name: string): Expr => ({ kind: 'var', name });
+  for (const name of ['SW 1', "En'", 'a-b', '1A', 'Ü']) {
+    it(`round-trips ${name} through print and parse`, () => {
+      const e: Expr = { kind: 'and', args: [v(name), { kind: 'not', a: v('B') }] };
+      expect(parseExpr(printExpr(e))).toEqual(e);
+    });
+
+    it(`renames A to ${name} and back`, () => {
+      const renamed = renameVarInExprText("A'B + A", 'A', name, new Set(['A', 'B']))!;
+      expect(exprVars(parseExpr(renamed))).toEqual(['B', name].sort(naturalCompare));
+      expect(renameVarInExprText(renamed, name, 'A', new Set(['B', name]))).toBe("A'B + A");
+    });
+  }
+
+  it('refuses a blank name and one split by a line break', () => {
+    expect(() => parseExpr('[ ]')).toThrow(ExprError);
+    expect(() => parseExpr('[a\nb]')).toThrow(ExprError);
+  });
+});
+
+describe('natural variable order', () => {
+  it('puts A2 before A10', () => {
+    expect(exprVars(parseExpr('A10 + A2 + A1'))).toEqual(['A1', 'A2', 'A10']);
+  });
+
+  it('keeps upper case ahead of lower case, as before', () => {
+    expect(exprVars(parseExpr('b + B + a + A'))).toEqual(['A', 'B', 'a', 'b']);
+  });
+
+  it('orders equal numbers by spelling, so the sort is total', () => {
+    expect(['x01', 'x1'].map((n) => naturalCompare(n, 'x1'))).toEqual([-1, 0]);
   });
 });

@@ -535,6 +535,20 @@
   margin: 0;
   font-size: 0.875rem;
 }
+.analyze-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+}
+.analyze-outhead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
 .analyze-error {
   color: var(--warn);
 }

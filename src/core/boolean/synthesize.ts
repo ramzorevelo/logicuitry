@@ -5,7 +5,7 @@
 
 import type { Expr } from './expr';
 import { ExprError, exprVars, printExpr } from './expr';
-import { groupTerm, implicantTerm, minimalCover, minimumCovers } from './kmap';
+import { groupTerm, minimalCover, minimumCovers, type KmapPolarity } from './kmap';
 import type { TruthTable } from './truthTable';
 
 /** `kind` is a ComponentKind name held as a plain string, so core/boolean
@@ -44,6 +44,9 @@ export interface SynthOptions {
   cancelNotPairs?: boolean;
   /** Text on the output LED; defaults to the printed expression. */
   outputLabel?: string;
+  /** Switch names in order, kept even when the function ignores them, so a
+   *  table's unused columns still exist on the board. */
+  inputs?: readonly string[];
 }
 
 const GATE_PIN = (i: number): string => String.fromCharCode(97 + i); // a, b, c, ...
@@ -52,7 +55,8 @@ class Builder {
   readonly parts: SynthPart[] = [];
   readonly links: SynthLink[] = [];
   private counts = new Map<string, number>();
-  /** One inverter per literal, shared by every term that needs it. */
+  /** Signal -> its inverter, so a literal and a De Morgan complement of the
+   *  same variable share one gate. */
   private inverters = new Map<string, string>();
   /** Inverter id -> the signal it inverts, so a second inversion can undo it. */
   private inverted = new Map<string, string>();
@@ -98,11 +102,9 @@ class Builder {
     return sources.slice(2).reduce((acc, src) => this.gate(kind, [this.not(acc), src]), first);
   }
 
-  not(source: string, literal?: string): string {
-    if (literal !== undefined) {
-      const seen = this.inverters.get(literal);
-      if (seen !== undefined) return seen;
-    }
+  not(source: string): string {
+    const seen = this.inverters.get(source);
+    if (seen !== undefined) return seen;
     // Two inverters in series are a wire. The one left behind loses its only
     // consumer and is pruned with the rest of the unreachable netlist.
     if (this.opts.cancelNotPairs) {
@@ -115,7 +117,7 @@ class Builder {
       ? this.gate(this.universal, [source, source])
       : this.gate('not', [source]);
     this.inverted.set(id, source);
-    if (literal !== undefined) this.inverters.set(literal, id);
+    this.inverters.set(source, id);
     return id;
   }
 
@@ -184,12 +186,8 @@ function buildNode(e: Expr, b: Builder, vars: ReadonlyMap<string, string>): stri
       if (id === undefined) throw new ExprError(`no input for ${e.name}`, 0);
       return id;
     }
-    case 'not': {
-      const source = buildNode(e.a, b, vars);
-      // Only a bare variable shares an inverter; an inverted sub-expression is
-      // its own signal and gets its own gate.
-      return b.not(source, e.a.kind === 'var' ? e.a.name : undefined);
-    }
+    case 'not':
+      return b.not(buildNode(e.a, b, vars));
     case 'and':
       return b.and(e.args.map((a) => buildNode(a, b, vars)));
     case 'or':
@@ -201,7 +199,7 @@ function buildNode(e: Expr, b: Builder, vars: ReadonlyMap<string, string>): stri
 
 export function synthesizeExpr(e: Expr, opts: SynthOptions = {}): SynthNetlist {
   const b = new Builder(opts);
-  const names = exprVars(e);
+  const names = [...new Set([...(opts.inputs ?? []), ...exprVars(e)])];
   const vars = new Map<string, string>();
   const inputIds: string[] = [];
   for (const name of names) {
@@ -247,6 +245,39 @@ function prune(net: SynthNetlist): SynthNetlist {
   };
 }
 
+/** The SOP (`ones`) or POS (`zeros`) read off explicit K-map groups, minimum
+ *  or not, so a build can follow what is on screen. No group at all is the
+ *  constant left when nothing is grouped. */
+export function exprOfGroups(
+  table: TruthTable,
+  groups: readonly (readonly number[])[],
+  polarity: KmapPolarity = 'ones',
+  varNames?: readonly string[],
+): Expr {
+  const sop = polarity === 'ones';
+  if (groups.length === 0) return { kind: 'const', value: sop ? 0 : 1 };
+  const name = (path: string): string => {
+    const i = table.inputPaths.indexOf(path);
+    return varNames?.[i] ?? path;
+  };
+  // A group with no fixed variable is the whole map, which decides the output alone.
+  const whole: Expr = { kind: 'const', value: sop ? 1 : 0 };
+  const terms: Expr[] = groups.map((group) => {
+    const literals = groupTerm(table, group, polarity);
+    if (literals.length === 0) return whole;
+    const parts: Expr[] = literals.map((lit) =>
+      lit.negated
+        ? { kind: 'not', a: { kind: 'var', name: name(lit.var) } }
+        : { kind: 'var', name: name(lit.var) },
+    );
+    if (parts.length === 1) return parts[0]!;
+    return { kind: sop ? 'and' : 'or', args: parts };
+  });
+  if (terms.includes(whole)) return whole;
+  if (terms.length === 1) return terms[0]!;
+  return { kind: sop ? 'or' : 'and', args: terms };
+}
+
 /** Routed through the K-map engine, so the truth-table entry point is a
  *  translation rather than a second minimiser. */
 export function exprOfCover(
@@ -255,25 +286,7 @@ export function exprOfCover(
   dontCares?: ReadonlySet<number>,
   varNames?: readonly string[],
 ): Expr {
-  const name = (path: string): string => {
-    const i = table.inputPaths.indexOf(path);
-    return varNames?.[i] ?? path;
-  };
-  const cover = minimalCover(table, outputIndex, dontCares);
-  if (cover.length === 0) return { kind: 'const', value: 0 };
-  const terms: Expr[] = cover.map((group) => {
-    const literals = implicantTerm(table, group);
-    // No fixed variable means the group covers the whole map: the output is 1.
-    if (literals.length === 0) return { kind: 'const', value: 1 };
-    const factors: Expr[] = literals.map((lit) =>
-      lit.negated
-        ? { kind: 'not', a: { kind: 'var', name: name(lit.var) } }
-        : { kind: 'var', name: name(lit.var) },
-    );
-    return factors.length === 1 ? factors[0]! : { kind: 'and', args: factors };
-  });
-  if (terms.some((t) => t.kind === 'const' && t.value === 1)) return { kind: 'const', value: 1 };
-  return terms.length === 1 ? terms[0]! : { kind: 'or', args: terms };
+  return exprOfGroups(table, minimalCover(table, outputIndex, dontCares), 'ones', varNames);
 }
 
 /** Minimum product-of-sums: each 0-group is a sum term, complemented where the
@@ -284,25 +297,8 @@ export function exprOfPosCover(
   dontCares?: ReadonlySet<number>,
   varNames?: readonly string[],
 ): Expr {
-  const name = (path: string): string => {
-    const i = table.inputPaths.indexOf(path);
-    return varNames?.[i] ?? path;
-  };
   const cover = minimumCovers(table, outputIndex, dontCares, 'zeros')[0] ?? [];
-  if (cover.length === 0) return { kind: 'const', value: 1 };
-  const factors: Expr[] = cover.map((group) => {
-    const literals = groupTerm(table, group, 'zeros');
-    // No fixed variable: the 0-group is the whole map, so the output is 0.
-    if (literals.length === 0) return { kind: 'const', value: 0 };
-    const sum: Expr[] = literals.map((lit) =>
-      lit.negated
-        ? { kind: 'not', a: { kind: 'var', name: name(lit.var) } }
-        : { kind: 'var', name: name(lit.var) },
-    );
-    return sum.length === 1 ? sum[0]! : { kind: 'or', args: sum };
-  });
-  if (factors.some((t) => t.kind === 'const' && t.value === 0)) return { kind: 'const', value: 0 };
-  return factors.length === 1 ? factors[0]! : { kind: 'and', args: factors };
+  return exprOfGroups(table, cover, 'zeros', varNames);
 }
 
 export function synthesizeTable(
@@ -317,5 +313,5 @@ export function synthesizeTable(
   // realization is two-level, as SOP is for NAND-NAND.
   const cover = opts.norOnly ? exprOfPosCover : exprOfCover;
   const e = cover(table, opts.outputIndex ?? 0, opts.dontCares, opts.varNames);
-  return synthesizeExpr(e, opts);
+  return synthesizeExpr(e, { ...opts, inputs: opts.varNames ?? table.inputPaths });
 }

@@ -10,6 +10,7 @@ import type { Board, ChipDef, Component, Point, WireEnd } from '../../core/model
 import { builtinChipLibrary, isBuiltinChipDef } from '../../core/parts/packages';
 import { usePrefsStore } from '../prefs';
 import { pushOutputBackward } from '../../core/gates/transform';
+import { analysisTablesOf } from '../../core/gates/verify';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
 import type { Theme } from '../../render/theme';
 import { makeTestTheme } from '../../render/theme.fixture';
@@ -5476,5 +5477,73 @@ describe('rotating a part re-routes its wires apart', () => {
     const routes = routesNow();
     expect(polylineCrossesAny(routes.get('d1')!, [body])).toBe(false);
     expect(polylineCrossesAny(routes.get('d2')!, [body])).toBe(false);
+  });
+});
+
+describe('commitSynthesis', () => {
+  const slice = () => ({
+    components: [
+      ...['A', 'B', 'C', 'D'].map(
+        (n, i): Component => ({
+          id: `sw${i + 1}`,
+          kind: 'toggle',
+          pos: { x: 0, y: 64 * i },
+          label: n,
+        }),
+      ),
+      { id: 'led1', kind: 'led', pos: { x: 160, y: 192 }, label: 'Y' } as Component,
+    ],
+    wires: [
+      {
+        id: 'w1',
+        a: { kind: 'pin' as const, component: 'sw4', pin: 'y' },
+        b: { kind: 'pin' as const, component: 'led1', pin: 'a' },
+        points: [],
+      },
+    ],
+    junctions: [],
+  });
+
+  beforeEach(() => {
+    reset();
+    useCircuitStore.setState({
+      tabs: [{ id: 'board', kind: 'board' }],
+      activeTabId: 'board',
+      mode: 'edit',
+    });
+    useCircuitStore.getState().loadBoard(starterBoard());
+  });
+
+  it('lands a D-only build whose Analyze table keeps all four switches', () => {
+    const id = useCircuitStore.getState().commitSynthesis(slice(), 'Built circuit');
+    expect(id).not.toBeNull();
+    const st = useCircuitStore.getState();
+    const built = analysisTablesOf(st.board, st.chipLib).find((o) =>
+      o.outputPath.startsWith('main/Built circuit/'),
+    )!;
+    expect(built.table!.inputPaths.map((p) => p.split('/').pop())).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  it('returns null and changes nothing while powered', () => {
+    const s = useCircuitStore.getState();
+    s.power();
+    const before = useCircuitStore.getState().board;
+    expect(useCircuitStore.getState().commitSynthesis(slice(), 'Built circuit')).toBeNull();
+    expect(useCircuitStore.getState().board).toBe(before);
+  });
+
+  it('returns null in bubble mode', () => {
+    useCircuitStore.getState().enterBubbleMode();
+    expect(useCircuitStore.getState().mode).toBe('bubble');
+    expect(useCircuitStore.getState().commitSynthesis(slice(), 'Built circuit')).toBeNull();
+    useCircuitStore.getState().exitBubbleMode();
+  });
+
+  it('returns null for an empty slice', () => {
+    expect(
+      useCircuitStore
+        .getState()
+        .commitSynthesis({ components: [], wires: [], junctions: [] }, 'Built circuit'),
+    ).toBeNull();
   });
 });

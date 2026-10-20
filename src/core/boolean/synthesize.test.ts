@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evalExpr, parseExpr, printExpr, truthTableOfExpr } from './expr';
 import {
   exprOfCover,
+  exprOfGroups,
   exprOfPosCover,
   synthesizeExpr,
   synthesizeTable,
@@ -281,5 +282,108 @@ describe('exprOfPosCover', () => {
   it('is constant 1 with no zero and constant 0 when every cell is zero', () => {
     expect(printExpr(exprOfPosCover(table("AB + (AB)'")))).toBe('1');
     expect(printExpr(exprOfPosCover(table("AB(AB)'")))).toBe('0');
+  });
+});
+
+describe('exprOfGroups', () => {
+  const table = (src: string) => truthTableOfExpr(parseExpr(src));
+
+  it('reads explicit SOP groups as circled, even a non-minimum cover', () => {
+    // A'B + BC circled as three groups: m(2,3), m(3,7) and m(7) on its own.
+    const t = table("A'B + BC");
+    expect(printExpr(exprOfGroups(t, [[2, 3], [3, 7], [7]]))).toBe("A'B + BC + ABC");
+  });
+
+  it('reads explicit POS groups as sum factors', () => {
+    const t = table('A + BC');
+    expect(
+      printExpr(
+        exprOfGroups(
+          t,
+          [
+            [0, 1],
+            [0, 2],
+          ],
+          'zeros',
+        ),
+      ),
+    ).toBe('(A + B)(A + C)');
+  });
+
+  it('uses the given names in place of the input paths', () => {
+    const t = table("A'B");
+    expect(printExpr(exprOfGroups(t, [[1]], 'ones', ['sw1', 'sw2']))).toBe("[sw1]'[sw2]");
+  });
+
+  it('is the polarity constant with no groups, and the whole map decides alone', () => {
+    const t = table('A + BC');
+    expect(printExpr(exprOfGroups(t, []))).toBe('0');
+    expect(printExpr(exprOfGroups(t, [], 'zeros'))).toBe('1');
+    const all = [0, 1, 2, 3];
+    expect(printExpr(exprOfGroups(table("AB + (AB)'"), [all]))).toBe('1');
+    expect(printExpr(exprOfGroups(table("AB(AB)'"), [all], 'zeros'))).toBe('0');
+  });
+});
+
+describe('synthesis keeps every table input', () => {
+  const table = (src: string) => truthTableOfExpr(parseExpr(src));
+  const switches = (net: SynthNetlist): string[] =>
+    net.parts.filter((p) => p.kind === 'toggle').map((p) => p.label!);
+
+  it('builds a switch for each column even when the output ignores it', () => {
+    const net = synthesizeTable(table("D + AA'BC"));
+    expect(switches(net)).toEqual(['A', 'B', 'C', 'D']);
+    expect(net.inputIds).toHaveLength(4);
+    const fed = new Set(net.links.map(([from]) => from));
+    expect(net.inputIds.filter((id) => fed.has(id))).toHaveLength(1);
+  });
+
+  it('keeps the inputs of a constant result', () => {
+    const net = synthesizeTable(table("A A' + B B'"));
+    expect(switches(net)).toEqual(['A', 'B']);
+    expect(net.parts.map((p) => p.kind)).toContain('constant');
+  });
+
+  it('lists the given inputs first, then any other expression variable', () => {
+    const net = synthesizeExpr(parseExpr('C + A'), { inputs: ['B', 'A'] });
+    expect(switches(net)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('uses the given variable names for the switches', () => {
+    const net = synthesizeTable(table('AB'), { varNames: ['X', 'Y'] });
+    expect(switches(net)).toEqual(['X', 'Y']);
+  });
+});
+
+describe('inverter sharing in universal-gate builds', () => {
+  const inverters = (net: SynthNetlist, of: string): number => {
+    const sw = net.parts.find((p) => p.label === of)!.id;
+    const ins = new Map<string, string[]>();
+    for (const [from, to] of net.links) {
+      const id = to.split('.')[0]!;
+      ins.set(id, [...(ins.get(id) ?? []), from]);
+    }
+    return net.parts.filter((p) => {
+      const feeds = ins.get(p.id) ?? [];
+      return p.kind !== 'led' && feeds.length > 0 && feeds.every((f) => f === sw);
+    }).length;
+  };
+
+  it("builds A'B + A with one inverter of A, NAND only", () => {
+    const net = synthesizeExpr(parseExpr("A'B + A"), { nandOnly: true });
+    expect(inverters(net, 'A')).toBe(1);
+    expect(agreesWith(net, "A'B + A")).toBe(true);
+  });
+
+  it("builds (A' + B)A with one inverter of A, NOR only", () => {
+    const net = synthesizeExpr(parseExpr("(A' + B)A"), { norOnly: true });
+    expect(inverters(net, 'A')).toBe(1);
+    expect(agreesWith(net, "(A' + B)A")).toBe(true);
+  });
+
+  it("builds A'B + A from three NANDs when pairs cancel", () => {
+    const net = synthesizeExpr(parseExpr("A'B + A"), { nandOnly: true, cancelNotPairs: true });
+    // nand(A,A) for A', nand(A',B), and the combining nand(nand(A',B), A').
+    expect(net.parts.filter((p) => p.kind === 'nand')).toHaveLength(3);
   });
 });

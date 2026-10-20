@@ -4,6 +4,7 @@ import {
   NoticePolicy,
   RENOTICE_AFTER_MS,
   blockedText,
+  buildBlockedReason,
   makeHaptic,
 } from './blockedNotice';
 
@@ -80,5 +81,24 @@ describe('makeHaptic', () => {
     }
     // 20 attempts over 200ms: the first plus one more once the gap elapsed.
     expect(vibrate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('buildBlockedReason', () => {
+  const free = { tab: 'board', viewOnly: false, mode: 'edit', powered: false };
+
+  it('allows a build on an editable, unpowered board tab', () => {
+    expect(buildBlockedReason(free)).toBeNull();
+  });
+
+  it('refuses with the wording placement uses', () => {
+    expect(blockedText(buildBlockedReason({ ...free, powered: true })!)).toBe(
+      'Power off to add parts.',
+    );
+    expect(blockedText(buildBlockedReason({ ...free, mode: 'bubble' })!)).toBe(
+      'Leave bubble mode to edit the board.',
+    );
+    expect(buildBlockedReason({ ...free, viewOnly: true })).toBe('view-only');
+    expect(buildBlockedReason({ ...free, tab: 'chip' })).toBe('board-tab');
   });
 });

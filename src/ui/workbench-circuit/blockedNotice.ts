@@ -14,7 +14,9 @@ export type BlockedReason =
   | 'powered-wire'
   | 'powered-param'
   | 'powered-rename'
-  | 'bubble-edit';
+  | 'bubble-edit'
+  | 'view-only'
+  | 'board-tab';
 
 /** Quiet gap after which a reason may announce itself again. */
 export const RENOTICE_AFTER_MS = 10_000;
@@ -33,10 +35,27 @@ const TEXT: Record<BlockedReason, string> = {
   'powered-param': 'Power off to change this.',
   'powered-rename': 'Power off to rename.',
   'bubble-edit': 'Leave bubble mode to edit the board.',
+  'view-only': 'Leave view-only to edit the board.',
+  'board-tab': 'Build circuit works on the board tab.',
 };
 
 export function blockedText(reason: BlockedReason): string {
   return TEXT[reason];
+}
+
+/** Why Build circuit cannot add its group right now, or null when it can. A
+ *  build places parts, so it is refused wherever placing one is. */
+export function buildBlockedReason(state: {
+  tab: string;
+  viewOnly: boolean;
+  mode: string;
+  powered: boolean;
+}): BlockedReason | null {
+  if (state.tab !== 'board') return 'board-tab';
+  if (state.viewOnly) return 'view-only';
+  if (state.mode === 'bubble') return 'bubble-edit';
+  if (state.powered) return 'powered-place';
+  return null;
 }
 
 /** Decides, per reason, whether this attempt gets the words or only the flash.

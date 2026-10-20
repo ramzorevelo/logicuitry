@@ -60,8 +60,9 @@ const SYMBOLS: Record<string, TokenKind> = {
   ')': ')',
 };
 
-/** A multi-letter name is written `[Sel]` so it reads as one variable. */
-const BRACKET_NAME = /^[A-Za-z][\w.]*$/;
+/** A multi-letter name is written `[Sel]` so it reads as one variable. Any
+ *  label can sit inside, since only `]` ends it. */
+const BRACKET_NAME = /^[^\]\n]*\S[^\]\n]*$/;
 
 const isLetter = (c: string): boolean => /[A-Za-z]/.test(c);
 const isDigit = (c: string): boolean => /[0-9]/.test(c);
@@ -220,6 +221,23 @@ export function parseExpr(src: string): Expr {
   return e;
 }
 
+/** Digit runs compare as numbers, so A2 sorts before A10. Everything else
+ *  compares by code unit, so the order never depends on the locale. */
+export function naturalCompare(a: string, b: string): number {
+  const chunks = (s: string): string[] => s.match(/\d+|\D+/g) ?? [];
+  const ca = chunks(a);
+  const cb = chunks(b);
+  for (let i = 0; i < Math.min(ca.length, cb.length); i++) {
+    const x = ca[i]!;
+    const y = cb[i]!;
+    if (x === y) continue;
+    if (/^\d/.test(x) && /^\d/.test(y) && Number(x) !== Number(y)) return Number(x) - Number(y);
+    return x < y ? -1 : 1;
+  }
+  if (ca.length !== cb.length) return ca.length - cb.length;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** Sorted, so the same function always yields the same column order. */
 export function exprVars(e: Expr): string[] {
   const names = new Set<string>();
@@ -229,7 +247,7 @@ export function exprVars(e: Expr): string[] {
     else if (n.kind !== 'const') n.args.forEach(walk);
   };
   walk(e);
-  return [...names].sort();
+  return [...names].sort(naturalCompare);
 }
 
 export function evalExpr(e: Expr, env: ReadonlyMap<string, 0 | 1>): 0 | 1 {

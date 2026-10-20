@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCircuitStore } from './circuitStore';
 import { componentPaths } from '../../core/model/compile';
-import { analysisTablesOf, type OutputAnalysis } from '../../core/gates/verify';
+import {
+  analysisTablesOf,
+  MAX_ANALYSIS_INPUTS,
+  NO_OUTPUT_MESSAGE,
+  type OutputAnalysis,
+} from '../../core/gates/verify';
 import { SEGMENT_NAMES } from '../../core/sim/primitives/display';
 import { permuteTableInputs, type TruthTable } from '../../core/boolean/truthTable';
 import {
@@ -23,25 +28,24 @@ import {
 import { sigmaOf } from '../../core/boolean/canonical';
 import { compressTable, type CompressedRow } from '../../core/boolean/compress';
 import { printExpr } from '../../core/boolean/expr';
-import { exprOfCover, exprOfPosCover } from '../../core/boolean/synthesize';
+import { exprOfGroups } from '../../core/boolean/synthesize';
 import { compareOutputs } from '../../core/boolean/compare';
 import { gateExpressions } from '../../core/gates/subexpr';
 import { BoolExpr } from '../components/BoolExpr';
 import { Toggle } from '../components/Toggle';
 import {
+  boundedKmapMetrics,
   drawKmap,
   fitKmapMetrics,
   kmapCellAt,
   kmapGroupAt,
   layoutKmap,
-  scaledKmapMetrics,
   type KmapGroupDraw,
   type KmapLayout,
 } from '../../render/kmap';
 import { readTheme } from '../../render/theme';
 import { useThemeRevision } from '../theme/useThemeRevision';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
-import { isFullyKnown } from '../../core/value/busValue';
 import { LONG_PRESS_MS, TAP_SLOP } from './touchGestures';
 import { useCoarsePointer } from '../pointerKind';
 import { usePrefsStore } from '../prefs';
@@ -50,13 +54,30 @@ import { cellKeyAction, nextCell } from './buildGrid';
 import { dontCaresOf, tableOfFunction, TYPED_OUTPUT_PATH, useTypedFunction } from './typedFunction';
 import { TypedEntry } from './TypedEntry';
 import {
+  checkSentences,
+  coverStatus,
   dontCareDisagreements,
+  factorJoins,
   functionLine,
+  groupHint,
   groupingRules,
+  kmapUnavailable,
   productJoins,
   refusalMessage,
   summarizeForm,
 } from './kmapText';
+import {
+  bitChar,
+  buildVarNames,
+  isCircled,
+  outputDisplay,
+  outputIndexOf,
+  revealColors,
+  revealResetKey,
+  splitTerminalPath,
+  unknownRows,
+  withBit,
+} from './analyzeLogic';
 
 // Analyze drawer: per-output truth tables (reachable,
 // net-deduped inputs) plus an interactive K-map for 2-4 inputs. Circles and
@@ -68,18 +89,11 @@ import {
  *  `main/<group>/<name>`, and repeating the group in every truth-table column
  *  header buries the one letter the reader is there for. The group is shown
  *  once, as the heading over the table. */
-const displayName = (path: string): string =>
-  path
-    .replace(/\.(y|a)(\[\d+\])?$/, '$2')
-    .replace(/^main\//, '')
-    .replace(/^.*\//, '');
-
-/** A terminal path without its pin suffix, which is how components are keyed. */
-const basePath = (path: string): string => path.replace(/\.(y|a)(\[\d+\])?$/, '');
+const displayName = (base: string): string => base.replace(/^main\//, '').replace(/^.*\//, '');
 
 /** The group a terminal path is scoped to, or '' for a board-level one. */
 const groupOfPath = (path: string): string => {
-  const rest = path.replace(/\.(y|a)(\[\d+\])?$/, '$2').replace(/^main\//, '');
+  const rest = splitTerminalPath(path).base.replace(/^main\//, '');
   const cut = rest.lastIndexOf('/');
   return cut < 0 ? '' : rest.slice(0, cut);
 };
@@ -87,15 +101,6 @@ const groupOfPath = (path: string): string => {
 interface Circle {
   minterms: number[];
   color: number;
-}
-
-/** Display char for one table cell: 'X' = instructor-marked don't-care,
- *  '–' = circuit-unknown (X/Z), else '0'/'1'. */
-function bitChar(t: TruthTable, row: number, col: number, dc?: ReadonlySet<number>): string {
-  if (dc?.has(row)) return 'X';
-  const v = t.rows[row]![col]!;
-  if (!isFullyKnown(v, 1)) return '–';
-  return (v.v & 1) === 1 ? '1' : '0';
 }
 
 /** Owner-locked layout lists (no AC pairing for 3-var). */
@@ -124,13 +129,6 @@ const KMAP_CANVAS_PAD = 8;
  *  to scroll from: the map itself claims every touch for grouping. */
 const MAX_MAP_HEIGHT_SHARE = 0.7;
 
-/** Both halves: removal is what a user wants the moment a circle exists. */
-function groupHint(coarse: boolean): string {
-  return coarse
-    ? 'Long-press a cell, then drag, to circle a group. Long-press a circle to remove it.'
-    : 'Ctrl+click or Ctrl+drag cells to circle a group. Shift+click a circle to remove it.';
-}
-
 const lowestUnusedColor = (circles: readonly Circle[]): number => {
   let c = 0;
   while (circles.some((g) => g.color === c)) c++;
@@ -138,6 +136,19 @@ const lowestUnusedColor = (circles: readonly Circle[]): number => {
 };
 
 const groupVar = (color: number): string => `var(--kmap-g${(color % 8) + 1})`;
+
+/** Controls that own their arrow, X and Delete keys; the map's cursor must not take them. */
+const OWN_KEYS_TAGS = new Set(['SELECT', 'INPUT', 'BUTTON', 'TEXTAREA']);
+
+/** A complement draws as its own bordered box, as in BoolExpr, so A'B' keeps
+ *  two bars with a gap and never reads as (AB)'. */
+function Literal({ lit, nameOf }: { lit: ImplicantLiteral; nameOf: (path: string) => string }) {
+  return lit.negated ? (
+    <span className="boolexpr__not">{nameOf(lit.var)}</span>
+  ) : (
+    <span>{nameOf(lit.var)}</span>
+  );
+}
 
 function Term({
   term,
@@ -156,7 +167,7 @@ function Term({
     <span key={i}>
       {sum && i > 0 && ' + '}
       {joins[i]}
-      <span style={l.negated ? { textDecoration: 'overline' } : undefined}>{nameOf(l.var)}</span>
+      <Literal lit={l} nameOf={nameOf} />
     </span>
   ));
   return <span>{sum && term.length > 1 ? <>({lits})</> : lits}</span>;
@@ -175,9 +186,18 @@ const REVEAL_LABELS = ['Reveal primes', 'Mark essentials', 'Show minimum cover',
 export function AnalyzeDrawer({
   onClose,
   onBuild,
+  focusOutputPath,
+  onFocusTaken,
+  buildBlocked,
 }: {
   onClose: () => void;
   onBuild?: (expression?: string) => void;
+  /** Output path to select, set after a build lands. */
+  focusOutputPath?: string | undefined;
+  /** Called once the drawer has selected `focusOutputPath`, so a later reopen keeps the user's pick. */
+  onFocusTaken?: (() => void) | undefined;
+  /** Why Build circuit is refused right now; undefined when it is allowed. */
+  buildBlocked?: string | undefined;
 }) {
   const rev = useCircuitStore((s) => s.rev);
   const board = useCircuitStore((s) => s.board);
@@ -191,7 +211,7 @@ export function AnalyzeDrawer({
   } = useMemo(() => {
     try {
       const outputs = analysisTablesOf(board, chipLib);
-      if (outputs.length === 0) throw new RangeError('no output terminal (output/LED/probe)');
+      if (outputs.length === 0) throw new RangeError(NO_OUTPUT_MESSAGE);
       return { outputs, error: null };
     } catch (e) {
       return { outputs: [], error: e instanceof Error ? e.message : String(e) };
@@ -245,33 +265,50 @@ export function AnalyzeDrawer({
     return bySeg;
   }, [board]);
 
-  const baseOf = (path: string): string => {
+  /** The component a terminal path addresses, and the bus bit when it is one
+   *  lane of a wider terminal. */
+  const terminalOf = (path: string): { base: string; bit?: number } => {
     const seg = segments.get(path);
-    return seg ? path.slice(0, -(seg.length + 1)) : basePath(path);
+    return seg ? { base: path.slice(0, -(seg.length + 1)) } : splitTerminalPath(path);
   };
 
   /** Bare terminal name for a column header. A display's segments are their
-   *  own boolean functions, so each column is the segment, not the part. */
-  const nameOfPath = (path: string): string =>
-    segments.get(path) ?? shown.get(baseOf(path))?.name ?? displayName(path);
+   *  own boolean functions, so each column is the segment, not the part. A bus
+   *  lane shows its bit on the name, whatever the path fell back to. */
+  const nameOfPath = (path: string): string => {
+    const seg = segments.get(path);
+    if (seg) return seg;
+    const { base, bit } = terminalOf(path);
+    return withBit(shown.get(base)?.name ?? displayName(base), bit);
+  };
 
   /** `<group>: <name>` for an output tab, and just the one where the group is
    *  named after the very expression the output is labelled with -- repeating
    *  it says nothing twice. A segment tab carries the display it belongs to,
    *  since seven bare letters would not say which part they are on. */
   const tabLabel = (path: string): string => {
-    const at = shown.get(baseOf(path));
+    const { base, bit } = terminalOf(path);
+    const at = shown.get(base);
     const seg = segments.get(path);
-    const own = at?.name ?? displayName(baseOf(path));
+    const own = withBit(at?.name ?? displayName(base), bit);
     const name = seg ? `${own} ${seg}` : own;
     const group = at?.group ?? groupOfPath(path);
     return !group || group === name ? name || group : `${group}: ${name}`;
   };
 
-  const [outputIndex, setOutputIndex] = useState(0);
-  const outIdx = Math.max(0, Math.min(outputIndex, outputs.length - 1));
-  /** Compare panel: the two outputs lined up, or null while closed. */
-  const [comparing, setComparing] = useState<{ a: number; b: number } | null>(null);
+  // By path, so deleting an earlier output never moves the selection onto another.
+  const [selectedPath, setSelectedPath] = useState<string | null>(focusOutputPath ?? null);
+  useEffect(() => {
+    if (focusOutputPath === undefined) return;
+    setSelectedPath(focusOutputPath);
+    onFocusTaken?.();
+  }, [focusOutputPath, onFocusTaken]);
+  const outIdx = outputIndexOf(
+    outputs.map((o) => o.outputPath),
+    selectedPath,
+  );
+  /** Compare panel: the two outputs lined up by path, or null while closed. */
+  const [comparing, setComparing] = useState<{ a: string; b: string } | null>(null);
   const current = outputs[outIdx];
   const outPath = current?.outputPath ?? '';
 
@@ -346,18 +383,32 @@ export function AnalyzeDrawer({
   const sigsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
-    const sigs: Record<string, string> = {};
-    for (const o of outputs) sigs[o.outputPath] = viewTableOf(o)?.inputPaths.join('|') ?? '';
-    const changed = Object.keys(sigs).filter((p) => sigsRef.current[p] !== sigs[p]);
+    // An output with no table right now (a passing board error, or the board
+    // while the typed source shows) keeps its circles and marks: only a table
+    // back with another signature drops them.
+    const views = new Map<string, TruthTable>();
+    for (const o of outputs) {
+      const view = viewTableOf(o);
+      if (view) views.set(o.outputPath, view);
+    }
+    const changed: string[] = [];
+    const sigs = { ...sigsRef.current };
+    for (const [path, view] of views) {
+      const sig = view.inputPaths.join('|');
+      if (sigs[path] !== undefined && sigs[path] !== sig) changed.push(path);
+      sigs[path] = sig;
+    }
     sigsRef.current = sigs;
     setCircles((prev) => {
       const next: Record<string, Circle[]> = {};
       for (const [key, groups] of Object.entries(prev)) {
         const path = key.replace(/#0$/, '');
         const pol: KmapPolarity = key.endsWith('#0') ? 'zeros' : 'ones';
-        const o = outputs.find((x) => x.outputPath === path);
-        const view = o ? viewTableOf(o) : null;
-        if (!view) continue;
+        const view = views.get(path);
+        if (!view) {
+          next[key] = groups;
+          continue;
+        }
         if (changed.includes(path)) continue; // input set/order shifted: drop all
         // Same input indexing: silently drop only the now-illegal circles.
         next[key] = groups.filter((g) => isLegalGroup(view, 0, g.minterms, dcSets[path], pol));
@@ -368,13 +419,7 @@ export function AnalyzeDrawer({
     // signature change above -- DC marks drop with it, same as circles.
     setDcSets((prev) => {
       const next: Record<string, Set<number>> = {};
-      for (const [path, dc] of Object.entries(prev)) {
-        const o = outputs.find((x) => x.outputPath === path);
-        const view = o ? viewTableOf(o) : null;
-        if (!view) continue;
-        if (changed.includes(path)) continue;
-        next[path] = dc;
-      }
+      for (const [path, dc] of Object.entries(prev)) if (!changed.includes(path)) next[path] = dc;
       return next;
     });
     if (changed.length > 0) {
@@ -413,17 +458,28 @@ export function AnalyzeDrawer({
     void themeRev;
     return parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
   }, [themeRev]);
+  // The drawer is a fixed width, so the scaled map is held to it.
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [drawerWidth, setDrawerWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!rootEl) return;
+    const measure = () => setDrawerWidth(rootEl.clientWidth || null);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(rootEl);
+    return () => ro.disconnect();
+  }, [rootEl]);
   const layout: KmapLayout | null = useMemo(() => {
     if (!kmapEligible || !table) return null;
     const grid = buildKmap(table, 0, layouts[layoutIdx], myDcs);
+    const cols = grid.colCodes.length;
+    const rows = grid.rowCodes.length;
     const metrics =
       maximized && maxBox
-        ? fitKmapMetrics(grid.colCodes.length, grid.rowCodes.length, maxBox.w, maxBox.h)
-        : chromeScale !== 1
-          ? scaledKmapMetrics(chromeScale)
-          : undefined;
+        ? fitKmapMetrics(cols, rows, maxBox.w, maxBox.h)
+        : boundedKmapMetrics(cols, rows, chromeScale, (drawerWidth ?? Infinity) - KMAP_CANVAS_PAD);
     return layoutKmap(grid, 0, 0, metrics);
-  }, [kmapEligible, table, layouts, layoutIdx, maximized, maxBox, myDcs, chromeScale]);
+  }, [kmapEligible, table, layouts, layoutIdx, maximized, maxBox, myDcs, chromeScale, drawerWidth]);
 
   const primeGroups = useMemo(
     () => (stage >= 1 && kmapEligible && table ? primeImplicants(table, 0, myDcs, polarity) : []),
@@ -457,8 +513,22 @@ export function AnalyzeDrawer({
     [revealStage, kmapEligible, table, myDcs, otherPolarity],
   );
 
+  // A reveal belongs to one function: another output, other table contents or
+  // a source flipped from outside (a build lands) start it over.
+  const revealKey = revealResetKey(typed.source, outPath, table);
+  const revealKeyRef = useRef(revealKey);
+  useEffect(() => {
+    if (revealKeyRef.current === revealKey) return;
+    revealKeyRef.current = revealKey;
+    setRevealStage({ ones: 0, zeros: 0 });
+    setCoverIdx(0);
+  }, [revealKey]);
+  // By content: a board edit elsewhere rebuilds the array without changing a cover.
+  const coversKey = JSON.stringify(covers);
+  useEffect(() => setCoverIdx(0), [coversKey]);
+
   const compressedRows: readonly CompressedRow[] = useMemo(() => {
-    if (!table || n > 4) return [];
+    if (!table || n > MAX_ANALYSIS_INPUTS) return [];
     return compressTable(table, 0, myDcs);
   }, [table, n, myDcs]);
 
@@ -467,6 +537,8 @@ export function AnalyzeDrawer({
     for (const p of table?.inputPaths ?? []) m.set(p, nameOfPath(p));
     return m;
   }, [table]);
+  const outShown = outputDisplay(nameOfPath(outPath), [...names.values()]);
+  const unknown = table ? unknownRows(table, myDcs) : 0;
 
   const ones = useMemo(() => {
     // Real targets only -- a DC-marked minterm is never "uncovered" (owner rule).
@@ -504,6 +576,21 @@ export function AnalyzeDrawer({
   // A Check result describes the circles as they were when it ran.
   useEffect(() => setCheckResult(null), [myCircles, myDcs, polarity, outPath]);
 
+  // A filter that drops circles shifts the indices a selection or hover points at.
+  const circleCountRef = useRef(0);
+  useEffect(() => {
+    if (myCircles.length < circleCountRef.current) {
+      setSelectedGroup(null);
+      setHoverGroup(null);
+    }
+    circleCountRef.current = myCircles.length;
+  }, [myCircles]);
+
+  // The focus view has nothing to show once the function leaves the K-map's range.
+  useEffect(() => {
+    if (!kmapEligible) setMaximized(false);
+  }, [kmapEligible]);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const maxPanelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -540,45 +627,26 @@ export function AnalyzeDrawer({
     ro.observe(overlay);
     return () => ro.disconnect();
   }, [maximized]);
-  const drawGroups: KmapGroupDraw[] = useMemo(
-    () => [
+  const drawGroups: KmapGroupDraw[] = useMemo(() => {
+    const revealed = revealColors(
+      myCircles,
+      revealGroups.map((rg) => rg.minterms),
+    );
+    return [
       ...myCircles.map((g, i) => ({
         minterms: g.minterms,
         style: 'user' as const,
         color: g.color,
         inset: i,
       })),
-      // Reveal cover: a group identical to a user circle shares its color
-      // (and takes the next inset step so both outlines stay visible); the
-      // rest take the lowest colors no user circle owns, in cover order.
-      ...(() => {
-        const userColors = new Set(myCircles.map((c) => c.color));
-        let nextColor = 0;
-        return revealGroups.map((rg, i) => {
-          const g = rg.minterms;
-          const key = g.join(',');
-          const match = myCircles.findIndex((c) => c.minterms.join(',') === key);
-          if (match !== -1)
-            return {
-              minterms: g,
-              style: 'reveal' as const,
-              color: myCircles[match]!.color,
-              inset: match + 1,
-              solid: rg.solid,
-            };
-          while (userColors.has(nextColor)) nextColor++;
-          return {
-            minterms: g,
-            style: 'reveal' as const,
-            color: nextColor++,
-            inset: myCircles.length + i,
-            solid: rg.solid,
-          };
-        });
-      })(),
-    ],
-    [myCircles, revealGroups],
-  );
+      ...revealGroups.map((rg, i) => ({
+        minterms: rg.minterms,
+        style: 'reveal' as const,
+        ...revealed[i]!,
+        solid: rg.solid,
+      })),
+    ];
+  }, [myCircles, revealGroups]);
   const emphasis = useMemo(() => {
     const s = new Set<number>();
     if (hoverGroup !== null) s.add(hoverGroup);
@@ -605,7 +673,7 @@ export function AnalyzeDrawer({
     ctx.clearRect(0, 0, w, h);
     drawKmap(ctx, theme, layout, {
       names,
-      outName: nameOfPath(outPath),
+      outName: outShown.name,
       groups: drawGroups,
       candidate,
       candidateIllegal: illegalFlash,
@@ -618,7 +686,7 @@ export function AnalyzeDrawer({
   }, [
     layout,
     names,
-    outPath,
+    outShown.name,
     drawGroups,
     candidate,
     illegalFlash,
@@ -651,7 +719,8 @@ export function AnalyzeDrawer({
     (cells: Set<number>) => {
       if (!table || cells.size === 0) return;
       const minterms = [...cells].sort((a, b) => a - b);
-      const diagnosis = diagnoseGroup(table, 0, minterms, myDcs, polarity);
+      const verdict = diagnoseGroup(table, 0, minterms, myDcs, polarity);
+      const diagnosis = verdict === 'ok' && isCircled(myCircles, minterms) ? 'duplicate' : verdict;
       if (diagnosis === 'ok') {
         setCircles((prev) => {
           const mine = prev[myKey] ?? [];
@@ -674,7 +743,7 @@ export function AnalyzeDrawer({
         }, 600);
       }
     },
-    [table, myKey, myDcs, polarity],
+    [table, myKey, myDcs, polarity, myCircles],
   );
 
   // Ctrl-release commits the candidate; window blur too so a candidate never
@@ -824,7 +893,9 @@ export function AnalyzeDrawer({
       return;
     }
     setSelectedGroup(null);
-    setCursor(null);
+    // A plain click puts the keyboard cursor on the cell, so X marks it next.
+    setCursor(kmapCellAt(layout, p.x, p.y) ?? null);
+    anchorRef.current = null;
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!layout) return;
@@ -912,6 +983,13 @@ export function AnalyzeDrawer({
       if (e.key === 'Escape') onClose();
       return;
     }
+    const inControl = OWN_KEYS_TAGS.has((e.target as Element).tagName);
+    const cursorKey =
+      e.key.startsWith('Arrow') ||
+      e.key === 'Delete' ||
+      e.key === 'Backspace' ||
+      e.key.toLowerCase() === 'x';
+    if (inControl && cursorKey) return;
     const arrows: Record<string, [number, number]> = {
       ArrowUp: [-1, 0],
       ArrowDown: [1, 0],
@@ -963,7 +1041,7 @@ export function AnalyzeDrawer({
   const switchSource = (next: 'board' | 'typed') => {
     if (next === typed.source) return;
     typed.setSource(next);
-    setOutputIndex(0);
+    setSelectedPath(null);
     setCandidate(null);
     setCursor(null);
     setRevealStage({ ones: 0, zeros: 0 });
@@ -972,6 +1050,22 @@ export function AnalyzeDrawer({
     setSelectedGroup(null);
     setHoverGroup(null);
   };
+  const header = (
+    <div className="analyze-head">
+      <h3>Analyze</h3>
+      {onBuild && (
+        <button
+          type="button"
+          className="tool-btn"
+          disabled={buildBlocked !== undefined}
+          title={buildBlocked ?? 'Build a circuit from a Boolean expression or a truth table'}
+          onClick={() => onBuild()}
+        >
+          Build circuit...
+        </button>
+      )}
+    </div>
+  );
   const sourcePicker = (
     <>
       <select
@@ -982,16 +1076,17 @@ export function AnalyzeDrawer({
         <option value="board">This board</option>
         <option value="typed">Typed function</option>
       </select>
-      {boardAnalyses.error && (
+      {/* On the board source the error is the drawer's own message already. */}
+      {usingTyped && boardAnalyses.error && (
         <div className="analyze-muted">{`This board: ${boardAnalyses.error}`}</div>
       )}
     </>
   );
   const typedEntry = usingTyped && <TypedEntry typed={typed} />;
 
-  const selectOutput = (i: number) => {
-    if (i < 0 || i >= outputs.length) return;
-    setOutputIndex(i);
+  const selectOutput = (path: string) => {
+    if (!outputs.some((o) => o.outputPath === path)) return;
+    setSelectedPath(path);
     setCandidate(null);
     setRevealStage({ ones: 0, zeros: 0 });
     setCoverIdx(0);
@@ -1001,25 +1096,36 @@ export function AnalyzeDrawer({
   };
   const outputPicker = outputs.length > 1 && (
     <div className="analyze-outputs">
-      <select
-        aria-label="Output"
-        value={outIdx}
-        onChange={(e) => selectOutput(Number(e.target.value))}
-      >
-        {outputs.map((o, i) => (
-          <option key={o.outputPath} value={i}>
+      <select aria-label="Output" value={outPath} onChange={(e) => selectOutput(e.target.value)}>
+        {outputs.map((o) => (
+          <option key={o.outputPath} value={o.outputPath}>
             {tabLabel(o.outputPath)}
           </option>
         ))}
       </select>
     </div>
   );
+  // One output has no picker to name it, and a renamed one shows its label beside the letter.
+  const outputHead =
+    current &&
+    (outShown.caption !== null ? (
+      <div className="analyze-outhead">
+        <strong>{outShown.name}</strong>
+        <span className="analyze-muted">{tabLabel(outPath)}</span>
+      </div>
+    ) : (
+      outputs.length === 1 && (
+        <div className="analyze-outhead">
+          <strong>{tabLabel(outPath)}</strong>
+        </div>
+      )
+    ));
 
   const asBuiltExpr = usingTyped ? undefined : asBuilt.get(outPath);
   const asBuiltLine = asBuiltExpr && (
     <div className="analyze-asbuilt">
       <span className="analyze-muted">As built:</span>
-      <span>{nameOfPath(outPath)} =</span>
+      <span>{outShown.name} =</span>
       <BoolExpr expr={asBuiltExpr} />
     </div>
   );
@@ -1035,18 +1141,15 @@ export function AnalyzeDrawer({
     />
   );
 
+  // The typed source always has a table, so only the board lands here.
   if (!current || !table) {
     return (
-      <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown}>
-        <h3>Analyze</h3>
+      <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown} ref={setRootEl}>
+        {header}
         {sourcePicker}
         {outputPicker}
-        <p className="analyze-error">analyze: {current?.error ?? analyses.error}</p>
-        {onBuild && (
-          <button type="button" className="tool-btn" onClick={() => onBuild()}>
-            Build circuit...
-          </button>
-        )}
+        {outputHead}
+        <p className="analyze-error">{current?.error ?? analyses.error}</p>
         {comparePanel}
       </div>
     );
@@ -1070,9 +1173,8 @@ export function AnalyzeDrawer({
     return `${l.cols.map(nameOf).join('')} top, ${l.rows.map(nameOf).join('')} side`;
   };
 
-  const fullTable = n <= 4;
+  const fullTable = n <= MAX_ANALYSIS_INPUTS;
   const posMode = polarity === 'zeros';
-  const targetWord = posMode ? 'zero' : 'one';
   const selectPolarity = (next: KmapPolarity) => {
     if (next === polarity) return;
     setPolarity(next);
@@ -1086,6 +1188,20 @@ export function AnalyzeDrawer({
   const termOf = (minterms: readonly number[]) => (
     <Term term={groupTerm(table, minterms, polarity)} nameOf={nameOfPath} sum={posMode} />
   );
+  /** What goes before each term: ` + ` between products, `·` only where two POS factors would fuse. */
+  const termJoins = (groups: readonly (readonly number[])[]): string[] =>
+    posMode
+      ? factorJoins(groups.map((g) => groupTerm(table, g, 'zeros').map((l) => nameOfPath(l.var))))
+      : groups.map((_, i) => (i > 0 ? ' + ' : ''));
+  // What is on screen, never a hidden answer: the shown cover, else the user's
+  // circles, else an empty dialog.
+  const buildThis = () => {
+    if (!onBuild) return;
+    const groups = stage === 3 ? cover : myCircles.map((c) => c.minterms);
+    if (stage !== 3 && groups.length === 0) return onBuild();
+    const varNames = buildVarNames(table.inputPaths.map(nameOfPath));
+    onBuild(printExpr(exprOfGroups(table, groups, polarity, varNames)));
+  };
   const dcList = [...myDcs].sort((a, b) => a - b);
   const compare = (() => {
     if (otherCover === null || stage !== 3) return null;
@@ -1146,7 +1262,7 @@ export function AnalyzeDrawer({
           </button>
         </div>
         <div className="analyze-sop">
-          {functionLine(nameOfPath(outPath), sigmaOf(table, myDcs), polarity)}
+          {functionLine(outShown.name, sigmaOf(table, myDcs), polarity, unknown)}
         </div>
         <canvas
           ref={canvasRef}
@@ -1167,28 +1283,23 @@ export function AnalyzeDrawer({
             <span className="analyze-muted">{groupHint(coarse)}</span>
           ) : (
             <span>
-              {nameOfPath(outPath)} ={' '}
-              {myCircles.map((g, i) => (
-                <span key={i} style={termStyle(i, g.color)}>
-                  {i > 0 && !posMode && (
-                    <span style={{ color: 'inherit', fontWeight: 400 }}> + </span>
-                  )}
-                  {termOf(g.minterms)}
-                </span>
-              ))}
+              {outShown.name} ={' '}
+              {(() => {
+                const joins = termJoins(myCircles.map((c) => c.minterms));
+                return myCircles.map((g, i) => (
+                  <span key={i} style={termStyle(i, g.color)}>
+                    {joins[i] && (
+                      <span style={{ color: 'inherit', fontWeight: 400 }}>{joins[i]}</span>
+                    )}
+                    {termOf(g.minterms)}
+                  </span>
+                ));
+              })()}
             </span>
           )}
         </div>
         {myCircles.length > 0 && <div className="analyze-muted">{groupHint(coarse)}</div>}
-        <div className="analyze-status">
-          {uncovered > 0
-            ? `${uncovered} ${targetWord}${uncovered === 1 ? '' : 's'} still uncovered`
-            : ones.size > 0
-              ? `all ${targetWord}s covered`
-              : posMode
-                ? 'constant 1'
-                : 'constant 0'}
-        </div>
+        <div className="analyze-status">{coverStatus(polarity, ones.size, uncovered, unknown)}</div>
         <details
           className="analyze-rules"
           open={kmapRulesOpen}
@@ -1236,16 +1347,16 @@ export function AnalyzeDrawer({
             <button
               type="button"
               className="tool-btn"
-              onClick={() => {
-                const varNames = table.inputPaths.map(nameOfPath);
-                onBuild(
-                  printExpr(
-                    posMode
-                      ? exprOfPosCover(table, 0, myDcs, varNames)
-                      : exprOfCover(table, 0, myDcs, varNames),
-                  ),
-                );
-              }}
+              disabled={buildBlocked !== undefined}
+              title={
+                buildBlocked ??
+                (stage === 3
+                  ? 'Build the cover on screen'
+                  : myCircles.length > 0
+                    ? 'Build your circled groups'
+                    : 'Open Build circuit')
+              }
+              onClick={buildThis}
             >
               Build this
             </button>
@@ -1260,15 +1371,18 @@ export function AnalyzeDrawer({
                 )
               ) : (
                 <span>
-                  {cover.map((g, i) => (
-                    <span
-                      key={i}
-                      style={{ color: groupVar(drawGroups[myCircles.length + i]?.color ?? i) }}
-                    >
-                      {i > 0 && !posMode && ' + '}
-                      {termOf(g)}
-                    </span>
-                  ))}
+                  {(() => {
+                    const joins = termJoins(cover);
+                    return cover.map((g, i) => (
+                      <span
+                        key={i}
+                        style={{ color: groupVar(drawGroups[myCircles.length + i]?.color ?? i) }}
+                      >
+                        {joins[i]}
+                        {termOf(g)}
+                      </span>
+                    ));
+                  })()}
                 </span>
               )}
             </span>
@@ -1280,26 +1394,26 @@ export function AnalyzeDrawer({
             </span>
           )}
         </div>
-        {checkResult && (
-          <div className="analyze-check" role="status">
-            {checkResult.circles.map(
-              (c, i) =>
-                (c.notPrime || c.redundant) && (
-                  <div key={i} style={{ color: groupVar(myCircles[i]!.color) }}>
-                    {termOf(myCircles[i]!.minterms)}
-                    {c.notPrime && ': Rule 4, this group can grow.'}
-                    {c.redundant && ': Rule 1, this group is not needed.'}
-                  </div>
-                ),
-            )}
-            <div>
-              {checkResult.coversAll
-                ? `Every ${targetWord} is covered.`
-                : `Some ${targetWord}s are not covered.`}
-            </div>
-            <div>{checkResult.isMinimum ? 'A minimum cover.' : 'Not a minimum cover.'}</div>
-          </div>
-        )}
+        {checkResult &&
+          (() => {
+            const said = checkSentences(checkResult, polarity, ones.size);
+            return (
+              <div className="analyze-check" role="status">
+                {said.circles.map(
+                  (finding, i) =>
+                    finding &&
+                    myCircles[i] && (
+                      <div key={i} style={{ color: groupVar(myCircles[i].color) }}>
+                        {termOf(myCircles[i].minterms)}
+                        {finding}
+                      </div>
+                    ),
+                )}
+                <div>{said.covered}</div>
+                <div>{said.minimum}</div>
+              </div>
+            );
+          })()}
         {compare && (
           <div className="analyze-compare">
             <div>
@@ -1314,15 +1428,16 @@ export function AnalyzeDrawer({
         )}
       </>
     ) : (
-      <p className="analyze-muted">K-map view supports up to 4 inputs.</p>
+      <p className="analyze-muted">{kmapUnavailable(outShown.name, n)}</p>
     );
 
   return (
-    <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown}>
-      <h3>Analyze</h3>
+    <div className="analyze-drawer" tabIndex={0} onKeyDown={onKeyDown} ref={setRootEl}>
+      {header}
       {sourcePicker}
       {typedEntry}
       {outputPicker}
+      {outputHead}
       {asBuiltLine}
       {(fullTable || canCompare) && (
         <div className="analyze-table-bar">
@@ -1333,7 +1448,9 @@ export function AnalyzeDrawer({
             <Toggle
               checked={comparing !== null}
               onChange={(on) =>
-                setComparing(on ? { a: outIdx, b: (outIdx + 1) % outputs.length } : null)
+                setComparing(
+                  on ? { a: outPath, b: outputs[(outIdx + 1) % outputs.length]!.outputPath } : null,
+                )
               }
               label="Compare outputs"
             />
@@ -1368,7 +1485,7 @@ export function AnalyzeDrawer({
                   </button>
                 </th>
               ))}
-              <th className="analyze-table__out">{nameOfPath(outPath)}</th>
+              <th className="analyze-table__out">{outShown.name}</th>
             </tr>
           </thead>
           <tbody>
@@ -1459,23 +1576,26 @@ function ComparePanel({
   tabLabel,
 }: {
   outputs: readonly OutputAnalysis[];
-  picked: { a: number; b: number };
-  onPick: (next: { a: number; b: number }) => void;
+  picked: { a: string; b: string };
+  onPick: (next: { a: string; b: string }) => void;
   nameOf: (path: string) => string;
   tabLabel: (path: string) => string;
 }) {
-  const a = outputs[Math.min(picked.a, outputs.length - 1)]!;
-  const b = outputs[Math.min(picked.b, outputs.length - 1)]!;
-  const aName = nameOf(a.outputPath);
-  const bName = nameOf(b.outputPath);
+  const paths = outputs.map((o) => o.outputPath);
+  const a = outputs[outputIndexOf(paths, picked.a)]!;
+  const b = outputs[outputIndexOf(paths, picked.b)]!;
+  // Two outputs may share a bare name; the tab label tells them apart.
+  const aName = tabLabel(a.outputPath);
+  const bName = tabLabel(b.outputPath);
+  const shownPick = { a: a.outputPath, b: b.outputPath };
   const picker = (which: 'a' | 'b', label: string) => (
     <select
       aria-label={label}
-      value={picked[which]}
-      onChange={(e) => onPick({ ...picked, [which]: Number(e.target.value) })}
+      value={shownPick[which]}
+      onChange={(e) => onPick({ ...shownPick, [which]: e.target.value })}
     >
-      {outputs.map((o, i) => (
-        <option key={o.outputPath} value={i}>
+      {outputs.map((o) => (
+        <option key={o.outputPath} value={o.outputPath}>
           {tabLabel(o.outputPath)}
         </option>
       ))}
@@ -1486,7 +1606,7 @@ function ComparePanel({
     if (a === b) return <p className="analyze-muted">Pick two different outputs.</p>;
     if (!a.table || !b.table) {
       const broken = !a.table ? a : b;
-      return <p className="analyze-error">{`${nameOf(broken.outputPath)}: ${broken.error}`}</p>;
+      return <p className="analyze-error">{broken.error}</p>;
     }
     const r = compareOutputs(
       a.table,

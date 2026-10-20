@@ -279,6 +279,7 @@ describe('polarity', () => {
       circles: [{ notPrime: false, redundant: false }],
       coversAll: true,
       isMinimum: true,
+      excess: null,
     });
     const bad = checkGroups(t, 0, [
       [0, 1],
@@ -294,5 +295,32 @@ describe('polarity', () => {
       [0, 1, 4, 5],
     ]);
     expect(redundant.circles.every((c) => c.redundant)).toBe(true);
+  });
+
+  it('checkGroups says why a full cover is not a minimum', () => {
+    const t = table(['A', 'B', 'C'], [0, 1, 4, 5]);
+    expect(
+      checkGroups(t, 0, [
+        [0, 1],
+        [4, 5],
+      ]).excess,
+    ).toBe('groups');
+    expect(checkGroups(t, 0, [[0, 1]]).excess).toBeNull();
+    // A + B: circling A'B and A is two groups, as many as the minimum, with a literal more.
+    const sum = table(['A', 'B', 'C'], [2, 3, 4, 5, 6, 7]);
+    const pairs = checkGroups(sum, 0, [
+      [2, 3],
+      [4, 5, 6, 7],
+    ]);
+    expect(pairs.isMinimum).toBe(false);
+    expect(pairs.excess).toBe('literals');
+  });
+
+  it('checkGroups calls no circles on a constant map a minimum', () => {
+    const zero = table(['A', 'B'], []);
+    expect(checkGroups(zero, 0, [])).toMatchObject({ coversAll: true, isMinimum: true });
+    expect(checkGroups(table(['A', 'B'], [0, 1, 2, 3]), 0, [], undefined, 'zeros').isMinimum).toBe(
+      true,
+    );
   });
 });

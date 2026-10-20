@@ -8,10 +8,13 @@ import {
   buildTruthTable,
   diffRows,
   MAX_TABLE_INPUTS,
+  parseBitPath,
   resolveInputNet,
   resolveOutputNet,
+  StoredStateError,
   type TruthTable,
 } from '../boolean/truthTable';
+import { BooleanEvalError } from '../boolean/evaluate';
 import { SEGMENT_NAMES } from '../sim/primitives/display';
 import { lowerCircuit } from './lower';
 import { dedupTerminals, reachableInputBits, type TerminalRef } from './reach';
@@ -28,6 +31,8 @@ export const OUTPUT_TERMINAL_KINDS: ReadonlySet<string> = new Set([
   'probe',
   'sevenseg',
 ]);
+
+export const NO_OUTPUT_MESSAGE = 'No output on this board: add an LED, output or probe';
 
 /** Whole-board equivalence check (bubble-push defense-in-depth): a board may
  *  legitimately carry width>1 terminals (M6.6 gate data-bit width) even
@@ -80,7 +85,7 @@ function compileSide(board: Board, lib: ChipLibrary): CompiledSide {
 export function boardDiffRows(a: Board, b: Board, lib: ChipLibrary): number[] {
   const sa = compileSide(a, lib);
   const sb = compileSide(b, lib);
-  if (sa.outputCols.length === 0) throw new RangeError('no output terminal (output/LED/probe)');
+  if (sa.outputCols.length === 0) throw new RangeError(NO_OUTPUT_MESSAGE);
   if (sa.inputCols.length === 0) throw new RangeError('truth table needs at least one input');
   if (
     sa.outputCols.length !== sb.outputCols.length ||
@@ -136,16 +141,18 @@ export function terminalRefs(board: Board, kinds: ReadonlySet<string>): Terminal
     .filter((c) => kinds.has(c.kind))
     .flatMap((c): TerminalRef[] => {
       const base = paths.get(c.id)!;
+      const shared = { kind: c.kind, labeled: !!c.label, ...(c.group ? { group: c.group } : {}) };
+      const name = c.label || c.id;
       if (c.kind === 'sevenseg') {
         const wired = wiredPins(board, c.id);
         return SEGMENT_NAMES.filter((pin) => wired.has(pin)).map((pin) => ({
+          ...shared,
           path: `${base}.${pin}`,
-          kind: c.kind,
-          labeled: !!c.label,
+          name: `${name} segment ${pin}`,
         }));
       }
       const path = c.kind === 'inport' ? `${base}.y` : c.kind === 'outport' ? `${base}.a` : base;
-      return [{ path, kind: c.kind, labeled: !!c.label }];
+      return [{ ...shared, path, name }];
     });
 }
 
@@ -193,34 +200,68 @@ export function analysisTablesOf(board: Board, lib: ChipLibrary): OutputAnalysis
     terminalRefs(board, OUTPUT_TERMINAL_KINDS),
     resolveOutputNet,
   );
-  const inputCols = inputs.flatMap((r) => bitCols(compiled, r, resolveInputNet));
-  const outputCols = outputs.flatMap((r) => bitCols(compiled, r, resolveOutputNet));
-  return outputCols.map((outCol, i) => {
+  const inputCols = inputs.flatMap((r) =>
+    bitCols(compiled, r, resolveInputNet).map((col) => ({ col, ref: r })),
+  );
+  const outputCols = outputs.flatMap((r) =>
+    bitCols(compiled, r, resolveOutputNet).map((col) => ({ col, ref: r })),
+  );
+  const outputNets = new Set(outputs.map((r) => resolveOutputNet(compiled, r.path)));
+  // An unwired input still names a variable of the function its group builds.
+  const fanOutFree = (col: string): boolean => {
+    const net = resolveInputNet(compiled, parseBitPath(col).base);
+    return compiled.fanout[net]!.length === 0 && !outputNets.has(net);
+  };
+  const allInputCols = inputCols.map((c) => c.col);
+  return outputCols.map(({ col: outCol, ref: outRef }, i) => {
+    const name = columnName(outCol, outRef);
     if (i >= MAX_ANALYSIS_OUTPUTS)
       return {
         outputPath: outCol,
         table: null,
-        error: `output limit ${MAX_ANALYSIS_OUTPUTS} exceeded`,
+        error: `Analyze handles up to ${MAX_ANALYSIS_OUTPUTS} outputs; ${name} is past that`,
       };
     try {
-      const reachable = reachableInputBits(compiled, inputCols, outCol);
-      if (reachable.length > MAX_ANALYSIS_INPUTS)
+      const reachable = reachableInputBits(compiled, allInputCols, outCol);
+      const outNet = resolveOutputNet(compiled, parseBitPath(outCol).base);
+      // An output nothing drives is no function at all, so no stray switch joins it.
+      const driven = reachable.length > 0 || compiled.drivers[outNet]!.length > 0;
+      const cols = inputCols
+        .filter(
+          ({ col, ref }) =>
+            reachable.includes(col) || (driven && ref.group === outRef.group && fanOutFree(col)),
+        )
+        .map((c) => c.col);
+      if (cols.length === 0) throw new RangeError(`${name} is not connected to any input`);
+      if (cols.length > MAX_ANALYSIS_INPUTS)
         throw new RangeError(
-          `needs ${reachable.length} inputs, max ${MAX_ANALYSIS_INPUTS} analyzable`,
+          `${name} reads ${cols.length} inputs; Analyze handles up to ${MAX_ANALYSIS_INPUTS}`,
         );
       return {
         outputPath: outCol,
-        table: buildTruthTable(compiled, reachable, [outCol]),
+        table: buildTruthTable(compiled, cols, [outCol]),
         error: null,
       };
     } catch (e) {
-      return {
-        outputPath: outCol,
-        table: null,
-        error: e instanceof Error ? e.message : String(e),
-      };
+      return { outputPath: outCol, table: null, error: plainError(e, name) };
     }
   });
+}
+
+/** What a message calls one bit column of a terminal. */
+function columnName(col: string, ref: TerminalRef): string {
+  const { bit } = parseBitPath(col);
+  const name = ref.name ?? col;
+  return bit === undefined ? name : `${name} bit ${bit}`;
+}
+
+/** The drawer shows these as written, so they name the output and never a path. */
+function plainError(e: unknown, name: string): string {
+  if (e instanceof StoredStateError)
+    return `${name} depends on a flip-flop or latch, so it has no truth table`;
+  if (e instanceof BooleanEvalError)
+    return `The board has a feedback loop, so ${name} has no truth table`;
+  return e instanceof Error ? e.message : String(e);
 }
 
 /** True iff `updated` computes the exact same function as `original` (same

@@ -2,7 +2,7 @@
 // rather than just a generator: the table and the expression are one function
 // seen two ways.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import * as bv from '../../core/value/busValue';
 import { ExprError, parseExpr, printExpr, truthTableOfExpr } from '../../core/boolean/expr';
@@ -15,11 +15,20 @@ import {
 } from '../../core/boolean/synthesize';
 import type { SynthNetlist } from '../../core/boolean/synthesize';
 import type { TruthTable } from '../../core/boolean/truthTable';
-import { cellKeyAction, nextCell, type Cell } from './buildGrid';
+import {
+  cellKeyAction,
+  closeStep,
+  constantNote,
+  minimiseFirstBlock,
+  nextCell,
+  resizeTable,
+  TABLE_LETTERS,
+  tableFromExpression,
+  type Cell,
+} from './buildGrid';
 import { useModalKeys } from '../modalKeys';
 import { useCoarsePointer } from '../pointerKind';
-
-const VAR_NAMES = ['A', 'B', 'C', 'D'];
+import { useCompact } from '../compact';
 
 type GateSet = 'any' | 'nand' | 'nor';
 
@@ -38,21 +47,28 @@ function tableOf(names: readonly string[], cells: readonly Cell[]): TruthTable {
   };
 }
 
-function cellsOfExpression(src: string, names: readonly string[]): Cell[] | null {
-  try {
-    const table = truthTableOfExpr(parseExpr(src));
-    if (table.inputPaths.length !== names.length) return null;
-    return table.rows.map((r) => ((r[0]!.v & 1) === 1 ? '1' : '0'));
-  } catch {
-    return null;
-  }
+/** The table a dialog opens with: the seed expression's own, when it has one. */
+function initialTable(text: string): { names: string[]; cells: Cell[]; note: string | null } {
+  const sync = tableFromExpression(text);
+  if (sync.kind === 'fit') return { names: sync.names, cells: sync.cells, note: null };
+  return {
+    names: TABLE_LETTERS.slice(0, 3),
+    cells: Array<Cell>(8).fill('0'),
+    note: sync.kind === 'unfit' ? sync.message : null,
+  };
 }
 
 export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Props) {
+  const seed = initialExpression ?? "A'B + BC";
+  const [first] = useState(() => initialTable(seed));
   const [tab, setTab] = useState<'expression' | 'table'>('expression');
-  const [text, setText] = useState(initialExpression ?? "A'B + BC");
-  const [varCount, setVarCount] = useState(3);
-  const [cells, setCells] = useState<Cell[]>(() => Array<Cell>(8).fill('0'));
+  const [text, setText] = useState(seed);
+  const [names, setNames] = useState<string[]>(first.names);
+  const [cells, setCells] = useState<Cell[]>(first.cells);
+  // Non-null means the cells are stale: the typed expression does not fit a table.
+  const [tableNote, setTableNote] = useState<string | null>(first.note);
+  const [tableEdited, setTableEdited] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [name, setName] = useState('Built circuit');
   const [twoInputOnly, setTwoInputOnly] = useState(false);
   const [gateSet, setGateSet] = useState<GateSet>('any');
@@ -60,8 +76,14 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
   const [minimiseFirst, setMinimiseFirst] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   const coarse = useCoarsePointer();
+  const compact = useCompact();
+  const varCount = names.length;
 
-  useModalKeys(onClose);
+  const requestClose = () => {
+    if (closeStep(tableEdited, confirmDiscard) === 'confirm') setConfirmDiscard(true);
+    else onClose();
+  };
+  useModalKeys(onClose, requestClose);
 
   const parsed = useMemo(() => {
     try {
@@ -71,50 +93,58 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
     }
   }, [text]);
 
-  const names = useMemo(() => VAR_NAMES.slice(0, varCount), [varCount]);
   const dontCares = useMemo(
     () => new Set(cells.flatMap((c, i) => (c === 'x' ? [i] : []))),
     [cells],
   );
 
-  // An expression cannot say "don't care", so re-deriving the cells from the
-  // cover this dialog just printed would resolve every x to whatever the
-  // minimiser picked for it. Only text the user typed reaches the table.
-  const printedCover = useRef<string | null>(null);
-
-  // Only when the parse agrees on the variable count, so a half-typed
-  // expression does not wipe a table built by hand.
-  useEffect(() => {
-    if (text === printedCover.current) return;
-    printedCover.current = null;
-    const next = cellsOfExpression(text, names);
-    if (next) setCells(next);
-  }, [text, names]);
+  // A half-typed expression leaves the table alone, so it never wipes one
+  // built by hand.
+  const onExpressionChange = (next: string) => {
+    setText(next);
+    const sync = tableFromExpression(next);
+    if (sync.kind === 'fit') {
+      setNames(sync.names);
+      setCells(sync.cells);
+      setTableNote(null);
+    } else if (sync.kind === 'unfit') {
+      setTableNote(sync.message);
+    }
+  };
 
   const writeCell = (index: number, value: Cell) => {
     const next = [...cells];
     next[index] = value;
     setCells(next);
-    // The same minimiser the Analyze drawer reveals, so the two agree.
+    setTableEdited(true);
+    setConfirmDiscard(false);
+    setTableNote(null);
+    // The same minimiser the Analyze drawer reveals, so the two agree. An
+    // expression cannot say "don't care", so the cells, not this text, stay
+    // the truth while the table is being edited.
     const dcs = new Set(next.flatMap((c, i) => (c === 'x' ? [i] : [])));
-    try {
-      const printed = printExpr(exprOfCover(tableOf(names, next), 0, dcs));
-      printedCover.current = printed;
-      setText(printed);
-    } catch {
-      // A width the K-map engine refuses; the table stays the truth.
-    }
+    setText(printExpr(exprOfCover(tableOf(names, next), 0, dcs)));
   };
 
+  const resize = (count: number) => {
+    const table = resizeTable(text, count);
+    setNames(table.names);
+    setCells(table.cells);
+    setTableNote(null);
+  };
+
+  const cover = useMemo(
+    () => exprOfCover(tableOf(names, cells), 0, dontCares),
+    [names, cells, dontCares],
+  );
   // The table path builds NOR-only from the product of sums, not the SOP above.
-  const posCover = useMemo(() => {
-    if (tab !== 'table' || gateSet !== 'nor') return null;
-    try {
-      return printExpr(exprOfPosCover(tableOf(names, cells), 0, dontCares));
-    } catch {
-      return null;
-    }
-  }, [tab, gateSet, names, cells, dontCares]);
+  const posCover = useMemo(
+    () => (gateSet === 'nor' ? exprOfPosCover(tableOf(names, cells), 0, dontCares) : null),
+    [gateSet, names, cells, dontCares],
+  );
+  const builtCover = posCover ?? cover;
+
+  const minimiseBlock = minimiseFirstBlock(text);
 
   const cycleCell = (index: number) => writeCell(index, nextCell(cells[index]!));
 
@@ -131,7 +161,10 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
     if (next >= 0 && next < cells.length) cellRefs.current[next]?.focus();
   };
 
+  const buildable = tab === 'table' ? tableNote === null : parsed.expr !== null;
+
   const build = () => {
+    if (!buildable) return;
     setBuildError(null);
     try {
       const options = {
@@ -144,7 +177,7 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
       const netlist =
         tab === 'table'
           ? synthesizeTable(tableOf(names, cells), { ...options, dontCares })
-          : minimiseFirst && gateSet !== 'any'
+          : minimiseFirst && minimiseBlock === null
             ? synthesizeTable(truthTableOfExpr(parseExpr(text)), expression)
             : synthesizeExpr(parseExpr(text), expression);
       onBuild(netlist, name.trim() || 'Built circuit');
@@ -154,190 +187,202 @@ export function BuildCircuitDialog({ initialExpression, onBuild, onClose }: Prop
   };
 
   const rows = 1 << varCount;
-  const buildable = tab === 'table' || parsed.expr !== null;
+  const constant = constantNote(builtCover);
 
   return (
     <div
       className="package-overlay"
-      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+      onPointerDown={(e) => e.target === e.currentTarget && requestClose()}
     >
       <div className="package-dialog build-dialog">
         <h3>Build circuit</h3>
 
-        <div className="build-tabs">
-          <button
-            type="button"
-            className="tool-btn"
-            aria-pressed={tab === 'expression'}
-            onClick={() => setTab('expression')}
-          >
-            Expression
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            aria-pressed={tab === 'table'}
-            onClick={() => setTab('table')}
-          >
-            Truth table
-          </button>
-        </div>
+        <div className="package-scroll">
+          <div className="build-tabs">
+            <button
+              type="button"
+              className="tool-btn"
+              aria-pressed={tab === 'expression'}
+              onClick={() => setTab('expression')}
+            >
+              Expression
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              aria-pressed={tab === 'table'}
+              onClick={() => setTab('table')}
+            >
+              Truth table
+            </button>
+          </div>
 
-        {tab === 'expression' ? (
-          <div className="build-expression">
+          {tab === 'expression' ? (
+            <div className="build-expression">
+              <label className="settings-row">
+                <input
+                  type="text"
+                  value={text}
+                  spellCheck={false}
+                  // A phone would pop its keyboard over the sheet on open.
+                  autoFocus={!compact}
+                  onChange={(e) => onExpressionChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    build();
+                  }}
+                  aria-label="Expression"
+                />
+                <span className="settings-row__text">
+                  <span>Expression</span>
+                  <span className="settings-row__hint">
+                    {"A'B + BC"} &nbsp; {"(A + B)C'"} &nbsp; {'A ^ B'} &nbsp; {'A AND NOT B'}
+                  </span>
+                </span>
+              </label>
+              {parsed.error ? (
+                <pre className="build-error">
+                  {text}
+                  {'\n'}
+                  {' '.repeat(Math.max(0, parsed.error.offset))}^{'\n'}
+                  {parsed.error.message}
+                </pre>
+              ) : (
+                <p className="analyze-muted">Reads as {printExpr(parsed.expr!)}</p>
+              )}
+            </div>
+          ) : (
+            <div className="build-table">
+              <label className="settings-row">
+                <select value={varCount} onChange={(e) => resize(Number(e.target.value))}>
+                  {Array.from({ length: MAX_KMAP_INPUTS - MIN_KMAP_INPUTS + 1 }, (_, i) => (
+                    <option key={i} value={MIN_KMAP_INPUTS + i}>
+                      {MIN_KMAP_INPUTS + i} variables
+                    </option>
+                  ))}
+                </select>
+                <span className="settings-row__text">
+                  <span>Inputs</span>
+                  <span className="settings-row__hint">
+                    {coarse
+                      ? "Tap a cell to cycle 0, 1, then a don't-care."
+                      : "Click a cell to cycle 0, 1, then a don't-care, or type 0, 1 or x to fill the row and drop to the next. Arrow keys move up and down."}
+                  </span>
+                </span>
+              </label>
+              {tableNote !== null ? <p className="build-error">{tableNote}</p> : null}
+              <table className="build-grid">
+                <thead>
+                  <tr>
+                    {names.map((v) => (
+                      <th key={v}>{v}</th>
+                    ))}
+                    <th>Y</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: rows }, (_, m) => (
+                    <tr key={m}>
+                      {names.map((v, i) => (
+                        <td key={v}>{(m >> (varCount - 1 - i)) & 1}</td>
+                      ))}
+                      <td>
+                        <button
+                          type="button"
+                          className="tool-btn build-cell"
+                          ref={(el) => {
+                            cellRefs.current[m] = el;
+                          }}
+                          onClick={() => cycleCell(m)}
+                          onKeyDown={(e) => onCellKey(e, m)}
+                          aria-label={`Output for row ${m}`}
+                        >
+                          {cells[m]}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="analyze-muted">Minimal cover: {printExpr(cover)}</p>
+              {posCover !== null ? (
+                <p className="analyze-muted">
+                  NOR only builds the minimum POS: {printExpr(posCover)}
+                </p>
+              ) : null}
+              {constant !== null && tableNote === null ? (
+                <p className="analyze-muted">{constant}</p>
+              ) : null}
+            </div>
+          )}
+
+          <label className="settings-row">
+            <input
+              type="checkbox"
+              checked={twoInputOnly}
+              onChange={(e) => setTwoInputOnly(e.target.checked)}
+            />
+            <span className="settings-row__text">
+              <span>Use two-input gates only</span>
+            </span>
+          </label>
+          <label className="settings-row">
+            <select
+              value={gateSet}
+              aria-label="Gates"
+              onChange={(e) => setGateSet(e.target.value as GateSet)}
+            >
+              <option value="any">Gates: Any</option>
+              <option value="nand">Gates: NAND only</option>
+              <option value="nor">Gates: NOR only</option>
+            </select>
+          </label>
+          {gateSet !== 'any' ? (
             <label className="settings-row">
               <input
-                type="text"
-                value={text}
-                spellCheck={false}
-                onChange={(e) => setText(e.target.value)}
-                aria-label="Expression"
+                type="checkbox"
+                checked={cancelNotPairs}
+                onChange={(e) => setCancelNotPairs(e.target.checked)}
               />
               <span className="settings-row__text">
-                <span>Expression</span>
-                <span className="settings-row__hint">
-                  {"A'B + BC"} &nbsp; {"(A + B)C'"} &nbsp; {'A ^ B'} &nbsp; {'A AND NOT B'}
-                </span>
+                <span>Remove double inversions</span>
               </span>
             </label>
-            {parsed.error ? (
-              <pre className="build-error">
-                {text}
-                {'\n'}
-                {' '.repeat(Math.max(0, parsed.error.offset))}^{'\n'}
-                {parsed.error.message}
-              </pre>
-            ) : (
-              <p className="analyze-muted">Reads as {printExpr(parsed.expr!)}</p>
-            )}
-          </div>
-        ) : (
-          <div className="build-table">
+          ) : null}
+          {tab === 'expression' ? (
             <label className="settings-row">
-              <select
-                value={varCount}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  setVarCount(n);
-                  setCells(Array<Cell>(1 << n).fill('0'));
-                  setText('0');
-                }}
-              >
-                {Array.from({ length: MAX_KMAP_INPUTS - MIN_KMAP_INPUTS + 1 }, (_, i) => (
-                  <option key={i} value={MIN_KMAP_INPUTS + i}>
-                    {MIN_KMAP_INPUTS + i} variables
-                  </option>
-                ))}
-              </select>
+              <input
+                type="checkbox"
+                checked={minimiseFirst && minimiseBlock === null}
+                disabled={minimiseBlock !== null}
+                onChange={(e) => setMinimiseFirst(e.target.checked)}
+              />
               <span className="settings-row__text">
-                <span>Inputs</span>
+                <span>Minimise first</span>
                 <span className="settings-row__hint">
-                  {coarse
-                    ? "Tap a cell to cycle 0, 1, then a don't-care."
-                    : "Click a cell to cycle 0, 1, then a don't-care, or type 0, 1 or x to fill the row and drop to the next. Arrow keys move up and down."}
+                  {minimiseBlock ??
+                    `Build the minimum ${gateSet === 'nor' ? 'product of sums' : 'sum of products'} instead of the expression as written.`}
                 </span>
               </span>
             </label>
-            <table className="build-grid">
-              <thead>
-                <tr>
-                  {names.map((v) => (
-                    <th key={v}>{v}</th>
-                  ))}
-                  <th>Y</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: rows }, (_, m) => (
-                  <tr key={m}>
-                    {names.map((v, i) => (
-                      <td key={v}>{(m >> (varCount - 1 - i)) & 1}</td>
-                    ))}
-                    <td>
-                      <button
-                        type="button"
-                        className="tool-btn build-cell"
-                        ref={(el) => {
-                          cellRefs.current[m] = el;
-                        }}
-                        onClick={() => cycleCell(m)}
-                        onKeyDown={(e) => onCellKey(e, m)}
-                        aria-label={`Output for row ${m}`}
-                      >
-                        {cells[m]}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="analyze-muted">Minimal cover: {text}</p>
-            {posCover !== null ? (
-              <p className="analyze-muted">NOR only builds the minimum POS: {posCover}</p>
-            ) : null}
-          </div>
-        )}
-
-        <label className="settings-row">
-          <input
-            type="checkbox"
-            checked={twoInputOnly}
-            onChange={(e) => setTwoInputOnly(e.target.checked)}
-          />
-          <span className="settings-row__text">
-            <span>Use two-input gates only</span>
-          </span>
-        </label>
-        <label className="settings-row">
-          <select value={gateSet} onChange={(e) => setGateSet(e.target.value as GateSet)}>
-            <option value="any">Any gates</option>
-            <option value="nand">NAND only</option>
-            <option value="nor">NOR only</option>
-          </select>
-          <span className="settings-row__text">
-            <span>Gates</span>
-          </span>
-        </label>
-        {gateSet !== 'any' ? (
+          ) : null}
           <label className="settings-row">
-            <input
-              type="checkbox"
-              checked={cancelNotPairs}
-              onChange={(e) => setCancelNotPairs(e.target.checked)}
-            />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
             <span className="settings-row__text">
-              <span>Cancel back-to-back NOT pairs</span>
-            </span>
-          </label>
-        ) : null}
-        {gateSet !== 'any' && tab === 'expression' ? (
-          <label className="settings-row">
-            <input
-              type="checkbox"
-              checked={minimiseFirst}
-              onChange={(e) => setMinimiseFirst(e.target.checked)}
-            />
-            <span className="settings-row__text">
-              <span>Minimise first</span>
+              <span>Name for the new circuit</span>
               <span className="settings-row__hint">
-                Build the minimum {gateSet === 'nor' ? 'product of sums' : 'sum of products'}{' '}
-                instead of the expression as written.
+                It lands as its own group, with its own switches and LED.
               </span>
             </span>
           </label>
+
+          {buildError ? <p className="build-error">{buildError}</p> : null}
+        </div>
+
+        {confirmDiscard ? (
+          <p className="build-error">Discard the table? Esc again to close</p>
         ) : null}
-        <label className="settings-row">
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-          <span className="settings-row__text">
-            <span>Name for the new circuit</span>
-            <span className="settings-row__hint">
-              It lands as its own group, with its own switches and LED.
-            </span>
-          </span>
-        </label>
-
-        {buildError ? <p className="build-error">{buildError}</p> : null}
-
         <div className="label-conflict-buttons">
           <button type="button" className="tool-btn" onClick={onClose}>
             Cancel

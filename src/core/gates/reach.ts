@@ -63,6 +63,10 @@ export interface TerminalRef {
   kind: string;
   /** Explicit user label present (wins dedup outright). */
   labeled: boolean;
+  /** Innermost group id; absent on the board itself. */
+  group?: string;
+  /** What a message calls the terminal, never a path. */
+  name?: string;
 }
 
 /** One representative terminal per resolved net: labeled first, then pure

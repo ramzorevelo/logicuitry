@@ -478,6 +478,18 @@ h3 {
   overflow-y: auto;
 }
 
+/* The body scrolls, not the dialog, so a 16-row table never pushes Cancel and
+   Build out of view; it keeps the dialog's own row spacing. */
+.build-dialog .package-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .build-tabs {
   display: flex;
   gap: var(--space-unit);

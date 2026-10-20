@@ -46,6 +46,18 @@ updating for, the patch digit is reserved for a critical one-off fix).
 - The palette is wider and wraps long names.
 - What's new shows the latest release; earlier versions open on a click or
   tap, and Close stays in view.
+- Build circuit keeps every input of the table, wired or not, and Analyze
+  counts an unwired input of the same circuit, so a 4-input table still opens
+  as a 4-variable K-map.
+- Build this builds the cover on screen, or the circled groups before a
+  reveal; it never fills in a hidden answer.
+- Analyze always offers Build circuit, follows the output just built, and
+  names an output labelled with its expression Y.
+- Analyze and Build circuit errors read as plain sentences.
+- Analyze shows the full table for 5 inputs.
+- Build circuit: the table follows the typed expression and its names,
+  Minimise first works with any gate set, Enter builds, and an edited table
+  asks before closing.
 
 ### Fixed
 
@@ -74,6 +86,17 @@ updating for, the patch digit is reserved for a critical one-off fix).
 - Saving by download marks the board saved.
 - Desktop app: Help > Check for updates finds new releases instead of
   reporting a failure.
+- K-map terms draw a separate bar over each complement: A'B' no longer reads
+  as (AB)'.
+- Delete in the Analyze drawer no longer deletes board parts, and keys typed
+  into its menus stay there.
+- A revealed K-map answer resets when the function changes.
+- Build circuit is unavailable while powered, in view-only, in bubble push
+  and on a chip tab, instead of building into the open chip.
+- The K-map fits the drawer in presentation mode.
+- K-map Check: a constant function, two findings on one group, and why a
+  cover is not minimum read correctly; an already circled group is refused.
+- NAND-only and NOR-only builds share one inverter per input.
 
 ## [0.4.3] - 2026-10-05
 

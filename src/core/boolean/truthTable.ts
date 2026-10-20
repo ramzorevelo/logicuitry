@@ -75,6 +75,9 @@ function resolveInputPinNet(circuit: CompiledCircuit, path: string): number | un
   return index < 0 ? undefined : prim.inputs[index];
 }
 
+/** A flip-flop, latch or other stored state sits behind an output. */
+export class StoredStateError extends BooleanEvalError {}
+
 /**
  * Throws when a stateful primitive feeds any of `nets`: its outputs depend on
  * history, so a row of input values does not determine them. Walks back from
@@ -93,7 +96,7 @@ function refuseStoredState(
       if (seeded.has(i)) continue;
       const prim = circuit.primitives[i]!;
       if (STATEFUL_KINDS.has(prim.kind))
-        throw new BooleanEvalError(`not purely combinational: ${prim.path} stores state`);
+        throw new StoredStateError(`not purely combinational: ${prim.path} stores state`);
       for (const n of prim.inputs) {
         if (seen.has(n)) continue;
         seen.add(n);

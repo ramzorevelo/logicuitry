@@ -51,6 +51,19 @@ export function fitKmapMetrics(
   };
 }
 
+/** The presentation-scaled map, shrunk to fit `availW` when it would not:
+ *  the drawer is a fixed width, and 135% chrome pushes a 4-variable map past it. */
+export function boundedKmapMetrics(
+  cols: number,
+  rows: number,
+  scale: number,
+  availW: number,
+): KmapMetrics {
+  const scaled = scale === 1 ? defaultKmapMetrics : scaledKmapMetrics(scale);
+  if (scaled.labelW + cols * scaled.cell <= availW) return scaled;
+  return fitKmapMetrics(cols, rows, availW, Infinity);
+}
+
 export interface KmapLayout {
   grid: KmapGrid;
   metrics: KmapMetrics;
@@ -471,18 +484,19 @@ export function kmapGroupAt(
 ): number | undefined {
   for (let i = groups.length - 1; i >= 0; i--) {
     const inset = 4 + ((groups[i]!.inset ?? i) % 3) * 3;
-    for (const { rect } of groupBlocks(layout, groups[i]!.minterms, inset)) {
+    for (const { rect, open } of groupBlocks(layout, groups[i]!.minterms, inset)) {
       const inExpanded =
         x >= rect.x - outerTol &&
         x <= rect.x + rect.w + outerTol &&
         y >= rect.y - outerTol &&
         y <= rect.y + rect.h + outerTol;
-      const inDeepInterior =
-        x > rect.x + innerTol &&
-        x < rect.x + rect.w - innerTol &&
-        y > rect.y + innerTol &&
-        y < rect.y + rect.h - innerTol;
-      if (inExpanded && !inDeepInterior) return i;
+      // An open side toward a wrapped edge has no stroke, so nothing there to hit.
+      const onDrawnSide =
+        (!open.left && x <= rect.x + innerTol) ||
+        (!open.right && x >= rect.x + rect.w - innerTol) ||
+        (!open.top && y <= rect.y + innerTol) ||
+        (!open.bottom && y >= rect.y + rect.h - innerTol);
+      if (inExpanded && onDrawnSide) return i;
     }
   }
   return undefined;

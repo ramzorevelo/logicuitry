@@ -3,6 +3,7 @@ import * as bv from '../core/value/busValue';
 import type { TruthTable } from '../core/boolean/truthTable';
 import { buildKmap } from '../core/boolean/kmap';
 import {
+  boundedKmapMetrics,
   cornerPlan,
   defaultKmapMetrics,
   fitKmapMetrics,
@@ -10,6 +11,7 @@ import {
   KMAP_FIT_MAX_CELL,
   KMAP_FIT_MIN_CELL,
   kmapCellAt,
+  kmapGroupAt,
   layoutKmap,
   scaledKmapMetrics,
 } from './kmap';
@@ -66,6 +68,40 @@ describe('fitKmapMetrics', () => {
 
   it('floors the cell when nothing fits, leaving the panel to scroll', () => {
     expect(fitKmapMetrics(4, 4, 50, 50).cell).toBe(KMAP_FIT_MIN_CELL);
+  });
+});
+
+describe('boundedKmapMetrics', () => {
+  it('keeps the default map when it fits the drawer', () => {
+    expect(boundedKmapMetrics(4, 4, 1, 300)).toEqual(defaultKmapMetrics);
+  });
+
+  it('shrinks a presentation-scaled 4-variable map to the drawer width', () => {
+    const m = boundedKmapMetrics(4, 4, 1.35, 300);
+    expect(m.labelW + 4 * m.cell).toBeLessThanOrEqual(300);
+    expect(m.cell).toBeLessThan(scaledKmapMetrics(1.35).cell);
+  });
+
+  it('keeps the scaled map where the drawer has room for it', () => {
+    expect(boundedKmapMetrics(2, 2, 1.35, 300)).toEqual(scaledKmapMetrics(1.35));
+  });
+});
+
+describe('kmapGroupAt', () => {
+  // m0 and m8 sit in the first and last columns, so the pair wraps the side edges.
+  const g = buildKmap(table(['A', 'B', 'C', 'D'], [0, 8]), 0);
+  const layout = layoutKmap(g, 0, 0, metrics);
+  const groups = [{ minterms: [0, 8], style: 'user' as const, color: 0 }];
+  const [left] = groupBlocks(layout, [0, 8], 4);
+  const midY = left!.rect.y + left!.rect.h / 2;
+
+  it('misses the open side of a wrapped group, where no stroke is drawn', () => {
+    expect(left!.open.left).toBe(true);
+    expect(kmapGroupAt(layout, groups, left!.rect.x + 2, midY)).toBeUndefined();
+  });
+
+  it('still hits the drawn side of the same block', () => {
+    expect(kmapGroupAt(layout, groups, left!.rect.x + left!.rect.w - 2, midY)).toBe(0);
   });
 });
 

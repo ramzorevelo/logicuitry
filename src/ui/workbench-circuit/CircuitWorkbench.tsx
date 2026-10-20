@@ -31,6 +31,7 @@ import {
   NOTICE_LINGER_MS,
   NoticePolicy,
   blockedText,
+  buildBlockedReason,
   makeHaptic,
   type BlockedReason,
 } from './blockedNotice';
@@ -127,6 +128,8 @@ import {
 import { PreviewController } from '../../render/ghostPreview';
 import { PackageDialog } from './PackageDialog';
 import { BuildCircuitDialog } from './BuildCircuitDialog';
+import { componentPaths } from '../../core/model/compile';
+import { keyBelongsElsewhere } from '../panelKeys';
 import { circuitFromNetlist } from './buildCircuit';
 import { LabelConflictDialog } from './LabelConflictDialog';
 import { CloseTabDialog } from './CloseTabDialog';
@@ -184,7 +187,11 @@ import { nextFocus } from './bubble/focusOrder';
 import { AnalyzeDrawer } from './AnalyzeDrawer';
 import { useTypedFunction } from './typedFunction';
 import { useReferenceDrawer, useReferenceDrawerControl } from '../components/ReferenceDrawer';
-import { analysisTablesOf, OUTPUT_TERMINAL_KINDS } from '../../core/gates/verify';
+import {
+  analysisTablesOf,
+  NO_OUTPUT_MESSAGE,
+  OUTPUT_TERMINAL_KINDS,
+} from '../../core/gates/verify';
 import { gateExpressions, hasSubExpressions } from '../../core/gates/subexpr';
 import type { Expr } from '../../core/boolean/expr';
 
@@ -793,6 +800,11 @@ export function CircuitWorkbench() {
   const bubblePairMode = useCircuitStore((s) => s.bubblePairMode);
   const activeTab: Tab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]!;
   const prefix = activeTab.kind === 'board' ? 'main/' : activeTab.prefix;
+  const buildBlockReason = buildBlockedReason({ tab: activeTab.kind, viewOnly, mode, powered });
+  const buildBlocked = buildBlockReason ? blockedText(buildBlockReason) : undefined;
+  // The output a build just made, so Analyze opens on it rather than on whatever came first.
+  const [focusOutputPath, setFocusOutputPath] = useState<string | undefined>(undefined);
+  const clearFocusOutput = useCallback(() => setFocusOutputPath(undefined), []);
 
   // Analyze drawer: reachable from edit mode's toolbar and
   // via bubble mode's Analyze exit. Content registers only while open-able.
@@ -815,22 +827,25 @@ export function CircuitWorkbench() {
                 <AnalyzeDrawer
                   onClose={closeAnalyze}
                   onBuild={(expression) => setBuilding(expression ? { expression } : {})}
+                  focusOutputPath={focusOutputPath}
+                  onFocusTaken={clearFocusOutput}
+                  buildBlocked={buildBlocked}
                 />
               ),
             }
           : null,
-      [analyzeOpen, closeAnalyze],
+      [analyzeOpen, closeAnalyze, focusOutputPath, clearFocusOutput, buildBlocked],
     ),
   );
   const tryOpenAnalyze = () => {
     const st = store.getState();
     if (activeTab.kind !== 'board') {
-      useCircuitStore.setState({ error: 'analyze: works on the board tab' });
+      useCircuitStore.setState({ error: 'Analyze works on the board tab' });
       return;
     }
     const outputs = st.board.components.filter((c) => OUTPUT_TERMINAL_KINDS.has(c.kind));
     try {
-      if (outputs.length === 0) throw new RangeError('no output terminal (output/LED/probe)');
+      if (outputs.length === 0) throw new RangeError(NO_OUTPUT_MESSAGE);
       // Compile-level validation only (cycles, multi-driver, ...) -- per-bit
       // width expansion is analysisTablesOf's own job below, wide terminals
       // are not an Analyze error.
@@ -1406,6 +1421,7 @@ export function CircuitWorkbench() {
       // A dialog is up: it owns the keyboard, buttons and all.
       if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (keyBelongsElsewhere(e)) return;
       const s = store.getState();
       s.clearTransientError();
       // View-only: same strict top-of-handler delegation bubble mode uses. Only
@@ -4538,6 +4554,13 @@ export function CircuitWorkbench() {
     return dipCellIndexAt(l, localPt.y) ?? 0;
   };
 
+  // A key pressed after the pointer left must not act on the last part it hovered.
+  const onCanvasPointerLeave = () => {
+    if (hoverItemRef.current === null) return;
+    hoverItemRef.current = null;
+    draw();
+  };
+
   const onCanvasClick = (e: React.MouseEvent) => {
     // Click a switch to drive it while powered. Ports are ChipDef
     // boundary pins, not sources -- they never respond to a click (P0.3:
@@ -5213,7 +5236,12 @@ export function CircuitWorkbench() {
         items: [
           { id: 'import', label: 'Import circuit...', run: () => void fileImport() },
           { id: 'package', label: 'Package as chip...', run: () => setPackaging(true) },
-          { id: 'build', label: 'Build circuit...', run: () => setBuilding({}) },
+          {
+            id: 'build',
+            label: 'Build circuit...',
+            disabled: buildBlocked !== undefined,
+            run: () => setBuilding({}),
+          },
         ],
       },
       {
@@ -5450,6 +5478,7 @@ export function CircuitWorkbench() {
     viewOnly,
     showSubExprs,
     activeTab.kind,
+    buildBlocked,
   ]);
   useContributeMenus('circuit', circuitMenus);
 
@@ -5515,6 +5544,7 @@ export function CircuitWorkbench() {
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
+              onPointerLeave={onCanvasPointerLeave}
               onClick={onCanvasClick}
             />
             {error && <div className="circuit-error">{error}</div>}
@@ -5733,7 +5763,8 @@ export function CircuitWorkbench() {
               </ToolBtn>
               <ToolBtn
                 icon="build"
-                title="Build a circuit from a Boolean expression or a truth table"
+                title={buildBlocked ?? 'Build a circuit from a Boolean expression or a truth table'}
+                disabled={buildBlocked !== undefined}
                 onClick={() => setBuilding({})}
               >
                 Build circuit…
@@ -5906,6 +5937,7 @@ export function CircuitWorkbench() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onPointerLeave={onCanvasPointerLeave}
             onClick={onCanvasClick}
             onDoubleClick={onCanvasDoubleClick}
           />
@@ -6567,18 +6599,23 @@ export function CircuitWorkbench() {
 
       {building && (
         <BuildCircuitDialog
+          key={building.expression ?? ''}
           {...(building.expression ? { initialExpression: building.expression } : {})}
           onBuild={(netlist, name) => {
+            if (buildBlockReason) return reportBlocked(buildBlockReason);
             const group = store
               .getState()
               .commitSynthesis(circuitFromNetlist(netlist, freeSpot()), name);
+            // Nothing landed, so the dialog stays up with the user's work in it.
+            if (!group) return;
+            const st = store.getState();
             // The new circuit lands on a free spot, which is off screen as soon
             // as the board has anything on it.
-            if (group) {
-              store.getState().requestFit();
-              // The typed function now exists as a circuit; analyse that.
-              useTypedFunction.getState().setSource('board');
-            }
+            st.requestFit();
+            // The typed function now exists as a circuit; analyse that.
+            useTypedFunction.getState().setSource('board');
+            const led = st.board.components.find((c) => c.group === group && c.kind === 'led');
+            if (led) setFocusOutputPath(componentPaths(st.board, 'main/').get(led.id));
             setBuilding(null);
           }}
           onClose={() => setBuilding(null)}

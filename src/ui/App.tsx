@@ -53,6 +53,7 @@ import { NumbersWorkbench } from './workbench-numbers/NumbersWorkbench';
 import { CircuitWorkbench } from './workbench-circuit/CircuitWorkbench';
 import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
 import { modalKeysHeld } from './modalKeys';
+import { isSelectTarget } from './panelKeys';
 
 // Gates workbench retired: bubble pushing is the Circuit workbench's locked
 // bubble mode now (B key / mode bar).
@@ -238,6 +239,7 @@ export function App() {
       // A dialog is up: it owns the keyboard, buttons and all.
       if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isSelectTarget(e.target)) return;
       if (e.key === 'F10') {
         // The APG-conformant way into a menu bar. Alt+letter is deliberately
         // not used: Alt is already a canvas modifier (Alt+drag detaches).

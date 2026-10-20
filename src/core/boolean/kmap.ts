@@ -389,6 +389,8 @@ export interface GroupCheck {
   coversAll: boolean;
   /** Same group count and literal count as the minimum cover. */
   isMinimum: boolean;
+  /** Why a cover of every target still is not a minimum; null otherwise. */
+  excess: 'groups' | 'literals' | null;
 }
 
 /** Explicit Check action over legal circles; never run live. */
@@ -414,14 +416,19 @@ export function checkGroups(
   const got = new Set<number>();
   for (const c of circles) for (const m of c) got.add(m);
   const coversAll = targets.every((m) => got.has(m));
-  const best = minimumCovers(table, outputIndex, dontCares, polarity, 1)[0];
-  const isMinimum =
-    !!best &&
-    coversAll &&
-    circles.every((c) => analyzeSubcube(n, c)) &&
-    circles.length === best.length &&
-    literalTotal(n, circles) === literalTotal(n, best);
-  return { circles: perCircle, coversAll, isMinimum };
+  // No target at all: the empty cover is the minimum, and it is what a constant leaves.
+  const best =
+    targets.length === 0 ? [] : minimumCovers(table, outputIndex, dontCares, polarity, 1)[0];
+  const judged = !!best && coversAll && circles.every((c) => analyzeSubcube(n, c));
+  const excess =
+    !judged || !best
+      ? null
+      : circles.length > best.length
+        ? 'groups'
+        : literalTotal(n, circles) > literalTotal(n, best)
+          ? 'literals'
+          : null;
+  return { circles: perCircle, coversAll, isMinimum: judged && excess === null, excess };
 }
 
 function compareCovers(

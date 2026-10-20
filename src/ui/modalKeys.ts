@@ -57,17 +57,19 @@ export function claimEscape(): EscapeClaim {
 /**
  * Claims the keyboard for a modal and closes it on Escape.
  * Pass null while the dialog is not showing, for the ones that decide that
- * from the store rather than by being mounted.
+ * from the store rather than by being mounted. `onEscape`, when given, takes
+ * Escape instead, for a dialog that asks before it discards work; Back still
+ * closes, since the layer it pops cannot be put back.
  */
-export function useModalKeys(onClose: (() => void) | null): void {
+export function useModalKeys(onClose: (() => void) | null, onEscape?: () => void): void {
   const open = onClose !== null;
   useBackLayer(onClose);
   useEffect(() => {
     if (!open) return;
     return pushModalKeys();
   }, [open]);
-  const latest = useRef(onClose);
-  latest.current = onClose;
+  const latest = useRef(onEscape ?? onClose);
+  latest.current = onEscape ?? onClose;
   useEffect(() => {
     if (!open) return;
     const claim = claimEscape();
