@@ -44,9 +44,10 @@ export function HoldInequality({ p }: { p: SeqPathTiming }) {
 export function StaCard(props: {
   path: PathTiming;
   sequential: SequentialTiming | null;
+  directionBreaks?: readonly string[];
   onClose: () => void;
 }) {
-  const { path, sequential } = props;
+  const { path, sequential, directionBreaks = [] } = props;
   return (
     <div className="sta-card">
       <div className="sta-card__head">
@@ -70,6 +71,11 @@ export function StaCard(props: {
         {path.estimated && ' · t_cd estimated (0.35 × t_pd typ)'}
         {path.typUnpublished && ' · typ not published: max used'}
       </div>
+      {directionBreaks.map((at) => (
+        <div key={at} className="sta-card__muted">
+          direction not fixed: path broken at {short(at)}
+        </div>
+      ))}
       {sequential && (
         <div className="sta-card__seq">
           <div className="sta-card__muted">sequential paths: inequality figures in ns</div>

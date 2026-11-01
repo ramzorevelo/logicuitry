@@ -53,6 +53,10 @@
   --kmap-g7: #3f8fc5;
   --kmap-g8: #a34a44;
 
+  /* A coloured group's fill, as an opacity over the paper: strong enough to
+     read as a band across the room, faint enough that wires stay the subject. */
+  --group-fill-alpha: 0.07;
+
   /* typography */
   --font-ui: 'D-DIN', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -148,6 +152,7 @@
   --kmap-g6: #d26787;
   --kmap-g7: #3b9ec9;
   --kmap-g8: #ba6a5f;
+  --group-fill-alpha: 0.1;
 }
 
 /* --- Character themes. Palettes are eyedropped from every reference frame in
@@ -254,6 +259,17 @@
   --ok: #58c39a;
   --signal-mixed: #86e850;
 
+  /* Dark-ground palette, as Dark: the :root values are tuned for a pale one. */
+  --kmap-g1: #4996d2;
+  --kmap-g2: #d67a3c;
+  --kmap-g3: #22a87a;
+  --kmap-g4: #9377d6;
+  --kmap-g5: #9c8f2f;
+  --kmap-g6: #d26787;
+  --kmap-g7: #3b9ec9;
+  --kmap-g8: #ba6a5f;
+  --group-fill-alpha: 0.1;
+
   --display-font: 'Chakra Petch', var(--font-ui);
   --chrome-radius: 0px;
   --glyph-pattern: pixel;
@@ -280,6 +296,17 @@
   --warn: #f5906d;
   --ok: #6fd6a4;
   --signal-mixed: #d070d8;
+
+  /* Dark-ground palette, as Dark: the :root values are tuned for a pale one. */
+  --kmap-g1: #4996d2;
+  --kmap-g2: #d67a3c;
+  --kmap-g3: #22a87a;
+  --kmap-g4: #9377d6;
+  --kmap-g5: #9c8f2f;
+  --kmap-g6: #d26787;
+  --kmap-g7: #3b9ec9;
+  --kmap-g8: #ba6a5f;
+  --group-fill-alpha: 0.1;
 
   --display-font: 'Chakra Petch', var(--font-ui);
   --chrome-radius: 0px;

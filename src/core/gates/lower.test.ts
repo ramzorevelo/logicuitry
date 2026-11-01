@@ -3,13 +3,14 @@ import { compile } from '../model/compile';
 import { evaluateNets } from '../boolean/evaluate';
 import * as bv from '../value/busValue';
 import type { Board, Component, Wire } from '../model/types';
-import { lowerCircuit } from './lower';
+import { lowerCircuit, lowerLibrary } from './lower';
+import { builtinChipLibrary, isBuiltinChipDef } from '../parts/packages';
 import { withInputBubble, withOutputBubble } from './bubbleModel';
 
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'b',
     name: 'b',
     components,
@@ -108,5 +109,15 @@ describe('lowerCircuit', () => {
     expect(evalBoard(b, 1, 0)).toEqual(bv.known(0, 1));
     // a=0,b=0 -> OR(1,0) = 1
     expect(evalBoard(b, 0, 0)).toEqual(bv.known(1, 1));
+  });
+});
+
+describe('lowerLibrary', () => {
+  it('passes built-in parts through, so compile still knows them by identity', () => {
+    const user = { ...builtinChipLibrary().get('74LS00')!, id: 'mine' };
+    const lib = new Map([...builtinChipLibrary(), ['mine', user]]);
+    const lowered = lowerLibrary(lib);
+    expect(isBuiltinChipDef(lowered.get('74LS189')!)).toBe(true);
+    expect(lowered.get('mine')).not.toBe(user);
   });
 });

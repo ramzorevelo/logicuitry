@@ -1,0 +1,204 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "half-adder",
+  "name": "Half adder",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 32
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 120
+      },
+      "label": "B"
+    },
+    {
+      "id": "x1",
+      "kind": "xor",
+      "pos": {
+        "x": 184,
+        "y": 40
+      }
+    },
+    {
+      "id": "a1",
+      "kind": "and",
+      "pos": {
+        "x": 184,
+        "y": 112
+      }
+    },
+    {
+      "id": "s",
+      "kind": "led",
+      "pos": {
+        "x": 344,
+        "y": 32
+      },
+      "label": "S"
+    },
+    {
+      "id": "cout",
+      "kind": "led",
+      "pos": {
+        "x": 344,
+        "y": 104
+      },
+      "label": "Cout"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "x1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 176,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "x1",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": [
+        {
+          "x": 160,
+          "y": 64
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "x1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "s",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "a1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "cout",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 176,
+        "y": 48
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 160,
+        "y": 136
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

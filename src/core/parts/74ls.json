@@ -548,6 +548,82 @@
       "hold": { "data": 5, "enable": 5 },
       "verified": true,
       "source": "TI SDLS167, October 1976, revised March 1988 (SN74LS377), switching characteristics, CL = 15 pF, RL = 2 kOhm. Setup 20 ns for data; enable is the worse of enable active-state (25) and inactive-state (10); hold 5 ns for data and enable"
+    },
+
+    {
+      "part": "74LS173",
+      "primitive": "register4oe",
+      "paths": {
+        "clk_to_q": {
+          "tplh": { "typ": 17, "max": 25 },
+          "tphl": { "typ": 22, "max": 30 }
+        },
+        "clr_to_q": {
+          "tphl": { "typ": 26, "max": 35 }
+        }
+      },
+      "enable": {
+        "tpzh": { "typ": 15, "max": 23 },
+        "tpzl": { "typ": 18, "max": 27 },
+        "tphz": { "typ": 11, "max": 20 },
+        "tplz": { "typ": 11, "max": 17 }
+      },
+      "setup_min": 17,
+      "hold_min": 3,
+      "setup": { "data": 17, "enable": 35 },
+      "hold": { "data": 3, "enable": 0 },
+      "verified": true,
+      "source": "TI SDLS067A, October 1976, revised June 1999 (SN74LS173A), switching characteristics, RL = 667 Ohm, CL = 45 pF (5 pF for the disable times); CLR to Q is published as tPHL only. Setup 17 ns data, 35 ns data enable (G1, G2); hold 3 ns data, 0 ns data enable"
+    },
+
+    {
+      "part": "74LS245",
+      "primitive": "transceiver8",
+      "paths": {
+        "port_to_port": {
+          "tplh": { "typ": 8, "max": 12 },
+          "tphl": { "typ": 8, "max": 12 }
+        }
+      },
+      "enable": {
+        "tpzh": { "typ": 25, "max": 40 },
+        "tpzl": { "typ": 27, "max": 40 },
+        "tphz": { "typ": 15, "max": 28 },
+        "tplz": { "typ": 15, "max": 25 }
+      },
+      "verified": true,
+      "source": "TI SDLS146B, October 1976, revised September 2016 (SN74LS245), switching characteristics, RL = 667 Ohm, CL = 45 pF (5 pF for the disable times). One propagation row serves A to B and B to A; the sheet times no DIR arc, so a DIR flip takes the enable and disable rows"
+    },
+
+    {
+      "part": "74LS189",
+      "primitive": "ram16x4",
+      "paths": {
+        "addr_to_q": {
+          "tplh": { "typ": 50, "max": 80 },
+          "tphl": { "typ": 50, "max": 80 }
+        },
+        "cs_to_q": {
+          "tplh": { "typ": 35, "max": 60 },
+          "tphl": { "typ": 35, "max": 60 }
+        }
+      },
+      "enable": {
+        "tpzh": { "typ": 35, "max": 60 },
+        "tpzl": { "typ": 35, "max": 60 },
+        "tphz": { "typ": 30, "max": 50 },
+        "tplz": { "typ": 30, "max": 50 }
+      },
+      "enable_from": {
+        "we": {
+          "tpzh": { "typ": 55, "max": 90 },
+          "tpzl": { "typ": 55, "max": 90 },
+          "tphz": { "typ": 40, "max": 60 },
+          "tplz": { "typ": 40, "max": 60 }
+        }
+      },
+      "verified": true,
+      "source": "TI D2417, September 1980, revised February 1985 (SN74LS189A), switching characteristics, CL = 45 pF (5 pF for the disable times), SN74LS189A column. Access time from address is addr_to_q; access time from chip select is cs_to_q and the /S enable; sense recovery time is the R/W enable; tPXZ from /S and from R/W are the two disables, one figure for either level"
     }
   ]
 }

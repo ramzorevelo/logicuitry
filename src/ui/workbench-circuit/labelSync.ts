@@ -344,6 +344,9 @@ export function labelDirectionConflict(
       const dir = resolveComponentPins(other, def).find((spec) => spec.name === p.pin)?.dir;
       if (comp.kind === 'inport' && dir === 'out')
         return `an In port cannot connect to a chip/gate output (${other.label || other.id}.${p.pin})`;
+      // An In port's outside driver is not known to float, so it may not share a bidirectional net.
+      if (comp.kind === 'inport' && dir === 'inout')
+        return `an In port cannot connect to a bidirectional pin (${other.label || other.id}.${p.pin})`;
       if (comp.kind === 'outport' && dir === 'in')
         return `an Out port cannot connect to a chip/gate input (${other.label || other.id}.${p.pin})`;
     }

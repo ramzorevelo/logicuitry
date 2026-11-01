@@ -18,7 +18,7 @@ const EMPTY: ChipLibrary = new Map();
 function board(components: Board['components'], wires: Board['wires'] = []): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'b',
     name: 'b',
     components,

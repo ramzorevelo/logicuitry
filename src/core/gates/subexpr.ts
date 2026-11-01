@@ -5,9 +5,10 @@
 import type { Expr } from '../boolean/expr';
 import { resolveInputNet, resolveOutputNet } from '../boolean/truthTable';
 import { compile, componentPaths } from '../model/compile';
+import { isOutputSlot } from '../model/pinSlots';
 import type { Board, ChipLibrary, Component } from '../model/types';
 import { intParam } from '../sim/primitives/types';
-import { lowerCircuit } from './lower';
+import { lowerCircuit, lowerLibrary } from './lower';
 import { INPUT_TERMINAL_KINDS, OUTPUT_TERMINAL_KINDS, terminalRefs } from './verify';
 
 /** Packages made of nothing but gates: annotated through to their DIP pins. */
@@ -48,7 +49,7 @@ const pinNumber = (pin: { id: string; name: string }): string =>
   /^pin-(\d+)$/.exec(pin.id)?.[1] ?? pin.name;
 
 export function gateExpressions(board: Board, lib: ChipLibrary): SubExpressions {
-  const loweredLib: ChipLibrary = new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
+  const loweredLib: ChipLibrary = lowerLibrary(lib);
   const compiled = compile(lowerCircuit(board), loweredLib);
   const paths = componentPaths(board, 'main/');
   const width = (net: number): number => compiled.nets[net]!.width;
@@ -73,7 +74,7 @@ export function gateExpressions(board: Board, lib: ChipLibrary): SubExpressions 
     chips.push({ comp: c, prefix: `${path}:`, transparent });
     if (transparent) continue;
     for (const pin of def.pins) {
-      if (pin.dir !== 'out') continue;
+      if (!isOutputSlot(pin.dir)) continue;
       const net = compiled.pathToNet.get(`${path}.${pin.name}`);
       if (net !== undefined && width(net) === 1 && !named.has(net))
         named.set(net, `${displayName(c)}.${pinNumber(pin)}`);
@@ -136,7 +137,7 @@ export function gateExpressions(board: Board, lib: ChipLibrary): SubExpressions 
     if (!ch.transparent) continue;
     const path = paths.get(ch.comp.id)!;
     for (const pin of lib.get(ch.comp.defId!)!.pins) {
-      if (pin.dir !== 'out') continue;
+      if (!isOutputSlot(pin.dir)) continue;
       const net = compiled.pathToNet.get(`${path}.${pin.name}`);
       const e = net === undefined ? null : exprOf(net);
       if (e) pins.set(`${ch.comp.id}.${pin.name}`, e);

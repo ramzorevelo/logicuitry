@@ -70,6 +70,7 @@ export function makeTestTheme(overrides: Partial<Theme> = {}): Theme {
     glyphText: 13,
     gridSchematic: 8,
     presentation: false,
+    groupFillAlpha: 0.07,
     ...overrides,
   };
 }

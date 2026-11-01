@@ -3,8 +3,10 @@
 export type PinRole = 'data' | 'clock' | 'enable' | 'asyncSet' | 'asyncClear' | 'select';
 /** `passive` is a net LABEL's pin: neither driver nor sink, it takes the
  *  direction and width of whatever net it is attached to. Only `netlabel` has
- *  one; every direction rule treats it as a wildcard rather than a default. */
-export type PinDir = 'in' | 'out' | 'passive';
+ *  one; every direction rule treats it as a wildcard rather than a default.
+ *  `inout` is a bidirectional pin: it drives its net (Z when idle) and reads
+ *  the resolved value back, so it takes both an input and an output slot. */
+export type PinDir = 'in' | 'out' | 'passive' | 'inout';
 
 export interface Point {
   x: number;
@@ -62,9 +64,11 @@ export type ComponentKind =
   | 'srlatch'
   | 'counter'
   | 'shiftreg'
+  | 'ram'
   | 'split'
   | 'merge'
   | 'tristate'
+  | 'transceiver'
   | 'tunnel'
   | 'tapdrive'
   | 'tapread'
@@ -97,7 +101,14 @@ export interface Component {
 }
 
 /** Instances carry no copied internals; edits to the def propagate by construction. */
-export type ChipInstance = Component & { kind: 'chip'; defId: string };
+export type ChipInstance = Component & {
+  kind: 'chip';
+  defId: string;
+  /** Preload per RAM inside, keyed by its path below this instance (`u1`,
+   *  `U4/u1`). Values only: the outermost instance's entry wins over anything
+   *  stored in the def, so each placed copy can hold its own program. */
+  contents?: Record<string, string>;
+};
 
 export function isChipInstance(c: Component): c is ChipInstance {
   return c.kind === 'chip';
@@ -126,6 +137,16 @@ export interface Junction {
   pos: Point;
 }
 
+/** A slot in the shared categorical palette, never a colour value: every
+ *  theme authors its own colour per slot, so a group or wire stays legible
+ *  whichever theme draws it. */
+export const PALETTE_SLOTS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8'] as const;
+export type PaletteSlot = (typeof PALETTE_SLOTS)[number];
+
+export function isPaletteSlot(value: unknown): value is PaletteSlot {
+  return (PALETTE_SLOTS as readonly unknown[]).includes(value);
+}
+
 /** One orthogonal wire run between two ends; points = bend geometry. */
 export interface Wire {
   id: string;
@@ -136,6 +157,10 @@ export interface Wire {
    *  drawn route. A fraction, not a point, so it keeps its place when the
    *  route reshapes under a component drag. Absent = midpoint. */
   busLabelT?: number;
+  /** Insulation colour, drawn as a sheath under the signal-coloured core, the
+   *  way a breadboard is wired with colour-coded jumpers. Per wire, not per
+   *  net. Drawing only: compile never reads it. */
+  color?: PaletteSlot;
 }
 
 /** Shared circuit body of ChipDef and Board. */
@@ -160,6 +185,10 @@ export interface Group {
    *  nesting changes what a border encloses, never which scope a name is in:
    *  a name is local to its own group, not to its ancestors. */
   parent?: string;
+  /** Frame colour. Absent draws the plain grey frame every group had before. */
+  color?: PaletteSlot;
+  /** Name drawn as a solid tab in the frame colour; needs `color`. */
+  tab?: boolean;
 }
 
 export interface ChipAppearance {
@@ -177,7 +206,7 @@ export interface ChipAppearance {
 
 export interface ChipDef extends Circuit {
   format: 'lcir.chip';
-  formatVersion: 5;
+  formatVersion: 7;
   id: string;
   name: string;
   version: number;
@@ -195,7 +224,7 @@ export interface TimingSetting {
 
 export interface Board extends Circuit {
   format: 'lcir.board';
-  formatVersion: 7;
+  formatVersion: 9;
   id: string;
   name: string;
   /** Hierarchical net paths pinned to the waveform view. */

@@ -47,6 +47,8 @@ const PART_PATHS: Record<string, Record<string, string>> = {
   '74LS75': { 'd->qn': 'data_to_qn', 'en->qn': 'en_to_qn' },
   '74LS165': { 'd->son': 'data_to_qn' },
   '74LS175': { 'clr->qn': 'clr_to_qn' },
+  '74LS245': { 'a->b': 'port_to_port', 'b->a': 'port_to_port' },
+  '74LS189': { 'a->q': 'addr_to_q', 'cs->q': 'cs_to_q' },
 };
 
 /** A lane-expanded bit (`a3`, `sum0`) times like the bus pin it came from: a per-part row is

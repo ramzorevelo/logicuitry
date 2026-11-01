@@ -28,6 +28,7 @@ import {
 import { dff, dlatch, register, srlatch } from './sequential';
 import { counter } from './counter';
 import { shiftreg } from './shiftreg';
+import { ram } from './ram';
 import { clock, led, probe, pushButton, toggleSwitch } from './stimulus';
 import { mux } from './mux';
 import { demux } from './demux';
@@ -35,6 +36,7 @@ import { busdisplay, ledmatrix, sevenseg } from './display';
 import { decoder, encoder } from './coder';
 import { bcd7seg } from './bcd7seg';
 import { adder, comparator, parity } from './arith';
+import { transceiver } from './transceiver';
 
 const specs = new Map<string, PrimitiveSpec>();
 
@@ -85,6 +87,7 @@ for (const spec of [
   srlatch,
   counter,
   shiftreg,
+  ram,
   mux,
   demux,
   clock,
@@ -101,6 +104,7 @@ for (const spec of [
   adder,
   comparator,
   parity,
+  transceiver,
 ]) {
   registerPrimitive(spec);
 }

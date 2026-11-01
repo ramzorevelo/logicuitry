@@ -18,6 +18,9 @@ export interface PrimitivePin {
   label?: string;
   /** Asserted at 0. The box glyph draws its inversion bubble from this. */
   activeLow?: boolean;
+  /** An output that can float, so it may share a net with other floating
+   *  drivers. Implied by `inout`. */
+  threeState?: boolean;
 }
 
 export type Params = Readonly<Record<string, ParamValue>>;
@@ -26,7 +29,7 @@ export interface EvalContext {
   params: Params;
   /** Per-instance state from init(); undefined for stateless primitives. */
   state: unknown;
-  /** Current input values, in pins() 'in' order. */
+  /** Current input values, in pins() order over 'in' and 'inout' pins. */
   inputs: readonly BusValue[];
   /** Inputs as of the previous evaluation; edge detection (DFF) reads these. */
   prevInputs: readonly BusValue[];
@@ -35,7 +38,7 @@ export interface EvalContext {
 }
 
 export interface EvalResult {
-  /** New driven value per 'out' pin; null = keep the previously driven value. */
+  /** New driven value per 'out' and 'inout' pin; null = keep the previously driven value. */
   outputs: (BusValue | null)[];
   /** Replacement state; omit to keep. */
   state?: unknown;

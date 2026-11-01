@@ -177,7 +177,7 @@ export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
     const id = slugId(trimmed, new Set(chipLib.keys()));
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 5,
+      formatVersion: 7,
       id,
       name: trimmed,
       version: 1,

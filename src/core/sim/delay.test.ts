@@ -3,8 +3,11 @@ import { compile } from '../model/compile';
 import type { Board } from '../model/types';
 import { board, comp, wire } from '../model/testFixtures';
 import { builtinChipLibrary } from '../parts/packages';
+import * as bv from '../value/busValue';
 import { toString } from '../value/busValue';
-import { datasheetDelay, IDEAL_DELAY_PS } from './delay';
+import { BIDIR } from '../model/bidirFixture';
+import { outputPropagationNs } from '../parts/arcs';
+import { datasheetDelay, IDEAL_DELAY_PS, pinNamesOf } from './delay';
 import { Simulator } from './kernel';
 
 const lib = builtinChipLibrary();
@@ -137,5 +140,92 @@ describe('74LS374 /OC enable and disable times', () => {
       enable: { ps: 21_000 + hops, q: '0' },
     });
     expect(ocToQ('max', false).disable.ps).toBe(20_000 + hops);
+  });
+});
+
+describe('enable and disable times on any to-or-from-Z edge', () => {
+  const PART = '74LS245';
+  const W = 4;
+
+  /** A transceiver driving B from a held source on A, its OE on a switch. */
+  function oeBoard(value: number): Board {
+    return board({
+      components: [
+        comp('sd', 'constant', { width: W, value }),
+        comp('se', 'constant', { value: 1 }),
+        comp('S', BIDIR, { width: W }),
+        comp('T', 'transceiver', { width: W }, 'T'),
+        comp('dir', 'constant', { value: 1 }),
+        comp('toe', 'toggle', { initial: 1 }, 'OE'),
+        comp('pb', 'probe', { width: W }, 'B'),
+      ],
+      wires: [
+        wire('w1', ['sd', 'y'], ['S', 'd']),
+        wire('w2', ['se', 'y'], ['S', 'en']),
+        wire('w3', ['S', 'p'], ['T', 'a']),
+        wire('w4', ['dir', 'y'], ['T', 'dir']),
+        wire('w5', ['toe', 'y'], ['T', 'oe']),
+        wire('w6', ['T', 'b'], ['pb', 'a']),
+      ],
+    });
+  }
+
+  /** OE edge to B edge, in ps: disable first, then enable. */
+  function oeToB(value: number) {
+    const compiled = compile(oeBoard(value), lib);
+    const sim = new Simulator(compiled, datasheetDelay('typ'));
+    sim.powerOn();
+    const bNet = compiled.pathToNet.get('main/B')!;
+    const oeNet = compiled.primitives[compiled.pathToPrimitive.get('main/OE')!]!.outputs[0]!;
+    const measure = (oe: boolean) => {
+      const t0 = sim.time;
+      sim.setToggle('main/OE', oe);
+      sim.settle();
+      const records = sim.traceRecords().filter((r) => r.time > t0);
+      const b = records.find((r) => r.net === bNet)!;
+      return { ps: b.time - records.find((r) => r.net === oeNet)!.time, b: toString(b.value, W) };
+    };
+    return { disable: measure(false), enable: measure(true) };
+  }
+
+  it("an OE edge takes the '245's tPHZ and tPZH on a high bus, tPLZ and tPZL on a low one", () => {
+    expect(oeToB(0b1111)).toEqual({
+      disable: { ps: 15_000, b: 'ZZZZ' },
+      enable: { ps: 25_000, b: '1111' },
+    });
+    expect(oeToB(0b0000)).toEqual({
+      disable: { ps: 15_000, b: 'ZZZZ' },
+      enable: { ps: 27_000, b: '0000' },
+    });
+  });
+
+  it('a bus of mixed levels takes the slower of each pair', () => {
+    expect(oeToB(0b0101)).toEqual({
+      disable: { ps: 15_000, b: 'ZZZZ' },
+      enable: { ps: 27_000, b: '0101' },
+    });
+  });
+
+  it('a DIR flip disables the old side and enables the new one; a data edge keeps its arc', () => {
+    const compiled = compile(oeBoard(0b1111), lib);
+    const prim = compiled.primitives[compiled.pathToPrimitive.get('main/T')!]!;
+    const { ins } = pinNamesOf(prim);
+    const model = datasheetDelay('typ');
+    const [sideA, sideB] = [0, 1];
+    const dirMoved = [ins.indexOf('dir')];
+    expect(model.delayPs(prim, sideB, bv.known(0b1111, W), bv.allZ(W), dirMoved)).toBe(15_000);
+    expect(model.delayPs(prim, sideA, bv.allZ(W), bv.known(0, W), dirMoved)).toBe(27_000);
+    const aMoved = [ins.indexOf('a')];
+    const dataEdge = model.delayPs(prim, sideB, bv.known(0, W), bv.known(0b1111, W), aMoved);
+    expect(outputPropagationNs(PART, ins, 'b', 'lh', 'typ')).toBe(8);
+    expect(dataEdge).toBe(8_000);
+    const maxEdge = datasheetDelay('max').delayPs(
+      prim,
+      sideB,
+      bv.known(0b1111, W),
+      bv.known(0, W),
+      aMoved,
+    );
+    expect(maxEdge).toBe(12_000);
   });
 });

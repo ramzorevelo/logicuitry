@@ -4,7 +4,7 @@
 // mis-wired.
 
 import type { PinRole } from '../../core/model/types';
-import type { Vec2 } from '../../render/scene';
+import type { Rect, Vec2 } from '../../render/scene';
 import type { PinTarget } from './pinTargets';
 
 export interface SmartConnectResult {
@@ -219,9 +219,11 @@ export function smartConnectSingleSource(
 export interface ChainComp {
   id: string;
   pos: Vec2;
-  /** Body center (symbolBounds midpoint) -- pin facing is derived from the
-   *  pin's offset off this, so rotation/mirror fall out of geometry. */
+  /** Body center (symbolBounds midpoint), the flow position. */
   center: Vec2;
+  /** Body bounds (symbolBounds), which pin facing reads; without them facing
+   *  falls back to the offset from `center`. */
+  bounds?: Rect;
   hasAnyInputPinSpec: boolean;
   freeIns: readonly PinTarget[];
   freeOuts: readonly PinTarget[];
@@ -232,6 +234,10 @@ export interface ChainComp {
   isInPort?: boolean;
   /** This component's own `in`-role pins that already carry a wire. */
   wiredIns?: readonly PinTarget[];
+  /** Bidirectional pins, which join freeIns or freeOuts by the way they face
+   *  along the flow. Wired ones may still fan out but never take a second wire. */
+  inouts?: readonly PinTarget[];
+  wiredInouts?: ReadonlySet<string>;
 }
 
 type ChainRole = 'middle' | 'pureSource' | 'pureSink' | 'skip';
@@ -277,14 +283,29 @@ function sinkTier(c: Candidate): number {
   return c.trueSource ? 1 : 2;
 }
 
-/** Cardinal direction a pin faces: dominant axis and sign of the pin's
- *  offset from its component's body center. Post-transform worldPos means a
- *  rotated/mirrored glyph's facing needs no special-casing. */
-export function pinFacing(pin: Vec2, center: Vec2): Vec2 {
-  const dx = pin.x - center.x;
-  const dy = pin.y - center.y;
-  if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
-  return { x: 0, y: dy >= 0 ? 1 : -1 };
+/** Cardinal direction a pin faces: out through the body edge it sits on,
+ *  the furthest one it overshoots or else the nearest. Not the offset from
+ *  the centre: an end pin of a tall DIP lies further from it vertically than
+ *  sideways and read as facing up. A zero-size rect at the centre reduces
+ *  this to the offset's dominant axis. Post-transform worldPos and bounds
+ *  mean a rotated/mirrored glyph needs no special-casing. */
+export function pinFacing(pin: Vec2, body: Rect): Vec2 {
+  // Ties resolve in this order, which is the centre rule's.
+  const beyond: [number, Vec2][] = [
+    [pin.x - (body.x + body.w), { x: 1, y: 0 }],
+    [body.x - pin.x, { x: -1, y: 0 }],
+    [pin.y - (body.y + body.h), { x: 0, y: 1 }],
+    [body.y - pin.y, { x: 0, y: -1 }],
+  ];
+  let best = beyond[0]!;
+  for (const b of beyond) if (b[0] > best[0]) best = b;
+  return best[1];
+}
+
+/** Body rect a facing is read against; a comp without bounds falls back to
+ *  its centre point. */
+export function facingBody(c: Pick<ChainComp, 'center' | 'bounds'>): Rect {
+  return c.bounds ?? { x: c.center.x, y: c.center.y, w: 0, h: 0 };
 }
 
 /** Chain-alignment gate for a chip/gate output feeding another chip/gate's
@@ -295,13 +316,13 @@ export function pinFacing(pin: Vec2, center: Vec2): Vec2 {
  *  one side) and position uses the group centroid. */
 export function outputAlignedWithInputs(
   outPin: Vec2,
-  outCenter: Vec2,
+  outBody: Rect,
   inPins: readonly Vec2[],
-  inCenter: Vec2,
+  inBody: Rect,
 ): boolean {
   if (inPins.length === 0) return false;
-  const dA = pinFacing(outPin, outCenter);
-  const dB = pinFacing(inPins[0]!, inCenter);
+  const dA = pinFacing(outPin, outBody);
+  const dB = pinFacing(inPins[0]!, inBody);
   const qx = inPins.reduce((s, p) => s + p.x, 0) / inPins.length;
   const qy = inPins.reduce((s, p) => s + p.y, 0) / inPins.length;
   const towardOut = (outPin.x - qx) * dB.x + (outPin.y - qy) * dB.y;
@@ -381,22 +402,57 @@ export function smartConnectChainWithin(
   };
 }
 
-export function smartConnectChain(comps: readonly ChainComp[], rotation = 0): SmartConnectResult {
+// Flow runs along whichever axis separates the sources from the sinks more.
+function chainAxis(comps: readonly ChainComp[]): 'x' | 'y' {
   const middles = comps.filter((c) => chainRole(c) === 'middle');
   const pureSources = comps.filter((c) => chainRole(c) === 'pureSource');
   const pureSinks = comps.filter((c) => chainRole(c) === 'pureSink');
-  if (pureSources.length === 0 && pureSinks.length === 0) return { pairs: [], unmatched: [] };
-
-  let axis: 'x' | 'y' = 'x';
   const srcGroup = pureSources.length ? pureSources : middles;
   const sinkGroup = pureSinks.length ? pureSinks : middles;
   const srcX = centroid(srcGroup, 'x');
   const srcY = centroid(srcGroup, 'y');
   const sinkX = centroid(sinkGroup, 'x');
   const sinkY = centroid(sinkGroup, 'y');
-  if (srcX !== undefined && srcY !== undefined && sinkX !== undefined && sinkY !== undefined) {
-    axis = Math.abs(sinkY - srcY) > Math.abs(sinkX - srcX) ? 'y' : 'x';
-  }
+  if (srcX === undefined || srcY === undefined || sinkX === undefined || sinkY === undefined)
+    return 'x';
+  return Math.abs(sinkY - srcY) > Math.abs(sinkX - srcX) ? 'y' : 'x';
+}
+
+/** Whether a bidirectional pin faces `toward`: it then reads from, or drives,
+ *  whatever lies there. A pin facing away belongs to the other side's wiring. */
+export function inoutFaces(pin: PinTarget, body: Rect, toward: Vec2): boolean {
+  const f = pinFacing(pin.worldPos, body);
+  return (toward.x - pin.worldPos.x) * f.x + (toward.y - pin.worldPos.y) * f.y > 0;
+}
+
+// Sources always sit upstream (lower flow coordinate), so an inout pin facing
+// back against the flow reads and one facing along it drives.
+function withInouts(c: ChainComp, axis: 'x' | 'y'): ChainComp {
+  if (!c.inouts?.length) return c;
+  const along = (p: PinTarget) => {
+    const f = pinFacing(p.worldPos, facingBody(c));
+    return axis === 'x' ? f.x : f.y;
+  };
+  const key = (p: PinTarget) => `${p.componentId} ${p.pinName}`;
+  return {
+    ...c,
+    freeIns: [...c.freeIns, ...c.inouts.filter((p) => along(p) < 0 && !c.wiredInouts?.has(key(p)))],
+    freeOuts: [...c.freeOuts, ...c.inouts.filter((p) => along(p) > 0)],
+  };
+}
+
+export function smartConnectChain(
+  chainComps: readonly ChainComp[],
+  rotation = 0,
+): SmartConnectResult {
+  // Axis from the plain pins first: the inout pins' roles depend on it.
+  const axis = chainAxis(chainComps);
+  const comps = chainComps.map((c) => withInouts(c, axis));
+  const middles = comps.filter((c) => chainRole(c) === 'middle');
+  const pureSources = comps.filter((c) => chainRole(c) === 'pureSource');
+  const pureSinks = comps.filter((c) => chainRole(c) === 'pureSink');
+  if (pureSources.length === 0 && pureSinks.length === 0) return { pairs: [], unmatched: [] };
+
   const flowCoord = (c: ChainComp): number => (axis === 'x' ? c.pos.x : c.pos.y);
 
   // Pure sinks resolve fully BEFORE middles (M4.5 follow-up), so every
@@ -441,9 +497,9 @@ export function smartConnectChain(comps: readonly ChainComp[], rotation = 0): Sm
             if (used) continue;
             const aligned = outputAlignedWithInputs(
               outPin.worldPos,
-              other.center,
+              facingBody(other),
               groupPinPositions,
-              consumer.center,
+              facingBody(consumer),
             );
             if (!aligned) {
               // Rule-5 exception: a misaligned feeder still qualifies if some

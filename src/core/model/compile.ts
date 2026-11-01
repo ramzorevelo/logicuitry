@@ -2,8 +2,12 @@
 // Simulation never sees ChipDefs; every instance is expanded once per use.
 
 import type { Board, ChipDef, ChipLibrary, Circuit, Component, PinDir, WireEnd } from './types';
+import { isChipInstance } from './types';
 import type { Params } from '../sim/primitives/types';
 import { CONNECTIVITY_KINDS, getPrimitive } from '../sim/primitives/registry';
+import { canFloat, isInputSlot, isOutputSlot, outputSlotPins } from './pinSlots';
+import { anyRamPreloadError, ramPreloadError } from '../sim/primitives/ram';
+import { isBuiltinChipDef } from '../parts/packages';
 
 export class CompileError extends Error {
   constructor(
@@ -38,6 +42,22 @@ export interface CompiledPrimitive {
   outputs: number[];
   /** 74LS binding for datasheet-mode delays. */
   part?: string;
+  /** A RAM inside a chip: the top-level instance (by `componentId`) whose
+   *  `contents[key]` sets this RAM's preload over anything inside the def. */
+  contentsSlot?: { instance: string; key: string };
+  /** Path of the built-in package instance this primitive is a section of. */
+  packageInstance?: string;
+}
+
+/** A `contents` entry that loads no RAM, kept rather than dropped: its key names
+ *  no RAM below the instance, or the RAM it names no longer fits it. */
+export interface StaleContentsKey {
+  /** Instance path, as primitive paths spell it (`main/U4`). */
+  instance: string;
+  /** The same instance by `componentId`, which a rename does not change. */
+  instanceId: string;
+  key: string;
+  reason: 'missing' | 'misfit';
 }
 
 export interface CompiledCircuit {
@@ -55,6 +75,25 @@ export interface CompiledCircuit {
   /** Unambiguous per-component lookup, keyed by the same `componentId` each
    *  primitive carries. */
   componentToPrimitive: Map<string, number>;
+  staleContents: StaleContentsKey[];
+}
+
+interface ContentsSource {
+  instance: string;
+  instanceId: string;
+  entries: Record<string, string>;
+  /** Keys that reached a RAM, shadowed or not. */
+  named: Set<string>;
+  /** Named keys whose entry is too big for its RAM after a def edit. */
+  misfit: Set<string>;
+  /** RAM path per key, so two RAMs never answer to one key. */
+  claimed: Map<string, string>;
+}
+
+/** One instance's `contents` seen from a circuit nested `rel` below it. */
+interface ContentsLayer {
+  source: ContentsSource;
+  rel: string;
 }
 
 /** Union-find over global net ids, with width/path/pull merging at union time. */
@@ -197,6 +236,34 @@ export function componentPaths(circuit: Circuit, prefix: string): Map<string, st
   return out;
 }
 
+/** The outermost enclosing instance's entry for the RAM at `path`, named `name`
+ *  here. Every layer naming it marks the key live, so a shadowed entry is not
+ *  stale. A key drops the `:defName` segments, so a group and a chip instance
+ *  of one name could hand two RAMs one key; that is refused. */
+function contentsFor(
+  name: string,
+  path: string,
+  layers: readonly ContentsLayer[],
+): { text: string; source: ContentsSource; key: string } | undefined {
+  let found: { text: string; source: ContentsSource; key: string } | undefined;
+  for (const { source, rel } of layers) {
+    const key = rel + name;
+    const other = source.claimed.get(key);
+    if (other !== undefined && other !== path)
+      throw new CompileError(
+        `contents key ${key} on ${shownPath(source.instance)} names two RAMs; give the group and the chip different names`,
+        path,
+      );
+    source.claimed.set(key, path);
+    if (!Object.hasOwn(source.entries, key)) continue;
+    source.named.add(key);
+    found ??= { text: source.entries[key]!, source, key };
+  }
+  return found;
+}
+
+const shownPath = (path: string) => path.replace(/^main\//, '');
+
 /** `Group.name` plus a separator for a grouped component, empty otherwise --
  *  the prefix a net path gets so two groups' same-named nets stay apart. */
 function groupNameOf(circuit: Circuit, group: string | undefined): string {
@@ -208,8 +275,16 @@ function groupNameOf(circuit: Circuit, group: string | undefined): string {
 export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit {
   const nets = new NetTable();
   const primitives: CompiledPrimitive[] = [];
+  const contentsSources: ContentsSource[] = [];
 
-  expand(top, 'main/', new Map(), []);
+  expand(top, 'main/', new Map(), [], []);
+
+  const staleContents = contentsSources.flatMap((s) =>
+    Object.keys(s.entries).flatMap((key): StaleContentsKey[] => {
+      const reason = !s.named.has(key) ? 'missing' : s.misfit.has(key) ? 'misfit' : undefined;
+      return reason ? [{ instance: s.instance, instanceId: s.instanceId, key, reason }] : [];
+    }),
+  );
 
   // Canonicalize the union-find into compact net indices.
   const rootToIndex = new Map<number, number>();
@@ -242,29 +317,30 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
     prim.outputs.forEach((n, out) => drivers[n]!.push({ prim: pi, out }));
   });
 
-  // One driver may fan out to many inputs freely; two or more drivers on one
-  // net is only legal for kinds built to share: tristate (kernel resolves an
-  // idle driver to Z) and tapdrive (each merges a disjoint bus sub-range, not
-  // a competing value). Anything else is an editor slip -- e.g. two outputs
-  // wired together -- caught here like the width/pull checks above.
-  const SHARED_NET_KINDS = new Set(['tristate', 'tapdrive']);
+  // A net takes at most one plain output, and only beside pins that float when
+  // idle (kernel resolves Z), as an ALU feeding a '245's A side. Tapdrives
+  // (disjoint sub-ranges) share only with each other and floating pins.
+  const outPinOf = (d: { prim: number; out: number }) => {
+    const prim = primitives[d.prim]!;
+    return outputSlotPins(getPrimitive(prim.kind).pins(prim.params))[d.out];
+  };
+  const isTap = (d: { prim: number; out: number }) => primitives[d.prim]!.kind === 'tapdrive';
+  const floats = (d: { prim: number; out: number }) => {
+    const pin = outPinOf(d);
+    return pin !== undefined && canFloat(pin);
+  };
   drivers.forEach((ds, i) => {
     if (ds.length <= 1) return;
-    if (ds.some((d) => !SHARED_NET_KINDS.has(primitives[d.prim]!.kind))) {
-      // Name the actual driving pins, not the synthetic net (main/n0 means
-      // nothing to the person holding the mouse).
-      const names = ds.map((d) => {
-        const prim = primitives[d.prim]!;
-        const outs = getPrimitive(prim.kind)
-          .pins(prim.params)
-          .filter((p) => p.dir === 'out');
-        return `${prim.path}.${outs[d.out]?.name ?? d.out}`;
-      });
-      throw new CompileError(
-        `pins ${names.join(' and ')} drive the same wire; only tristate outputs may share a net`,
-        outNets[i]!.paths[0]!,
-      );
-    }
+    const plain = ds.filter((d) => !isTap(d) && !floats(d));
+    if (plain.length === 0 || (plain.length === 1 && !ds.some(isTap))) return;
+    // Name the actual driving pins, not the synthetic net (main/n0 means
+    // nothing to the person holding the mouse).
+    const clashing = plain.length > 1 ? plain : ds.filter((d) => !floats(d));
+    const names = clashing.map((d) => `${primitives[d.prim]!.path}.${outPinOf(d)?.name ?? d.out}`);
+    throw new CompileError(
+      `pins ${names.join(' and ')} drive the same wire; a net takes at most one output that cannot float`,
+      outNets[i]!.paths[0]!,
+    );
   });
 
   const pathToNet = new Map<string, number>();
@@ -282,17 +358,21 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
     pathToNet,
     pathToPrimitive,
     componentToPrimitive,
+    staleContents,
   };
 
   /**
    * Expands one level. boundary maps internal input/output component ids of a
-   * ChipDef to the parent-side global net its boundary pin must join.
+   * ChipDef to the parent-side global net its boundary pin must join. layers
+   * are the enclosing instances' `contents`, outermost first.
    */
   function expand(
     circuit: Circuit,
     prefix: string,
     boundary: Map<string, number>,
     defStack: string[],
+    layers: ContentsLayer[],
+    packageInstance?: string,
   ): void {
     const local = new LocalNodes();
     // Tap wires join a bus sub-range to a stub net through a synthesized connector,
@@ -387,8 +467,8 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
       const path = paths.get(comp.id)!;
       const pins = pinInfos.get(comp.id)!;
 
-      if (comp.kind === 'chip') {
-        const def = lib.get(comp.defId!)!;
+      if (isChipInstance(comp)) {
+        const def = lib.get(comp.defId)!;
         if (defStack.includes(def.id))
           throw new CompileError(
             `recursive chip reference: ${[...defStack, def.id].join(' -> ')}`,
@@ -399,7 +479,28 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
           const g = globalFor(pinKey(comp.id, pinDef.name), pinDef.width);
           childBoundary.set(pinDef.boundComponent, g);
         }
-        expand(def, `${path}:${def.name}/`, childBoundary, [...defStack, def.id]);
+        const source: ContentsSource = {
+          instance: path,
+          instanceId: prefix + comp.id,
+          entries: comp.contents ?? {},
+          named: new Set(),
+          misfit: new Set(),
+          claimed: new Map(),
+        };
+        contentsSources.push(source);
+        const below = path.slice(prefix.length);
+        const childLayers = [
+          ...layers.map((l) => ({ source: l.source, rel: `${l.rel}${below}/` })),
+          { source, rel: '' },
+        ];
+        expand(
+          def,
+          `${path}:${def.name}/`,
+          childBoundary,
+          [...defStack, def.id],
+          childLayers,
+          isBuiltinChipDef(def) ? path : undefined,
+        );
         // A chip instance has no primitive of its own, so its boundary pins
         // get no path from the emit loop below; alias each one here (found
         // fresh, since the union inside expand() may have moved its root) so
@@ -436,12 +537,37 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
       }
 
       const spec = getPrimitive(comp.kind);
-      const params = comp.params ?? {};
+      let params = comp.params ?? {};
+      let contentsSlot: CompiledPrimitive['contentsSlot'];
+      if (comp.kind === 'ram') {
+        const name = path.slice(prefix.length);
+        const set = contentsFor(name, path, layers);
+        if (set) {
+          const withSet = { ...params, preload: set.text };
+          // Well-formed but too big means a def edit shrank the RAM: keep the
+          // entry for a revert and run on the def's preload, as for a stale key.
+          if (ramPreloadError(withSet) === null) params = withSet;
+          else {
+            const malformed = anyRamPreloadError(set.text);
+            if (malformed)
+              throw new CompileError(
+                `RAM contents set on ${shownPath(set.source.instance)}: ${malformed}`,
+                path,
+              );
+            set.source.misfit.add(set.key);
+          }
+        }
+        if (layers[0])
+          contentsSlot = { instance: layers[0].source.instanceId, key: layers[0].rel + name };
+        const bad = ramPreloadError(params);
+        if (bad) throw new CompileError(`RAM preload: ${bad}`, path);
+      }
       const inputs: number[] = [];
       const outputs: number[] = [];
       for (const pin of spec.pins(params)) {
         const g = globalFor(pinKey(comp.id, pin.name), pin.width);
-        (pin.dir === 'in' ? inputs : outputs).push(g);
+        if (isInputSlot(pin.dir)) inputs.push(g);
+        if (isOutputSlot(pin.dir)) outputs.push(g);
       }
       const prim: CompiledPrimitive = {
         kind: comp.kind,
@@ -458,6 +584,8 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
             ? spec.defaultPart(params)
             : spec.defaultPart;
       if (part) prim.part = part;
+      if (contentsSlot) prim.contentsSlot = contentsSlot;
+      if (packageInstance) prim.packageInstance = packageInstance;
       primitives.push(prim);
 
       // Probes give their net a human alias for the waveform view.
@@ -526,6 +654,9 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
           `tap references unknown pin ${stubEnd.component}.${stubEnd.pin}`,
           at,
         );
+      // A tap connector is one-way; a pin that both drives and reads has no single direction.
+      if (stubInfo.dir === 'inout')
+        throw new CompileError('a tap cannot end on a bidirectional pin', at);
       if (stubInfo.width !== width)
         throw new CompileError(
           `tap range width ${width} does not match pin ${stubEnd.pin} width ${stubInfo.width}`,

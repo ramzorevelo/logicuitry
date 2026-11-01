@@ -31,6 +31,7 @@ export function evaluateNets(
       circuit.primitives.map((_, i) => i).filter((i) => circuit.primitives[i]!.kind === 'inport'),
     );
   const values = new Map(driven);
+  const shared = new Map<number, BusValue[]>();
   const pending = new Set(
     circuit.primitives
       .map((_, i) => i)
@@ -81,7 +82,17 @@ export function evaluateNets(
       });
       prim.outputs.forEach((n, slot) => {
         const out = result.outputs[slot];
-        if (out) values.set(n, out);
+        if (!out) return;
+        const drivers = circuit.drivers[n]!.length;
+        if (drivers <= 1) {
+          values.set(n, out);
+          return;
+        }
+        // A shared three-state net is known only once every driver has
+        // spoken, and then resolves as the kernel resolves it.
+        const parts = [...(shared.get(n) ?? []), out];
+        shared.set(n, parts);
+        if (parts.length === drivers) values.set(n, bv.resolve(parts, circuit.nets[n]!.width));
       });
       pending.delete(i);
       progressed = true;

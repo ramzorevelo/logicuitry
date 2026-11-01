@@ -856,7 +856,7 @@ describe('circuitStore power + pinSignal', () => {
 function bufDef(id: string): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 5,
+    formatVersion: 7,
     id,
     name: id,
     version: 1,
@@ -906,7 +906,7 @@ function bufDef(id: string): ChipDef {
 function emptyBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'test',
     name: 'test',
     components: [],
@@ -1606,7 +1606,7 @@ describe('id generation never collides with an already-loaded board', () => {
   it('keeps a chip id clear of the board even when its defId ends in digits', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 5,
+      formatVersion: 7,
       id: '74LS00',
       name: '74LS00',
       version: 1,
@@ -2859,7 +2859,7 @@ describe('Task 1b: naming a gate/mux/decoder/chip participates in labelSync', ()
   it('naming a chip instance derives one label per boundary output pin, via renameComponent', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 5,
+      formatVersion: 7,
       id: 'chipdef1',
       name: 'MyChip',
       version: 1,
@@ -4081,7 +4081,25 @@ describe('multi-driver pre-commit rejection (general case, not just In/Out label
     );
     expect(ok).toBe(false);
     expect(useCircuitStore.getState().board.wires).toHaveLength(0);
-    expect(useCircuitStore.getState().error).toMatch(/drive the same wire/);
+    expect(useCircuitStore.getState().error).toBe(
+      `${g1!.id} and ${g2!.id} both drive this wire. A wire can have only one output that is not three-state.`,
+    );
+  });
+
+  it('refuses unticking output enable when it leaves two plain outputs on a bus', () => {
+    const s = useCircuitStore.getState();
+    s.place('register', { x: 0, y: 0 }, 8, { width: 4, outputEnable: true });
+    s.place('register', { x: 200, y: 0 }, 8, { width: 4, outputEnable: true });
+    const [r1, r2] = useCircuitStore.getState().board.components.map((c) => c.id);
+    const q = (component: string): WireEnd => ({ kind: 'pin', component, pin: 'q' });
+    expect(s.addWire(q(r1!), q(r2!))).toBe(true);
+    expect(s.setComponentParams(r1!, { outputEnable: false })).toBe(true);
+    const before = useCircuitStore.getState().board;
+    expect(s.setComponentParams(r2!, { outputEnable: false })).toBe(false);
+    expect(useCircuitStore.getState().error).toMatch(/both drive this wire/);
+    expect(useCircuitStore.getState().board).toBe(before);
+    expect(s.setComponentParamsBatch([{ id: r2!, params: { outputEnable: false } }])).toBe(false);
+    expect(useCircuitStore.getState().board).toBe(before);
   });
 
   it('addWire still allows two tristate outputs to share a net', () => {
@@ -4095,6 +4113,85 @@ describe('multi-driver pre-commit rejection (general case, not just In/Out label
     );
     expect(ok).toBe(true);
     expect(useCircuitStore.getState().error).toBeNull();
+  });
+});
+
+describe('bus transceiver wiring', () => {
+  beforeEach(() =>
+    useCircuitStore.setState({
+      board: emptyBoard(),
+      chipLib: new Map(),
+      tabs: [{ id: 'board', kind: 'board' }],
+      activeTabId: 'board',
+      staleInstances: new Set(),
+      selection: new Set(),
+      powered: false,
+      error: null,
+    }),
+  );
+  const ids = () => useCircuitStore.getState().board.components.map((c) => c.id);
+  const end = (component: string, pin: string): WireEnd => ({ kind: 'pin', component, pin });
+
+  it('wires two bidirectional sides together and a tristate onto one', () => {
+    const s = useCircuitStore.getState();
+    s.place('transceiver', { x: 0, y: 0 }, 8, { width: 1 });
+    s.place('transceiver', { x: 200, y: 0 }, 8, { width: 1 });
+    s.place('tristate', { x: 400, y: 0 }, 8);
+    const [x1, x2, t] = ids();
+    expect(s.addWire(end(x1!, 'b'), end(x2!, 'a'))).toBe(true);
+    expect(s.addWire(end(t!, 'y'), end(x2!, 'a'))).toBe(true);
+    expect(useCircuitStore.getState().error).toBeNull();
+  });
+
+  it('takes one plain output on a bidirectional side and refuses a second, naming both', () => {
+    const s = useCircuitStore.getState();
+    s.place('transceiver', { x: 0, y: 0 }, 8, { width: 1 });
+    s.place('not', { x: 200, y: 0 }, 8);
+    s.place('not', { x: 200, y: 100 }, 8);
+    const [x1, g, h] = ids();
+    expect(s.addWire(end(g!, 'y'), end(x1!, 'a'))).toBe(true);
+    expect(s.addWire(end(h!, 'y'), end(x1!, 'a'))).toBe(false);
+    expect(useCircuitStore.getState().error).toBe(
+      `${g} and ${h} both drive this wire. A wire can have only one output that is not three-state.`,
+    );
+  });
+
+  it('refuses a tap whose stub end is a bidirectional side', () => {
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: [
+          { id: 'c8', kind: 'constant', pos: { x: 0, y: 0 }, params: { width: 8, value: 0 } },
+          { id: 'o8', kind: 'outport', pos: { x: 200, y: 0 }, params: { width: 8 } },
+          { id: 'x1', kind: 'transceiver', pos: { x: 100, y: 100 }, params: { width: 1 } },
+        ],
+        wires: [{ id: 'wbus', a: end('c8', 'y'), b: end('o8', 'a'), points: [] }],
+      },
+    }));
+    const resolve: ResolveWireEnd = (e) =>
+      e.kind === 'pin' && e.component === 'c8' ? { x: 0, y: 0 } : { x: 200, y: 0 };
+    const result = useCircuitStore
+      .getState()
+      .connectToTap(end('x1', 'a'), { x: 100, y: 0 }, 8, resolve as never, 1);
+    expect(result).toBe('rejected');
+    expect(useCircuitStore.getState().error).toBe('a tap cannot end on a bidirectional pin');
+    expect(useCircuitStore.getState().board.wires).toHaveLength(1);
+  });
+
+  it('wires abutting floating drivers, and a plain output abutting one', () => {
+    // Every pin of every part sits on one point, so only the pairing rule decides.
+    const at: ComponentPins = (c) =>
+      resolveComponentPins(c).map((p) => ({ ...p, pos: { x: 0, y: 0 } }));
+    const s = useCircuitStore.getState();
+    s.place('transceiver', { x: 0, y: 0 }, 8, { width: 1 });
+    s.place('transceiver', { x: 0, y: 0 }, 8, { width: 1 }, undefined, undefined, at);
+    expect(useCircuitStore.getState().board.wires.length).toBeGreaterThan(0);
+    useCircuitStore.setState({ board: emptyBoard() });
+    s.place('transceiver', { x: 0, y: 0 }, 8, { width: 1 });
+    s.place('not', { x: 0, y: 0 }, 8, undefined, undefined, undefined, (c) =>
+      at(c).filter((p) => p.dir === 'out' || p.dir === 'inout'),
+    );
+    expect(useCircuitStore.getState().board.wires.length).toBeGreaterThan(0);
   });
 });
 
@@ -4516,7 +4613,7 @@ describe('loadChipDefs (library folder -> chipLib)', () => {
 
   const def = (id: string): ChipDef => ({
     format: 'lcir.chip',
-    formatVersion: 5,
+    formatVersion: 7,
     id,
     name: id,
     version: 1,
@@ -4568,7 +4665,7 @@ describe('loadBoard (session restore / File > Open)', () => {
 
   const loaded = (): Board => ({
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'opened',
     name: 'opened',
     components: [
@@ -4830,7 +4927,7 @@ describe('circuitStore groups', () => {
     expect(id).not.toBeNull();
 
     const after = useCircuitStore.getState().board;
-    expect(after.groups).toEqual([{ id, name: 'Left' }]);
+    expect(after.groups).toEqual([{ id, name: 'Left', color: 'g1' }]);
     expect(
       after.components
         .filter((c) => c.group === id)
@@ -4889,8 +4986,8 @@ describe('circuitStore groups', () => {
     expect(useCircuitStore.getState().renameGroup(g2, 'Left')).toBe(false);
     expect(useCircuitStore.getState().renameGroup(g2, 'Middle')).toBe(true);
     expect(useCircuitStore.getState().board.groups).toEqual([
-      { id: g1, name: 'Left' },
-      { id: g2, name: 'Middle' },
+      { id: g1, name: 'Left', color: 'g1' },
+      { id: g2, name: 'Middle', color: 'g2' },
     ]);
   });
 });
@@ -4903,7 +5000,7 @@ describe('circuitStore label sharing across a buffer', () => {
 
   const chainBoard = (withBuffer: boolean): Board => ({
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'chain',
     name: 'chain',
     components: [
@@ -4949,7 +5046,7 @@ describe('circuitStore label sharing across a buffer', () => {
   /** sw -> chain of single-input parts -> led. */
   const throughBoard = (kinds: readonly string[]): Board => ({
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'chain',
     name: 'chain',
     components: [
@@ -5545,5 +5642,136 @@ describe('commitSynthesis', () => {
         .getState()
         .commitSynthesis({ components: [], wires: [], junctions: [] }, 'Built circuit'),
     ).toBeNull();
+  });
+});
+
+describe('group and wire colours', () => {
+  beforeEach(reset);
+
+  const colourBoard = (st: { board: Board }): { board: Board } => ({
+    board: {
+      ...st.board,
+      components: [
+        { id: 'c1', kind: 'toggle', pos: { x: 0, y: 0 }, params: { initial: false } },
+        { id: 'c2', kind: 'led', pos: { x: 160, y: 0 } },
+        { id: 'c3', kind: 'led', pos: { x: 160, y: 80 }, group: 'gb' },
+      ],
+      groups: [{ id: 'gb', name: 'B', color: 'g1' }],
+      wires: [
+        {
+          id: 'w1',
+          a: { kind: 'pin', component: 'c1', pin: 'y' },
+          b: { kind: 'pin', component: 'c2', pin: 'a' },
+          points: [],
+        },
+      ],
+      junctions: [],
+    },
+  });
+
+  it('a new group takes the lowest unused colour, a nested one skips its parent', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.setState({ selection: new Set(['c1', 'c2']) });
+    const outer = useCircuitStore.getState().groupSelection('A')!;
+    expect(useCircuitStore.getState().board.groups!.find((g) => g.id === outer)!.color).toBe('g2');
+    useCircuitStore.setState({ selection: new Set(['c1']) });
+    const inner = useCircuitStore.getState().groupSelection('Inner')!;
+    const groups = useCircuitStore.getState().board.groups!;
+    expect(groups.find((g) => g.id === inner)).toMatchObject({ parent: outer, color: 'g3' });
+  });
+
+  it('styles a group in one undo step and refuses a taken name', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.setState({ selection: new Set(['c1']) });
+    const id = useCircuitStore.getState().groupSelection('A')!;
+    const s = useCircuitStore.getState();
+    expect(s.styleGroup(id, { name: 'B' })).toBe(false);
+    expect(s.styleGroup(id, { name: '  ' })).toBe(false);
+    expect(s.styleGroup(id, { name: 'Input', color: 'g6', tab: true })).toBe(true);
+    expect(useCircuitStore.getState().board.groups!.find((g) => g.id === id)).toEqual({
+      id,
+      name: 'Input',
+      color: 'g6',
+      tab: true,
+    });
+    useCircuitStore.getState().undo();
+    expect(useCircuitStore.getState().board.groups!.find((g) => g.id === id)).toEqual({
+      id,
+      name: 'A',
+      color: 'g2',
+    });
+  });
+
+  it('plain drops the tab with the colour', () => {
+    useCircuitStore.setState(colourBoard);
+    const s = useCircuitStore.getState();
+    s.styleGroup('gb', { tab: true });
+    s.styleGroup('gb', { color: null });
+    expect(useCircuitStore.getState().board.groups).toEqual([{ id: 'gb', name: 'B' }]);
+  });
+
+  it('a group colour keeps the sim powered, a group rename does not', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.getState().power();
+    useCircuitStore.getState().toggleInput('c1');
+    const lit = useCircuitStore.getState().pinSignal('c2', 'a');
+    useCircuitStore.getState().styleGroup('gb', { color: 'g4', tab: true });
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().pinSignal('c2', 'a')).toBe(lit);
+    useCircuitStore.getState().styleGroup('gb', { name: 'Lamps' });
+    expect(useCircuitStore.getState().powered).toBe(false);
+  });
+
+  it('colours the listed wires, clears with null, and keeps power through undo', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.getState().power();
+    useCircuitStore.getState().toggleInput('c1');
+    // Read rather than assumed: power-on may restore a switch held from the last run.
+    const lit = useCircuitStore.getState().pinSignal('c2', 'a');
+    useCircuitStore.getState().colorWires(new Set(['w1']), 'g5');
+    expect(useCircuitStore.getState().board.wires[0]!.color).toBe('g5');
+    expect(useCircuitStore.getState().powered).toBe(true);
+    useCircuitStore.getState().undo();
+    expect(useCircuitStore.getState().board.wires[0]!.color).toBeUndefined();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().pinSignal('c2', 'a')).toBe(lit);
+    useCircuitStore.getState().redo();
+    expect(useCircuitStore.getState().board.wires[0]!.color).toBe('g5');
+    expect(useCircuitStore.getState().powered).toBe(true);
+    useCircuitStore.getState().colorWires(new Set(['w1']), null);
+    expect('color' in useCircuitStore.getState().board.wires[0]!).toBe(false);
+  });
+
+  it('a part spliced into a coloured wire leaves both halves coloured', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.getState().colorWires(new Set(['w1']), 'g2');
+    useCircuitStore.getState().insertOnWire({
+      kind: 'not',
+      wireId: 'w1',
+      pos: { x: 80, y: 0 },
+      grid: 8,
+      inName: 'a',
+      outName: 'y',
+      upstreamEnd: { kind: 'pin', component: 'c1', pin: 'y' },
+      downstreamEnd: { kind: 'pin', component: 'c2', pin: 'a' },
+    });
+    const wires = useCircuitStore.getState().board.wires;
+    expect(wires).toHaveLength(2);
+    expect(wires.every((w) => w.color === 'g2')).toBe(true);
+  });
+
+  it('a duplicate keeps its wire colours', () => {
+    useCircuitStore.setState(colourBoard);
+    useCircuitStore.getState().colorWires(new Set(['w1']), 'g7');
+    const board = useCircuitStore.getState().board;
+    useCircuitStore
+      .getState()
+      .commitDuplicate(
+        { components: board.components.slice(0, 2), wires: board.wires, junctions: [] },
+        { x: 0, y: 320 },
+      );
+    const wires = useCircuitStore.getState().board.wires;
+    expect(wires).toHaveLength(2);
+    expect(wires.every((w) => w.color === 'g7')).toBe(true);
   });
 });

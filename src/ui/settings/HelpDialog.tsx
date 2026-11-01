@@ -66,6 +66,7 @@ const SECTIONS: Section[] = [
     title: 'Circuit: tools',
     rows: [
       { what: 'Select and move', keys: 'Esc', touch: 'Select tool' },
+      { what: 'Move a part, wire or group', keys: 'Drag it', touch: 'Hold it, then drag' },
       { what: 'Select an area', keys: SHORTCUTS.lasso, touch: 'Marquee or Lasso tool' },
       {
         what: 'Switch between a marquee and a drawn shape',
@@ -124,6 +125,21 @@ const SECTIONS: Section[] = [
       { what: 'Group', keys: SHORTCUTS.group, touch: SELECTION_BAR },
       { what: 'Ungroup', keys: SHORTCUTS.ungroup, touch: SELECTION_BAR },
       {
+        what: 'Rename or colour a group',
+        keys: 'Double-click its name or border',
+        touch: 'Long press its name or border',
+      },
+      {
+        what: 'Colour a wire, or every selected wire',
+        keys: 'Double-click the wire',
+        touch: 'Long press the wire',
+      },
+      {
+        what: 'Colour every wire on its net',
+        keys: 'Whole net, in the wire colour box',
+        touch: 'Whole net, in the wire colour box',
+      },
+      {
         what: 'Undo / redo',
         keys: `${SHORTCUTS.undo} / ${SHORTCUTS.redo}`,
         touch: 'The two arrows',
@@ -157,6 +173,16 @@ const SECTIONS: Section[] = [
       { what: 'Mark a cell as a don’t-care', keys: 'X, or Alt+drag' },
       { what: 'Remove a group', keys: 'Delete', touch: 'Long press the group' },
       { what: 'Clear the group in progress, then close', keys: 'Esc' },
+    ],
+  },
+  {
+    title: 'Circuit: Memory panel',
+    rows: [
+      { what: 'Flip a bit of a RAM cell', keys: 'Click the bit', touch: 'Tap the bit' },
+      { what: 'Type a cell’s value', keys: '0 to F', touch: 'Keypad' },
+      { what: 'Move to another cell', keys: 'Up and Down, or Enter' },
+      { what: 'Clear a cell to X', keys: 'Delete' },
+      { what: 'Back to the board', keys: 'Esc' },
     ],
   },
   {

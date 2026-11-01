@@ -23,8 +23,15 @@ interface Tile {
  *  scratch tile is trimmed afterwards, so this only bounds the scan cost --
  *  but paint falling outside it IS lost, so a caller that knows it draws a
  *  long caption passes its own. */
-const SCRATCH_PAD = 96;
-const MAX_ENTRIES = 400;
+export const SCRATCH_PAD = 96;
+/** Floor for the tile cap; above the part count of the largest example board. */
+const MIN_TILES = 1000;
+/** The current bucket plus the one before it, which stands in while the
+ *  current one waits for a frame with budget left. */
+const BUCKETS_PER_KEY = 2;
+/** Tile building per frame, in ms. Re-rasterising every glyph of a large
+ *  board in one frame stalled a zoom step on the bus computer for ~46 ms. */
+const BUILD_BUDGET_MS = 6;
 
 /** Device pixels per world unit, quantised so a zoom gesture does not mint a
  *  tile per frame. Rounded UP to the next eighth: a tile is then never
@@ -48,10 +55,34 @@ export function tileWorldSize(
   return { w: pixelW / tileScale, h: pixelH / tileScale };
 }
 
-const cache = new Map<string, Tile>();
+/** LRU by key (Map order); each key holds its tiles by zoom bucket. */
+const cache = new Map<string, Map<number, Tile>>();
+let tileCount = 0;
+let maxTiles = MIN_TILES;
+let buildMsLeft = Infinity;
+let buildsDeferred = false;
 
 export function clearGlyphCache(): void {
   cache.clear();
+  tileCount = 0;
+}
+
+/**
+ * Runs one frame's drawing with a cap on the time spent building tiles
+ * (not on the frame: wires alone can outlast the cap). Past the cap a glyph
+ * draws from its tile at another zoom, else directly, uncached. Returns true
+ * when that happened, so the caller draws another frame to finish the tiles.
+ * Drawing outside this builds every missing tile at once.
+ */
+export function drawWithGlyphBudget(draw: () => void, budgetMs = BUILD_BUDGET_MS): boolean {
+  buildMsLeft = budgetMs;
+  buildsDeferred = false;
+  try {
+    draw();
+  } finally {
+    buildMsLeft = Infinity;
+  }
+  return buildsDeferred;
 }
 
 // A tile's key describes the component and the theme, never the code that
@@ -61,7 +92,16 @@ export function clearGlyphCache(): void {
 if (import.meta.hot) import.meta.hot.on('vite:beforeUpdate', clearGlyphCache);
 
 export function glyphCacheSize(): number {
-  return cache.size;
+  return tileCount;
+}
+
+/**
+ * Sizes the cap to the board being drawn. A fixed cap below the glyph count
+ * evicts tiles the same frame draws again: a 1484-part board cost 4.5x a
+ * 371-part one per draw. Two tiles per glyph covers the bucket kept for zoom.
+ */
+export function fitGlyphCacheTo(glyphCount: number): void {
+  maxTiles = Math.max(MIN_TILES, BUCKETS_PER_KEY * glyphCount);
 }
 
 /**
@@ -78,27 +118,52 @@ export function drawCachedGlyph(
   pad = SCRATCH_PAD,
 ): void {
   const bucket = zoomBucket(scale);
-  const full = `${key}|${bucket}`;
-  const hit = cache.get(full);
-  let tile: Tile | null = hit ?? null;
-  if (tile) {
-    // Refresh LRU position.
-    cache.delete(full);
-    cache.set(full, tile);
-  } else {
-    tile = buildTile(bounds, bucket, paint, pad);
+  let tiles = cache.get(key);
+  if (tiles) {
+    cache.delete(key);
+    cache.set(key, tiles);
+  }
+  let tile = tiles?.get(bucket);
+  if (!tile) {
+    if (buildMsLeft <= 0) {
+      buildsDeferred = true;
+      const standIn = tiles && [...tiles.values()].pop();
+      if (standIn) blit(ctx, standIn, bounds);
+      else paint(ctx);
+      return;
+    }
+    const started = performance.now();
+    tile = buildTile(bounds, bucket, paint, pad) ?? undefined;
+    buildMsLeft -= performance.now() - started;
     if (!tile) {
       paint(ctx);
       return;
     }
-    cache.set(full, tile);
-    while (cache.size > MAX_ENTRIES) {
-      const oldest = cache.keys().next();
-      if (oldest.done) break;
-      cache.delete(oldest.value);
+    if (!tiles) {
+      tiles = new Map();
+      cache.set(key, tiles);
     }
+    tiles.set(bucket, tile);
+    tileCount++;
+    for (const old of tiles.keys()) {
+      if (tiles.size <= BUCKETS_PER_KEY) break;
+      tiles.delete(old);
+      tileCount--;
+    }
+    evictOldest();
   }
+  blit(ctx, tile, bounds);
+}
 
+function evictOldest(): void {
+  for (const [key, tiles] of cache) {
+    if (tileCount <= maxTiles) return;
+    cache.delete(key);
+    tileCount -= tiles.size;
+  }
+}
+
+function blit(ctx: CanvasRenderingContext2D, tile: Tile, bounds: Rect): void {
   // Size and offset are both in the tile's OWN scale, never the frame's: the
   // zoom bucket means the two differ most of the time, and dividing the tile's
   // pixel size by the frame scale silently rescaled the glyph, so pins drifted

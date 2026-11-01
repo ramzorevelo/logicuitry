@@ -9,6 +9,8 @@ import chipSchema from '../../schemas/chip.schema.json';
 import boardSchema from '../../schemas/board.schema.json';
 import lessonSchema from '../../schemas/lesson.schema.json';
 import type { LcirFormat } from './migrations';
+import { isChipInstance, type Component } from '../core/model/types';
+import { anyRamPreloadError, ramPreloadError } from '../core/sim/primitives/ram';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 ajv.addSchema(commonSchema);
@@ -34,6 +36,27 @@ export function validateDocument(doc: unknown): ValidationResult {
   if (typeof format !== 'string' || !(format in validators))
     return { valid: false, errors: [`(root) unknown or missing format '${String(format)}'`] };
   const validate = validators[format as LcirFormat];
-  if (validate(doc)) return { valid: true };
-  return { valid: false, errors: readableErrors(validate.errors) };
+  if (!validate(doc)) return { valid: false, errors: readableErrors(validate.errors) };
+  const errors = paramErrors(doc as { components?: Component[] });
+  return errors.length ? { valid: false, errors } : { valid: true };
+}
+
+/** Values the schema cannot express: a RAM preload must parse for its size,
+ *  and a chip instance's `contents` entry for some RAM size. */
+function paramErrors(doc: { components?: Component[] }): string[] {
+  const errors: string[] = [];
+  (doc.components ?? []).forEach((comp, i) => {
+    const name = comp.label || comp.id;
+    if (comp.kind === 'ram') {
+      const bad = ramPreloadError(comp.params ?? {});
+      if (bad) errors.push(`/components/${i}/params/preload RAM ${name}: ${bad}`);
+    }
+    if (!isChipInstance(comp)) return;
+    for (const [key, text] of Object.entries(comp.contents ?? {})) {
+      const bad = anyRamPreloadError(text);
+      const pointer = key.replace(/~/g, '~0').replace(/\//g, '~1');
+      if (bad) errors.push(`/components/${i}/contents/${pointer} chip ${name}, RAM ${key}: ${bad}`);
+    }
+  });
+  return errors;
 }

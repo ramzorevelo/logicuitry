@@ -1,0 +1,219 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "majority-from-a-decoder",
+  "name": "Majority from a decoder",
+  "components": [
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 184
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 232
+      },
+      "label": "B"
+    },
+    {
+      "id": "c",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 280
+      },
+      "label": "C"
+    },
+    {
+      "id": "dec",
+      "kind": "decoder",
+      "pos": {
+        "x": 160,
+        "y": 160
+      },
+      "params": {
+        "addressBits": 3,
+        "pinView": "a=expanded"
+      }
+    },
+    {
+      "id": "or",
+      "kind": "or",
+      "pos": {
+        "x": 360,
+        "y": 256
+      },
+      "params": {
+        "inputs": 4
+      }
+    },
+    {
+      "id": "y",
+      "kind": "led",
+      "pos": {
+        "x": 536,
+        "y": 264
+      },
+      "label": "Y"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a2"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 96,
+          "y": 216
+        },
+        {
+          "x": 96,
+          "y": 248
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "a0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "c",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 144,
+          "y": 232
+        },
+        {
+          "x": 144,
+          "y": 296
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "or",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 352,
+          "y": 248
+        },
+        {
+          "x": 352,
+          "y": 264
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "or",
+        "pin": "b"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y6"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "or",
+        "pin": "c"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "dec",
+        "pin": "y7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "or",
+        "pin": "d"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "or",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

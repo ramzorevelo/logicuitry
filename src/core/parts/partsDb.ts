@@ -32,6 +32,9 @@ export interface PartEntry {
   tphl_clk_q?: TypMax;
   paths?: Record<string, ArcRow>;
   enable?: EnableRow;
+  /** Core input pin -> its own enable row, where the sheet times one control apart
+   *  ('189 R/W against /S); any other moved input takes `enable`. */
+  enable_from?: Record<string, EnableRow>;
   setup_min?: number;
   hold_min?: number;
   /** Per-class minimums where the datasheet splits them; a missing class takes `setup_min`. */

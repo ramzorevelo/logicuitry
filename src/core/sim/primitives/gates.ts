@@ -116,7 +116,7 @@ export const tristateBuf: PrimitiveSpec = {
   pins: () => [
     { name: 'a', dir: 'in', width: 1, role: 'data', order: 0 },
     { name: 'en', dir: 'in', width: 1, role: 'enable', order: 1 },
-    { name: 'y', dir: 'out', width: 1, role: 'data', order: 0 },
+    { name: 'y', dir: 'out', width: 1, role: 'data', order: 0, threeState: true },
   ],
   evaluate(ctx): EvalResult {
     const en = ctx.inputs[1]!;

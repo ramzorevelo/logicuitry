@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 5,
+  "formatVersion": 7,
   "id": "74LS00",
   "name": "74LS00",
   "version": 1,

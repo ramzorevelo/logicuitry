@@ -887,6 +887,8 @@ function stitch(
   const netOfWire = new Map<string, string>();
   for (const net of nets) for (const id of net.old) netOfWire.set(id, net.key);
 
+  const wireById = new Map(input.wires.map((w) => [w.id, w]));
+  const netByKey = new Map(nets.map((n) => [n.key, n]));
   const outWires: Wire[] = [];
   const emitted = new Set<string>();
   for (const w of input.wires) {
@@ -898,7 +900,12 @@ function stitch(
     }
     if (emitted.has(key!)) continue;
     emitted.add(key!);
-    outWires.push(...repl.wires);
+    // A rebuilt net shares no wire with the old one. A colour the whole net
+    // wore survives; a mixed net comes out plain rather than spreading one
+    // wire's colour over runs that never had it.
+    const colors = new Set(netByKey.get(key!)!.old.map((id) => wireById.get(id)?.color));
+    const color = colors.size === 1 ? [...colors][0] : undefined;
+    outWires.push(...repl.wires.map((r) => (color ? { ...r, color } : r)));
   }
 
   const minted: Junction[] = [];

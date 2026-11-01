@@ -987,6 +987,95 @@
   font-size: var(--text-secondary);
 }
 
+.dock-tabs {
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* --- Memory tab: one card per RAM --- */
+
+.wave-panel__body--memory {
+  overflow-x: hidden;
+}
+
+.memory-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 4);
+}
+
+.memory-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.memory-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.memory-card__title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.memory-card__size {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+.memory-card__hint {
+  max-width: 48ch;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+/* A 32-bit RAM is wider than a phone; it scrolls here, never the page. */
+.memory-card__grid {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.memory-card__canvas {
+  display: block;
+  outline: none;
+  touch-action: manipulation;
+}
+
+.memory-card__canvas:focus-visible {
+  outline-offset: -1px;
+  outline: 1px solid var(--accent);
+}
+
+.memory-card__keypad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: calc(var(--touch-h) * 9);
+  font-family: var(--font-mono);
+}
+
+.memory-card__keypad .tool-btn {
+  min-width: var(--touch-h);
+  min-height: var(--touch-h);
+  justify-content: center;
+  /* Two quick digits are a double tap, which mobile Chrome reads as zoom. */
+  touch-action: manipulation;
+}
+
+.memory-card__keep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+}
+
 /* --- clock/component param overlay (double-click a clock or width-editable glyph) --- */
 
 .circuit-clock-edit,
@@ -1032,6 +1121,51 @@
 .circuit-param-edit__segmented {
   display: flex;
   gap: 2px;
+}
+
+/* Group and wire colour picker: the eight palette slots and a "none" swatch. */
+.circuit-swatches {
+  --swatch: 22px;
+  display: grid;
+  grid-template-columns: repeat(9, var(--swatch));
+  gap: var(--space-unit);
+}
+
+/* A finger needs the touch target, so the row wraps to two. */
+.app-shell--compact .circuit-swatches {
+  --swatch: var(--touch-h);
+  grid-template-columns: repeat(5, var(--swatch));
+}
+
+.circuit-swatch {
+  width: var(--swatch);
+  height: var(--swatch);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--chrome-radius);
+  cursor: pointer;
+}
+
+.circuit-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.circuit-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.circuit-swatch--none {
+  background: linear-gradient(to top right, transparent 46%, var(--muted) 46% 54%, transparent 54%),
+    var(--surface);
+}
+
+.circuit-param-edit__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-unit);
 }
 
 /* M6.6 Phase 6: per-lane bus expand/collapse checkboxes, one row per pin --
@@ -1231,6 +1365,16 @@
   min-height: var(--touch-h);
 }
 
+/* The label is already at the type floor, so the room comes from padding: at 320 a typical
+   selection's last action showed as "Grou". The bar still scrolls when more are offered. */
+.app-shell--compact .selection-actions {
+  gap: calc(var(--space-unit) / 2);
+}
+
+.app-shell--compact .selection-actions .tool-btn {
+  padding-inline: calc(var(--space-unit) * 1.5);
+}
+
 /* Parts palette on a phone. The desktop rail has no room here, so it becomes
    a scrolling strip above the reference/nav chrome: still the same
    PALETTE_GROUPS, still 44px targets. */
@@ -1402,6 +1546,7 @@
    for padding to grow past. Four buttons at 52 crowd a phone's only band of
    canvas for nothing. */
 .circuit-quick .tool-btn {
+  flex-shrink: 0;
   width: var(--touch-h);
   height: var(--touch-h);
   min-width: 0;
@@ -1441,6 +1586,38 @@
    Delete's edge and took its taps. */
 .app-shell--landscape .selection-actions {
   left: calc(var(--touch-h) + var(--space-unit) * 4 + var(--stroke-min) * 2);
+}
+
+/* Sized by its flex slot, never by the canvas inside, so size containment costs nothing and lets
+   the quick panel ask how tall the board is. */
+.app-shell--compact .circuit-canvas-wrap {
+  container: board / size;
+}
+
+/* The four-button column is about 158px. Waveforms open on a rotated phone leave 60px of board,
+   where the column squashed its buttons to 9px; a row fits. */
+@container board (max-height: 160px) {
+  /* Not clamped to the board: on a 216px phone the board is 35px, and a clamped row grew
+     scrollbars over its own buttons. Overhanging the dock's top edge is the lesser cost. */
+  .app-shell--landscape .circuit-quick {
+    flex-direction: row;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* On a board this short the bar and the row share a band, so the bar starts past the row. */
+  .app-shell--landscape .selection-actions {
+    left: calc(var(--touch-h) * 4 + var(--space-unit) * 7 + var(--stroke-min) * 2);
+  }
+}
+
+/* A board barely taller than one button: the panel's inset and padding hung the row over the dock
+   header. Without them the framed row is one button plus its border tall. */
+@container board (max-height: 48px) {
+  .app-shell--landscape .circuit-quick {
+    top: 0;
+    padding: 0;
+  }
 }
 
 /* Power, Run, Undo and Redo live in the floating quick panel on a phone.
@@ -1541,7 +1718,7 @@
    handle sit outside that cap and pushed the whole panel over the canvas on a
    short screen. Capping the panel itself leaves the board visible. */
 .app-shell--compact .wave-panel {
-  max-height: 55dvh;
+  max-height: 45dvh;
   display: flex;
   flex-direction: column;
 }
@@ -1552,9 +1729,26 @@
   min-height: 0;
 }
 
-/* Landscape has even less height to give away. */
-.app-shell--landscape .wave-panel {
-  max-height: 45dvh;
+/* One row that scrolls sideways, like the toolbar: wrapped, the controls took 108px of a 608px
+   phone in three rows. */
+.app-shell--compact .wave-panel__header {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-shell--compact .wave-panel__header::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--compact .wave-panel__header > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app-shell--compact .wave-panel__signals-pop {
+  position: fixed;
 }
 
 /* The drawer and the toolbar were padded as though they had a desktop's room.

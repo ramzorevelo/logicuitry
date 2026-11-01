@@ -64,6 +64,23 @@ describe('autoPlace', () => {
     expect(moved.get('g')?.y ?? 0).toBe(0);
   });
 
+  it('treats a bidirectional pin as neither source nor sink', () => {
+    const bidir = (id: string, x: number, y: number): RoutableComponent => {
+      const c = routable(id, x, y);
+      const pins = new Map(c.pins);
+      pins.set('a', { pos: { x, y: y + 16 }, dir: 'inout' });
+      return { ...c, pins };
+    };
+    // Only g reads sw, so only g moves into the next column; x, on an inout pin, stays put.
+    const comps = [routable('sw', 48, 48), bidir('x', 48, 448), routable('g', 600, 64)];
+    const after = shifted(comps, [
+      wire('w1', ['sw', 'y'], ['x', 'a']),
+      wire('w2', ['sw', 'y'], ['g', 'a']),
+    ]);
+    expect(after.get('x')!.bounds.x).toBe(after.get('sw')!.bounds.x);
+    expect(after.get('g')!.bounds.x).toBeGreaterThan(after.get('sw')!.bounds.x);
+  });
+
   it('keeps a column in the order the author drew it', () => {
     const comps = [
       routable('sw', 48, 48),

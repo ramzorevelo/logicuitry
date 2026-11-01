@@ -6,6 +6,7 @@ import * as bv from '../value/busValue';
 import type { Board } from '../model/types';
 import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
 import { componentPaths } from '../model/compile';
+import { outputSlotPins } from '../model/pinSlots';
 import type { NetChangeRecord } from '../sim/kernel';
 import type { DatasheetColumn } from '../parts/partsDb';
 import { isStructuralHop, pinNamesOf } from '../sim/delay';
@@ -144,9 +145,7 @@ export function trackList(board: Board, circuit: CompiledCircuit): TrackSpec[] {
     const pi = circuit.componentToPrimitive.get(`main/${comp.id}`);
     if (pi === undefined) continue;
     const prim = circuit.primitives[pi]!;
-    const outs = getPrimitive(comp.kind)
-      .pins(comp.params ?? {})
-      .filter((p) => p.dir === 'out');
+    const outs = outputSlotPins(getPrimitive(comp.kind).pins(comp.params ?? {}));
     // Path is keyed by comp.id (always unique), NOT comp.label -- a track's
     // display label CAN legally collide with another component's (same-net
     // sharing), but two DIFFERENT components must never produce the same

@@ -65,7 +65,9 @@ describe('isWidthCapable', () => {
     expect(paramKeysFor('shiftreg', { width: 8 })).toEqual(
       new Set(['width', 'clear', 'hasLoad', 'parallelOut']),
     );
-    expect(paramKeysFor('register', {})).toEqual(new Set(['width']));
+    expect(paramKeysFor('register', {})).toEqual(new Set(['width', 'outputEnable']));
+    expect(clampParamValue('register', 'outputEnable', 1)).toBe(true);
+    expect(clampParamValue('dff', 'outputEnable', true)).toBeNull();
     expect(paramKeysFor('counter', { width: 4, dualEnable: true }).has('hasEnable')).toBe(false);
   });
 
@@ -265,5 +267,11 @@ describe('liveParamsOnly', () => {
     const p = { width: 1, color: 'red' };
     liveParamsOnly('led', p, true);
     expect(p).toEqual({ width: 1, color: 'red' });
+  });
+});
+
+describe('bus transceiver params', () => {
+  it('exposes width, derived from its own bus pins', () => {
+    expect([...paramKeysFor('transceiver', { width: 8 })]).toEqual(['width']);
   });
 });

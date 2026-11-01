@@ -89,7 +89,7 @@ function randomBoard(rng: Prng, nIn: number, nGates: number, nOut: number): Boar
 
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'rand',
     name: 'rand',
     components,

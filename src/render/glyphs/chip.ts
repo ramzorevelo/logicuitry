@@ -36,6 +36,7 @@ const BOX_KINDS = [
   'srlatch',
   'counter',
   'shiftreg',
+  'ram',
   'mux',
   'demux',
   'decoder',
@@ -43,6 +44,7 @@ const BOX_KINDS = [
   'adder',
   'comparator',
   'parity',
+  'transceiver',
 ] as const;
 
 // Fixed 1G bubble diameter for box async pins: one bubble size, everywhere,
@@ -105,10 +107,18 @@ export function boxLayout(input: GeometryInput, theme: Theme): BoxLayout {
   const selectPins = input.pins
     .filter((p) => p.role === 'select')
     .sort((a, b) => b.order - a.order);
-  const left = input.pins
-    .filter((p) => p.dir === 'in' && p.role !== 'select')
-    .sort((a, b) => a.order - b.order);
-  const right = input.pins.filter((p) => p.dir === 'out').sort((a, b) => a.order - b.order);
+  // Inout pins list with the outputs, except that a pair splits across the
+  // body: a transceiver's `a` faces left and `b` right.
+  const inouts = input.pins.filter((p) => p.dir === 'inout').sort((a, b) => a.order - b.order);
+  const inoutsLeft = inouts.slice(0, Math.floor(inouts.length / 2));
+  const left = [
+    ...input.pins.filter((p) => p.dir === 'in' && p.role !== 'select'),
+    ...inoutsLeft,
+  ].sort((a, b) => a.order - b.order);
+  const right = [
+    ...input.pins.filter((p) => p.dir === 'out'),
+    ...inouts.filter((p) => !inoutsLeft.includes(p)),
+  ].sort((a, b) => a.order - b.order);
   const rows = Math.max(left.length, right.length, 1);
 
   // Row pitch tracks the pin-label size, not a literal 2G: at presentation

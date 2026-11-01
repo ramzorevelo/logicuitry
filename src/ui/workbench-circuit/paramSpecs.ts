@@ -10,6 +10,7 @@ import type { Params } from '../../core/sim/primitives/types';
 import type { ParamValue } from '../../core/model/types';
 import { MAX_WIDTH } from '../../core/value/busValue';
 import { MATRIX_MAX, MATRIX_MIN } from '../../core/sim/primitives/display';
+import { RAM_MAX_ADDRESS_BITS } from '../../core/sim/primitives/ram';
 import { isLedColor, isLedShape } from '../../render/theme';
 import { VARIABLE_ARITY_GATES } from './circuitStore';
 
@@ -50,7 +51,7 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
   if (isWidthCapable(kind, params)) keys.add('width');
   if (VARIABLE_ARITY_GATES.has(kind)) keys.add('inputs');
   if (kind === 'mux' || kind === 'demux') keys.add('selectBits');
-  if (kind === 'decoder' || kind === 'encoder') keys.add('addressBits');
+  if (kind === 'decoder' || kind === 'encoder' || kind === 'ram') keys.add('addressBits');
   if (kind === 'mux' || kind === 'demux' || kind === 'decoder') keys.add('hasEnable');
   // A dual-enable core ('161/'163) has ENP and ENT, which the checkbox cannot describe.
   if (kind === 'counter' && params['dualEnable'] !== true) keys.add('hasEnable');
@@ -59,6 +60,7 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
     keys.add('asyncClear');
   }
   if (kind === 'srlatch') keys.add('form');
+  if (kind === 'register') keys.add('outputEnable');
   if (kind === 'counter' || kind === 'shiftreg') {
     keys.add('clear');
     keys.add('hasLoad');
@@ -107,8 +109,10 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
     }
     case 'addressBits': {
       const n = Math.round(Number(raw));
+      if (!Number.isFinite(n)) return null;
+      if (kind === 'ram') return Math.min(RAM_MAX_ADDRESS_BITS, Math.max(1, n));
       if (kind !== 'decoder' && kind !== 'encoder') return null;
-      return Number.isFinite(n) ? Math.min(4, Math.max(1, n)) : null;
+      return Math.min(4, Math.max(1, n));
     }
     case 'hasEnable':
       return kind === 'mux' || kind === 'demux' || kind === 'decoder' || kind === 'counter'
@@ -117,6 +121,8 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
     case 'asyncSet':
     case 'asyncClear':
       return kind === 'dff' ? !!raw : null;
+    case 'outputEnable':
+      return kind === 'register' ? !!raw : null;
     case 'form':
       return kind === 'srlatch' ? (raw === 'nand' ? 'nand' : 'nor') : null;
     case 'clear':

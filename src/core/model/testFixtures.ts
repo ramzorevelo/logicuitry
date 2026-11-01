@@ -1,7 +1,7 @@
 // Shared builders for core tests: terse construction of boards and defs.
 
 import type { Board, ChipDef, Component, ComponentKind, PinDef, Wire } from './types';
-import type { ParamValue } from './types';
+import type { ChipInstance, ParamValue } from './types';
 
 export function comp(
   id: string,
@@ -45,7 +45,7 @@ export function tapWire(
 export function board(over: Partial<Board>): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'test-board',
     name: 'test',
     components: [],
@@ -61,7 +61,7 @@ export function board(over: Partial<Board>): Board {
 export function chipDef(over: Partial<ChipDef> & Pick<ChipDef, 'id' | 'name' | 'pins'>): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 5,
+    formatVersion: 7,
     version: 1,
     components: [],
     wires: [],
@@ -107,5 +107,58 @@ export function srLatchDef(): ChipDef {
       wire('w5', ['g1', 'y'], ['outQ', 'a']),
       wire('w6', ['g2', 'y'], ['outQn', 'a']),
     ],
+  });
+}
+
+/** A user chip around a 2 x 8 RAM `r1` that always reads: address in `A`,
+ *  the addressed cell on `Q`. */
+export function memChipDef(preload = '01 02'): ChipDef {
+  return chipDef({
+    id: 'mem',
+    name: 'mem',
+    pins: [pin('A', 'in', 'inA', 0), pin('Q', 'out', 'outQ', 0, 8)],
+    components: [
+      comp('inA', 'inport', undefined, 'A'),
+      comp('one', 'constant', { value: 1 }),
+      comp('zero', 'constant', { value: 0 }),
+      comp('r1', 'ram', { width: 8, addressBits: 1, preload }),
+      comp('outQ', 'outport', { width: 8 }, 'Q'),
+    ],
+    wires: [
+      wire('w1', ['inA', 'y'], ['r1', 'a']),
+      wire('w2', ['zero', 'y'], ['r1', 'we']),
+      wire('w3', ['one', 'y'], ['r1', 'cs']),
+      wire('w4', ['r1', 'q'], ['outQ', 'a']),
+    ],
+  });
+}
+
+/** A chip instance of `defId`, with `contents` when given. */
+export function chipComp(
+  id: string,
+  defId: string,
+  label: string,
+  contents?: Record<string, string>,
+): ChipInstance {
+  return {
+    ...comp(id, 'chip', undefined, label),
+    kind: 'chip',
+    defId,
+    ...(contents ? { contents } : {}),
+  };
+}
+
+/** A chip holding one `mem` instance labelled `M`, passing `A` and `Q` through. */
+export function memWrapDef(innerContents?: Record<string, string>): ChipDef {
+  return chipDef({
+    id: 'wrap',
+    name: 'wrap',
+    pins: [pin('A', 'in', 'inA', 0), pin('Q', 'out', 'outQ', 0, 8)],
+    components: [
+      comp('inA', 'inport', undefined, 'A'),
+      chipComp('m1', 'mem', 'M', innerContents),
+      comp('outQ', 'outport', { width: 8 }, 'Q'),
+    ],
+    wires: [wire('w1', ['inA', 'y'], ['m1', 'A']), wire('w2', ['m1', 'Q'], ['outQ', 'a'])],
   });
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, Component, Wire, WireEnd } from '../model/types';
-import { connectedPins, netPins, netWireIds } from './netGraph';
+import { connectedPins, netPins, netWireIds, netWiresOf } from './netGraph';
 
 describe('connectedPins', () => {
   it('finds a directly wired pin', () => {
@@ -235,5 +235,76 @@ describe('net labels join by name, not by wire', () => {
     const reached = connectedPins(c, { component: 'sw', pin: 'y' });
     expect(reached).toContainEqual({ component: 'g', pin: 'a' });
     expect(reached).toContainEqual({ component: 'h', pin: 'a' });
+  });
+});
+
+describe('netWiresOf', () => {
+  const w = (id: string, a: WireEnd, b: WireEnd): Wire => ({ id, a, b, points: [] });
+  const p = (component: string, pin: string): WireEnd => ({ kind: 'pin', component, pin });
+  const j = (junction: string): WireEnd => ({ kind: 'junction', junction });
+  const circuit: Circuit = {
+    components: [
+      { id: 'L1', kind: 'netlabel', pos: { x: 0, y: 0 }, label: 'CLK' },
+      { id: 'L2', kind: 'netlabel', pos: { x: 0, y: 0 }, label: 'CLK' },
+    ],
+    junctions: [{ id: 'j1', pos: { x: 0, y: 0 } }],
+    wires: [
+      w('run1', p('a', 'y'), j('j1')),
+      w('run2', j('j1'), p('b', 'x')),
+      w('branch', j('j1'), p('L1', 'a')),
+      w('far', p('L2', 'a'), p('c', 'x')),
+      w('other', p('d', 'y'), p('e', 'x')),
+    ],
+  };
+
+  it('spreads past splices and same-name labels, and stops at other nets', () => {
+    expect(netWiresOf(circuit, new Set(['run2']))).toEqual(
+      new Set(['run1', 'run2', 'branch', 'far']),
+    );
+  });
+
+  it('unions the nets of several wires and ignores unknown ids', () => {
+    expect(netWiresOf(circuit, new Set(['far', 'other', 'gone']))).toEqual(
+      new Set(['run1', 'run2', 'branch', 'far', 'other']),
+    );
+  });
+});
+
+describe('net walks keep to compile scope', () => {
+  const w = (id: string, a: WireEnd, b: WireEnd): Wire => ({ id, a, b, points: [] });
+  const p = (component: string, pin: string): WireEnd => ({ kind: 'pin', component, pin });
+
+  it('does not join same-name labels in different groups', () => {
+    const circuit: Circuit = {
+      components: [
+        { id: 'L1', kind: 'netlabel', pos: { x: 0, y: 0 }, label: 'A', group: 'g1' },
+        { id: 'L2', kind: 'netlabel', pos: { x: 0, y: 0 }, label: 'A', group: 'g2' },
+        { id: 'L3', kind: 'netlabel', pos: { x: 0, y: 0 }, label: 'A', group: 'g1' },
+      ],
+      junctions: [],
+      wires: [
+        w('in1', p('x', 'y'), p('L1', 'a')),
+        w('in2', p('L2', 'a'), p('y', 'x')),
+        w('same', p('L3', 'a'), p('z', 'x')),
+      ],
+    };
+    expect(netWiresOf(circuit, new Set(['in1']))).toEqual(new Set(['in1', 'same']));
+  });
+
+  it('does not cross a bus tap into the bus', () => {
+    const circuit: Circuit = {
+      components: [],
+      junctions: [],
+      wires: [
+        w('bus', p('src', 'y'), p('dst', 'a')),
+        w(
+          'bit',
+          { kind: 'tap', wire: 'bus', range: { hi: 2, lo: 2 }, pos: { x: 0, y: 0 } },
+          p('led', 'a'),
+        ),
+      ],
+    };
+    expect(netWiresOf(circuit, new Set(['bit']))).toEqual(new Set(['bit']));
+    expect(netWiresOf(circuit, new Set(['bus']))).toEqual(new Set(['bus']));
   });
 });

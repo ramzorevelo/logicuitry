@@ -3,7 +3,7 @@ import { validateDocument } from './validate';
 
 const chip = {
   format: 'lcir.chip',
-  formatVersion: 5,
+  formatVersion: 7,
   id: 'and-gate',
   name: 'AND gate',
   version: 1,
@@ -15,7 +15,7 @@ const chip = {
 
 const board = {
   format: 'lcir.board',
-  formatVersion: 7,
+  formatVersion: 9,
   id: 'b1',
   name: 'demo',
   components: [],
@@ -69,6 +69,60 @@ describe('validateDocument', () => {
   it('rejects unknown top-level properties (additionalProperties: false)', () => {
     const r = validateDocument({ ...lesson, surprise: true });
     expect(r.valid).toBe(false);
+  });
+
+  it('loads a RAM preload that fits, and refuses a malformed one naming the component', () => {
+    const ram = (preload: string, label?: string) => ({
+      id: 'r1',
+      kind: 'ram',
+      pos: { x: 0, y: 0 },
+      params: { width: 8, addressBits: 1, preload },
+      ...(label ? { label } : {}),
+    });
+    expect(validateDocument({ ...board, components: [ram('0A X')] })).toEqual({ valid: true });
+    expect(validateDocument({ ...board, components: [ram('0A 1G', 'MEM')] })).toEqual({
+      valid: false,
+      errors: ["/components/0/params/preload RAM MEM: address 1: '1G' is not a hex value or X"],
+    });
+    expect(validateDocument({ ...chip, components: [ram('1 2 3')] })).toEqual({
+      valid: false,
+      errors: ['/components/0/params/preload RAM r1: 3 cells for 2 addresses'],
+    });
+  });
+
+  it('loads chip instance contents, and refuses a malformed entry naming the component', () => {
+    const inst = (contents: Record<string, string>) => ({
+      id: 'u1',
+      kind: 'chip',
+      defId: 'mem',
+      label: 'U1',
+      pos: { x: 0, y: 0 },
+      contents,
+    });
+    expect(validateDocument({ ...board, components: [inst({ u1: '0A X', 'U4/u1': '' })] })).toEqual(
+      { valid: true },
+    );
+    expect(validateDocument({ ...board, components: [inst({ 'U4/u1': '0A 1G' })] })).toEqual({
+      valid: false,
+      errors: [
+        "/components/0/contents/U4~1u1 chip U1, RAM U4/u1: address 1: '1G' is not a hex value or X",
+      ],
+    });
+    expect(validateDocument({ ...chip, components: [inst({ u1: '123456789' })] })).toEqual({
+      valid: false,
+      errors: [
+        "/components/0/contents/u1 chip U1, RAM u1: address 0: '123456789' has more than 8 hex digits",
+      ],
+    });
+    expect(validateDocument({ ...board, components: [inst({ u1: 7 } as never)] }).valid).toBe(
+      false,
+    );
+    expect(validateDocument({ ...board, components: [inst({ '': '1' })] }).valid).toBe(false);
+  });
+
+  it('refuses contents on anything but a chip instance', () => {
+    const ram = { id: 'r1', kind: 'ram', pos: { x: 0, y: 0 }, contents: { r1: '1' } };
+    expect(validateDocument({ ...board, components: [ram] }).valid).toBe(false);
   });
 
   it('rejects an unknown or missing format', () => {

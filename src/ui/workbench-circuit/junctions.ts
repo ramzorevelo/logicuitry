@@ -4,6 +4,7 @@
 // a Circuit draft; no DOM/canvas.
 
 import type { Circuit, Point, Wire, WireEnd } from '../../core/model/types';
+import { inheritedColor } from '../../core/model/palette';
 import { projectOntoSegment, routeOrthogonal } from './wireGeom';
 import { WIRE_BODY_HIT_RADIUS } from '../../render/hitTest';
 
@@ -112,12 +113,14 @@ export function splitWireAtHit(
       a: hit.wire.a,
       b: { kind: 'junction', junction: junctionId },
       points: before,
+      ...inheritedColor(hit.wire),
     },
     {
       id: genWireId(),
       a: { kind: 'junction', junction: junctionId },
       b: hit.wire.b,
       points: after,
+      ...inheritedColor(hit.wire),
     },
   );
 }
@@ -257,6 +260,7 @@ export function collapseJunctions(
         a: other1,
         b: other2,
         points: keepCorner ? [...seg1, j.pos, ...seg2] : [...seg1, ...seg2],
+        ...inheritedColor(r1.wire, r2.wire),
       };
       draft.wires = draft.wires.filter((w) => w.id !== r1.wire.id && w.id !== r2.wire.id);
       draft.wires.push(merged);

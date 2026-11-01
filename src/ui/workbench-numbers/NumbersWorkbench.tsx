@@ -71,7 +71,7 @@ export function NumbersWorkbench() {
           )}
 
           {tab !== 'algebra' && (
-            <label className="field">
+            <label className="field numbers-workbench__width">
               width
               <select
                 className="select"

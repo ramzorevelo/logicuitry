@@ -2,25 +2,47 @@ import { create } from 'zustand';
 import type {
   Board,
   ChipDef,
+  ChipInstance,
   ChipLibrary,
   Circuit,
   Component,
   ComponentKind,
+  Group,
   Junction,
+  PaletteSlot,
   ParamValue,
   PinDir,
   Point,
   TimingSetting,
   Wire,
 } from '../../core/model/types';
-import { compile, CompileError, type CompiledCircuit } from '../../core/model/compile';
+import {
+  compile,
+  CompileError,
+  type CompiledCircuit,
+  type StaleContentsKey,
+} from '../../core/model/compile';
 import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
+import {
+  ramAddress,
+  ramSize,
+  withResizedPreload,
+  type RamState,
+} from '../../core/sim/primitives/ram';
+import { printPreload } from '../../core/sim/primitives/ramPreload';
+import { listRams, type RamEntry } from '../../core/model/ramView';
 import {
   parsePinView,
   serializePinView,
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
 import { Simulator } from '../../core/sim/kernel';
+import {
+  inheritedColor,
+  nextGroupColor,
+  recoloredWire,
+  styledGroup,
+} from '../../core/model/palette';
 import { builtinChipLibrary, isBuiltinChipDef, isBuiltinChipId } from '../../core/parts/packages';
 import { idealDelay, datasheetDelay } from '../../core/sim/delay';
 import * as bv from '../../core/value/busValue';
@@ -28,6 +50,13 @@ import { busSignalState, type SignalState } from '../../render/theme';
 import { History, applyToCircuit, diffCircuits, type ApplyFn } from './history';
 import { paramLiveness } from './paramLiveness';
 import type { WireEnd } from '../../core/model/types';
+import {
+  canFloat,
+  inputSlotPins,
+  isOutputSlot,
+  mayShareNet,
+  outputSlotPins,
+} from '../../core/model/pinSlots';
 import { cloneCircuit, derivePins, detachRemovedPins, findCycle, renamePinRefs } from './packaging';
 import {
   attachAtHit,
@@ -70,7 +99,7 @@ import {
   type GroupRotateItem,
   type GroupRotateResult,
 } from './wireGeom';
-import { lowerCircuit } from '../../core/gates/lower';
+import { lowerCircuit, lowerLibrary } from '../../core/gates/lower';
 import {
   composeKind,
   decomposeKind,
@@ -201,7 +230,7 @@ const ledDefaults = (
  *  never reaches for a theme. */
 export type ComponentPins = (
   component: Component,
-) => readonly { name: string; pos: Point; width: number; dir: PinDir }[];
+) => readonly { name: string; pos: Point; width: number; dir: PinDir; threeState?: boolean }[];
 
 /** Parts dropped pin-on-pin are wired where they touch, so landing an LED on a
  *  gate's output connects it. Wire ends are pin references, so dragging the
@@ -231,7 +260,7 @@ const connectAbutting = (
             p.pos.x === mine.pos.x &&
             p.pos.y === mine.pos.y &&
             p.width === mine.width &&
-            !(p.dir === 'out' && mine.dir === 'out') &&
+            mayShareNet(p, mine) &&
             !spoken(other.id, p.name, p.dir),
         );
         if (!hit) continue;
@@ -261,7 +290,7 @@ const snapPoint = (p: Point, g: number): Point => ({
 export function starterBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 7,
+    formatVersion: 9,
     id: 'scratch',
     name: 'Untitled board',
     components: [
@@ -514,6 +543,15 @@ interface CircuitState {
   /** Rename a group. Its name prefixes the net paths of the labels inside it,
    *  so this is a rename of those paths too. */
   renameGroup: (id: string, name: string) => boolean;
+  /** Name, colour and tab of a group in one undo step. `color: null` makes it
+   *  plain, which also drops the tab. False when the name is empty or taken. */
+  styleGroup: (
+    id: string,
+    patch: { name?: string; color?: PaletteSlot | null; tab?: boolean },
+  ) => boolean;
+  /** Insulation colour on each listed wire, `null` to clear it. One undo step,
+   *  and a live sim keeps running: compile never reads it. */
+  colorWires: (ids: ReadonlySet<string>, color: PaletteSlot | null) => void;
   /** Ctrl+X: 1-in/1-out components are healed (wired through); others delete normally. */
   deleteWithHeal: (ids?: Set<string>, resolveEnd?: ResolveWireEnd) => void;
   /** Returns false (no commit) when the connection is rejected -- e.g. an
@@ -625,6 +663,27 @@ interface CircuitState {
   // never bump `rev`; the canvas redraw effect must list them explicitly.
   waveformOpen: boolean;
   setWaveformOpen: (open: boolean) => void;
+  /** Which view the open dock shows. Memory clears any scrub replay, since
+   *  the grid has no history to rewind. */
+  dockTab: DockTab;
+  setDockTab: (tab: DockTab) => void;
+
+  // --- Memory panel.
+  /** The board's RAMs, from the live compile while powered; memoized on the
+   *  board and library, so a pointer-driven `rev` bump does not recompile. */
+  memoryRams: () => { rams: RamEntry[] } | { error: string };
+  /** Cells and current address of the RAM at a compiled index; null while unpowered. */
+  ramLive: (index: number) => { cells: readonly bv.BusValue[]; address: number | null } | null;
+  /** One undoable edit of a RAM's preload or its chip instance's `contents`
+   *  entry, on the board tab. False when refused (powered, a chip tab active,
+   *  a misfit slot, or the RAM is gone). */
+  setRamPreload: (entry: RamEntry, text: string) => boolean;
+  /** Final cells of the last Space power-off, by RAM `componentId`; valid only
+   *  while `board` and `chipLib` are the ones it was taken from. */
+  lastRun: LastRun | null;
+  keepLastRun: (entry: RamEntry) => void;
+  /** RAMs whose cells a powered edit is holding for the next power-on. */
+  heldRamIds: () => ReadonlySet<string>;
   /** Non-null while scrub-replaying: wire/glyph coloring reads the trace at
    *  this time instead of the live sim. Any sim-advancing action clears it. */
   replayTimePs: number | null;
@@ -771,6 +830,40 @@ function shadowNotice(ids: readonly string[]): { error?: string } {
   return { error: `chips: your ${ids.join(', ')} replaces the built-in part of the same name` };
 }
 
+export type DockTab = 'waves' | 'memory';
+
+export interface LastRun {
+  board: Board;
+  chipLib: ChipLibrary;
+  runs: ReadonlyMap<string, readonly bv.BusValue[]>;
+}
+
+/** The run Keep last run would store for one RAM, or null once an edit,
+ *  power-on or load has retired the offer. */
+export function offeredRun(
+  s: { lastRun: LastRun | null; board: Board; chipLib: ChipLibrary },
+  componentId: string,
+): readonly bv.BusValue[] | null {
+  const run = s.lastRun;
+  if (!run || run.board !== s.board || run.chipLib !== s.chipLib) return null;
+  return run.runs.get(componentId) ?? null;
+}
+
+export function staleContentsNotice(keys: readonly StaleContentsKey[]): string {
+  const where = (reason: StaleContentsKey['reason']) =>
+    keys
+      .filter((k) => k.reason === reason)
+      .map((k) => `${k.instance.replace(/^main\//, '')}/${k.key}`)
+      .join(', ');
+  const missing = where('missing');
+  const misfit = where('misfit');
+  const parts = [
+    missing && `no RAM at ${missing} now`,
+    misfit && `${misfit} no longer fits its RAM`,
+  ];
+  return `contents: ${parts.filter(Boolean).join('; ')}; the saved memory is kept`;
+}
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function omitPos(v: Record<string, unknown>): Record<string, unknown> {
@@ -828,6 +921,13 @@ const GEOMETRY_KEYS = new Set(['pos', 'rot', 'mirror', 'nameOffset']);
 
 export function simEffectOfItem(item: import('./history').PickedItem): SimEffect {
   if (isPureMoveItem(item)) return 'none';
+  if (item.kind === 'group' && item.before && item.after) {
+    // The name prefixes compiled paths; colour and tab are drawing only.
+    const structural = (g: Group) => JSON.stringify({ ...g, color: undefined, tab: undefined });
+    return structural(item.before as Group) === structural(item.after as Group)
+      ? 'none'
+      : 'topology';
+  }
   if (item.kind !== 'component' || !item.before || !item.after) return 'topology';
   const before = item.before as unknown as Component;
   const after = item.after as unknown as Component;
@@ -871,6 +971,28 @@ function isPureMoveItem(item: import('./history').PickedItem): boolean {
  *  can restore them when the pref asks. Deliberately outside the store: it is
  *  not board content, nothing should undo it, and no file should carry it. */
 const heldSwitchState = new Map<string, unknown>();
+
+/** RAM cells a powered edit dropped the sim on, by `componentId`, restored at
+ *  the next power-on whatever the switch pref says. Unlike switch positions
+ *  they survive later unpowered edits: an unrelated rewire must not cost the
+ *  program the circuit just wrote. */
+const heldRamCells = new Map<
+  string,
+  { width: number; addressBits: number; cells: readonly bv.BusValue[] }
+>();
+
+let liveRamList: { compiled: CompiledCircuit; rams: RamEntry[] } | null = null;
+
+/** listRams over the unpowered board, keyed on the inputs it was built from. */
+let ramListCache: {
+  board: Board;
+  chipLib: ChipLibrary;
+  result: { rams: RamEntry[] } | { error: string };
+} | null = null;
+
+/** Stale `contents` keys last shown, so a recompile of the same board does not
+ *  repeat the notice; only a change in the set shows it again. */
+let shownStaleContents = '';
 
 export const useCircuitStore = create<CircuitState>((set, get) => {
   const activeTab = (): Tab => {
@@ -974,7 +1096,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       powered: false,
       rev: s.rev + 1,
     }));
+    holdRamCells();
     sim = null;
+    checkStaleContents();
     return true;
   };
 
@@ -995,6 +1119,43 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const kind = sim.compiled.primitives[pi]?.kind;
       if (kind !== 'toggle' && kind !== 'button') continue;
       heldSwitchState.set(componentId, sim.sim.primitiveStateAt(pi));
+    }
+  };
+
+  const holdRamCells = () => {
+    if (!sim) return;
+    for (const [i, prim] of sim.compiled.primitives.entries()) {
+      if (prim.kind !== 'ram') continue;
+      const { width, addressBits } = ramSize(prim.params);
+      const { cells } = sim.sim.primitiveStateAt(i) as RamState;
+      heldRamCells.set(prim.componentId, { width, addressBits, cells });
+    }
+  };
+
+  // Bubble params lower to literal kinds and spliced NOTs before compile; the
+  // defs are lowered too so a packaged def carrying bubble params compiles.
+  const compileBoard = (): CompiledCircuit => {
+    return compile(lowerCircuit(get().board), lowerLibrary(get().chipLib));
+  };
+
+  // A notice already on the strip wins; the keys are shown on a later compile.
+  const noteStaleContents = (compiled: CompiledCircuit) => {
+    const signature = JSON.stringify(compiled.staleContents.map((k) => [k.instanceId, k.key]));
+    if (signature === shownStaleContents) return;
+    if (compiled.staleContents.length === 0) {
+      shownStaleContents = signature;
+      return;
+    }
+    if (get().error) return;
+    shownStaleContents = signature;
+    set({ error: staleContentsNotice(compiled.staleContents) });
+  };
+
+  const checkStaleContents = () => {
+    try {
+      noteStaleContents(compileBoard());
+    } catch {
+      // A board that does not compile says so on power-on, in its own words.
     }
   };
 
@@ -1057,6 +1218,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
     }
     if (topologyChanged) {
+      holdRamCells();
       captureSwitchState();
       sim = null;
       replayIdx = null;
@@ -1796,7 +1958,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const oldPins = getPrimitive(comp.kind)
       .pins(comp.params ?? {})
       .map((p) => p.name);
-    const nextParams = { ...comp.params, ...params };
+    const merged = { ...comp.params, ...params };
+    const nextParams = newKind === 'ram' ? withResizedPreload(comp.params ?? {}, merged) : merged;
     const newPinNames = new Set(
       getPrimitive(newKind)
         .pins(nextParams)
@@ -1895,11 +2058,42 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const plan = computeParamsPlan(activeCircuit(), id, params, label);
     if (!plan) return false;
     let conflict: CircuitState['labelConflict'] = null;
+    let driverError: string | null = null;
     edit('params', (d) => {
+      const before = cloneCircuit(d);
       conflict = plan(d);
+      driverError = revertOnDriverConflict(before, d);
     });
+    if (driverError) {
+      set({ error: driverError });
+      return false;
+    }
     if (conflict) set({ labelConflict: conflict });
     return true;
+  };
+
+  // Unticking output enable makes a shared q plain, which may leave two plain
+  // drivers on its bus; restoring `d` leaves edit() an empty diff to drop.
+  // Gated on that: a pinView expand compiles dirty until junctions collapse.
+  const revertOnDriverConflict = (before: Circuit, d: Circuit): string | null => {
+    if (!d.components.some((c) => outputStoppedFloating(before, c))) return null;
+    const error = multiDriverConflict(before, d, get().chipLib);
+    if (error) Object.assign(d, before);
+    return error;
+  };
+
+  const outputStoppedFloating = (before: Circuit, c: Component): boolean => {
+    const old = before.components.find((o) => o.id === c.id);
+    if (!old || !hasPrimitive(c.kind) || !hasPrimitive(old.kind)) return false;
+    const floatedBefore = new Set(
+      getPrimitive(old.kind)
+        .pins(old.params ?? {})
+        .filter(canFloat)
+        .map((p) => p.name),
+    );
+    return getPrimitive(c.kind)
+      .pins(c.params ?? {})
+      .some((p) => isOutputSlot(p.dir) && !canFloat(p) && floatedBefore.has(p.name));
   };
 
   // Shared by setGateInputs (delta) and setGateInputCount (absolute, the
@@ -2090,15 +2284,13 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const board = get().board;
     const tabPrefix = 'main/'; // compile() always roots the given circuit at 'main/'.
     try {
-      const loweredLib: ChipLibrary = new Map(
-        [...get().chipLib].map(([id, def]) => [id, lowerCircuit(def)]),
-      );
-      compile(lowerCircuit(board), loweredLib);
+      const compiled = compileBoard();
       set((s) =>
         s.mismatchWires.size > 0 || s.error?.startsWith('width:')
           ? { error: null, mismatchWires: new Set() }
           : { mismatchWires: new Set() },
       );
+      noteStaleContents(compiled);
     } catch (e) {
       if (!(e instanceof CompileError)) return;
       const badId = e.path.startsWith(tabPrefix) ? e.path.slice(tabPrefix.length) : editedId;
@@ -2134,7 +2326,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const comp = circuit.components.find((c) => c.label === owner || c.id === owner);
       return comp?.label ?? owner;
     });
-    return `${named.join(' and ')} both drive this wire. Only tristate outputs can share a connection.`;
+    return `${named.join(' and ')} both drive this wire. A wire can have only one output that is not three-state.`;
   };
 
   // Pre-commit twin of compile.ts's own multi-driver check, via compile()
@@ -2150,20 +2342,21 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     // labelDirectionConflict's own trial circuits already make) -- compile()
     // itself only needs Circuit's fields plus a lib to resolve chip
     // instances, so the wider param type is a formality here.
-    const lower = (lib: ChipLibrary): ChipLibrary =>
-      new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
     try {
-      compile(lowerCircuit(before as Board | ChipDef), lower(chipLib));
+      compile(lowerCircuit(before as Board | ChipDef), lowerLibrary(chipLib));
     } catch {
       return null;
     }
     try {
-      compile(lowerCircuit(trial as Board | ChipDef), lower(chipLib));
+      compile(lowerCircuit(trial as Board | ChipDef), lowerLibrary(chipLib));
       return null;
     } catch (e) {
-      return e instanceof CompileError && e.message.includes('drive the same wire')
-        ? describeMultiDriver(before, e.message)
-        : null;
+      if (!(e instanceof CompileError)) return null;
+      // The trial wire's path prefix means nothing to the user.
+      const message = e.message.slice(e.path.length + 2);
+      if (message.includes('drive the same wire')) return describeMultiDriver(before, message);
+      // Same compile rule, so a tap gesture and a moved free end refuse alike.
+      return message.includes('bidirectional pin') ? message : null;
     }
   };
 
@@ -2192,6 +2385,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     changedPrims: new Set(),
     timing: { mode: getPrefs().timingModel, datasheet: 'typ' },
     waveformOpen: false,
+    dockTab: 'waves',
+    lastRun: null,
     replayTimePs: null,
     hoverTrackPath: null,
     staReport: null,
@@ -2274,8 +2469,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       historyByTab.clear();
       sim = null;
       replayIdx = null;
+      heldRamCells.clear();
       set((st) => ({
         board,
+        lastRun: null,
         // The saved timing wins; the pref only seeds a New board.
         timing: board.timing,
         tabs: [{ id: 'board', kind: 'board' }],
@@ -2292,6 +2489,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         labelConflict: null,
         rev: st.rev + 1,
       }));
+      shownStaleContents = '';
+      checkStaleContents();
     },
 
     requestFit: () => set((st) => ({ fitRequest: st.fitRequest + 1 })),
@@ -2314,6 +2513,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (cycleError) return { ok: false, error: cycleError };
       const shadowed = shadowedBuiltins(get().chipLib, defs);
       set({ chipLib: candidateLib, ...shadowNotice(shadowed) });
+      checkStaleContents();
       return { ok: true, count: defs.length };
     },
 
@@ -2374,6 +2574,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       edit(opts.componentId ? 'move' : 'place', (d) => {
         const idx = d.wires.findIndex((w) => w.id === opts.wireId);
         if (idx < 0) return;
+        const spliced = d.wires[idx];
         let compId: string;
         if (opts.componentId) {
           const ci = d.components.findIndex((c) => c.id === opts.componentId);
@@ -2402,12 +2603,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             a: opts.upstreamEnd,
             b: { kind: 'pin', component: compId, pin: opts.inName },
             points: [],
+            ...inheritedColor(spliced),
           },
           {
             id: genId('w'),
             a: { kind: 'pin', component: compId, pin: opts.outName },
             b: opts.downstreamEnd,
             points: [],
+            ...inheritedColor(spliced),
           },
         );
       });
@@ -2519,6 +2722,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             a: remapEnd(w.a),
             b: remapEnd(w.b),
             points: w.points.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y })),
+            ...inheritedColor(w),
           });
       });
       if (idMap.size > 0) set({ selection: new Set(idMap.values()) });
@@ -2654,7 +2858,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         const taken = new Set((d.groups ?? []).map((g) => g.name));
         let chosen = groupName;
         for (let n = 2; taken.has(chosen); n++) chosen = `${groupName} ${n}`;
-        d.groups = [...(d.groups ?? []), { id: groupId, name: chosen }];
+        d.groups = [
+          ...(d.groups ?? []),
+          { id: groupId, name: chosen, color: nextGroupColor(d.groups ?? []) },
+        ];
         // Labels are scoped to the group, so a second build of the same
         // expression keeps its own A and B rather than colliding with the
         // first one's.
@@ -2674,6 +2881,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             a: remapEnd(w.a),
             b: remapEnd(w.b),
             points: w.points.map((p) => ({ ...p })),
+            ...(w.color ? { color: w.color } : {}),
           });
       });
       if (get().rev === revBefore) return null;
@@ -2698,8 +2906,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       // parent and keeps the components it still visually encloses.
       const parents = new Set(members.map((c) => c.group));
       const parent = parents.size === 1 ? [...parents][0] : undefined;
+      const color = nextGroupColor(circuit.groups ?? [], parent);
       edit('group', (d) => {
-        d.groups = [...(d.groups ?? []), { id, name: chosen, ...(parent ? { parent } : {}) }];
+        d.groups = [
+          ...(d.groups ?? []),
+          { id, name: chosen, ...(parent ? { parent } : {}), color },
+        ];
         d.components = d.components.map((c) => (sel.has(c.id) ? { ...c, group: id } : c));
       });
       return id;
@@ -2746,6 +2958,31 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         d.groups = (d.groups ?? []).map((g) => (g.id === id ? { ...g, name: trimmed } : g));
       });
       return true;
+    },
+
+    styleGroup: (id, patch) => {
+      const circuit = activeCircuit();
+      const group = circuit.groups?.find((g) => g.id === id);
+      if (!group) return false;
+      const name = patch.name === undefined ? group.name : patch.name.trim();
+      if (!name || circuit.groups!.some((g) => g.id !== id && g.name === name)) return false;
+      const next = styledGroup(
+        group,
+        name,
+        patch.color === undefined ? group.color : patch.color,
+        patch.tab === undefined ? group.tab : patch.tab,
+      );
+      edit('style group', (d) => {
+        d.groups = (d.groups ?? []).map((g) => (g.id === id ? next : g));
+      });
+      return true;
+    },
+
+    colorWires: (ids, color) => {
+      if (ids.size === 0) return;
+      edit('wire colour', (d) => {
+        d.wires = d.wires.map((w) => (ids.has(w.id) ? recoloredWire(w, color) : w));
+      });
     },
 
     deleteSelection: (ids, resolveEnd) => {
@@ -2811,6 +3048,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
               a: r1.end === 'a' ? r1.wire.b : r1.wire.a,
               b: r2.end === 'a' ? r2.wire.b : r2.wire.a,
               points: [...seg1, { ...j.pos }, ...seg2],
+              ...inheritedColor(r1.wire, r2.wire),
             });
             d.junctions = d.junctions.filter((x) => x.id !== j.id);
           }
@@ -2832,7 +3070,13 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             if (!inWire || outWires.length === 0) continue;
             const upstreamEnd = otherEnd(inWire, id);
             for (const ow of outWires)
-              d.wires.push({ id: genId('w'), a: upstreamEnd, b: otherEnd(ow, id), points: [] });
+              d.wires.push({
+                id: genId('w'),
+                a: upstreamEnd,
+                b: otherEnd(ow, id),
+                points: [],
+                ...inheritedColor(inWire, ow),
+              });
           }
           d.components = d.components.filter((c) => !sel.has(c.id));
           // A 3+-way junction falls through the heal loop above untouched
@@ -3296,10 +3540,19 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const tab = activeTab();
       const draft = cloneCircuit(activeCircuit());
       const apply: ApplyFn = (kind, id, value) => applyToCircuit(draft, kind, id, value as never);
-      if (!historyFor(tab.id).undo(apply)) return;
+      const cmd = historyFor(tab.id).undo(apply);
+      if (!cmd) return;
       if (tab.kind === 'board') {
         renormalizeForBubbleMode(draft);
+        // Undoing a recolour or a drag must not cost the instructor every
+        // switch position, any more than making it did.
+        if (cmd.items.every((item) => simEffectOfItem(item) === 'none')) {
+          set((s) => ({ board: { ...s.board, ...draft }, rev: s.rev + 1 }));
+          dropStaleSelection();
+          return;
+        }
         set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
+        holdRamCells();
         sim = null;
         // Re-validate against the now-reverted board: a stale compile-error/
         // mismatch from the edit just undone shouldn't outlive it.
@@ -3314,10 +3567,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const tab = activeTab();
       const draft = cloneCircuit(activeCircuit());
       const apply: ApplyFn = (kind, id, value) => applyToCircuit(draft, kind, id, value as never);
-      if (!historyFor(tab.id).redo(apply)) return;
+      const cmd = historyFor(tab.id).redo(apply);
+      if (!cmd) return;
       if (tab.kind === 'board') {
         renormalizeForBubbleMode(draft);
+        if (cmd.items.every((item) => simEffectOfItem(item) === 'none')) {
+          set((s) => ({ board: { ...s.board, ...draft }, rev: s.rev + 1 }));
+          dropStaleSelection();
+          return;
+        }
         set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
+        holdRamCells();
         sim = null;
         checkWidthMismatch('');
       } else {
@@ -3336,6 +3596,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         replayTimePs: null,
         rev: s.rev + 1,
       }));
+      holdRamCells();
       sim = null;
     },
 
@@ -3343,8 +3604,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       replayIdx = null;
       if (get().powered) {
         captureSwitchState();
+        const runs = new Map<string, readonly bv.BusValue[]>();
+        if (sim)
+          for (const [i, prim] of sim.compiled.primitives.entries())
+            if (prim.kind === 'ram')
+              runs.set(prim.componentId, (sim.sim.primitiveStateAt(i) as RamState).cells);
         sim = null;
         set((s) => ({
+          lastRun: runs.size > 0 ? { board: s.board, chipLib: s.chipLib, runs } : null,
           powered: false,
           running: false,
           changedPrims: new Set(),
@@ -3354,15 +3621,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         return;
       }
       try {
-        // Bubble params (base-kind gates, input bubbles, bare markers) lower
-        // to plain literal kinds/spliced NOTs before compile; identity on a
-        // bubble-free circuit, so ordinary boards compile exactly as before.
-        // ChipDefs are lowered too so a packaged def carrying bubble params
-        // still compiles.
-        const loweredLib: ChipLibrary = new Map(
-          [...get().chipLib].map(([id, def]) => [id, lowerCircuit(def)]),
-        );
-        const compiled = compile(lowerCircuit(get().board), loweredLib);
+        const compiled = compileBoard();
         const s = new Simulator(compiled, delayFor(get().timing));
         s.powerOn();
         // Consumed by the power-on that follows the capture, never held past it:
@@ -3384,9 +3643,22 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           }
           if (restoring.size > 0) s.settle();
         }
+        let restoredRam = false;
+        for (const [componentId, held] of heldRamCells) {
+          const pi = compiled.componentToPrimitive.get(componentId);
+          const prim = pi === undefined ? undefined : compiled.primitives[pi];
+          if (pi === undefined || prim?.kind !== 'ram') continue;
+          const size = ramSize(prim.params);
+          if (size.width !== held.width || size.addressBits !== held.addressBits) continue;
+          s.setPrimitiveStateAt(pi, { ...(s.primitiveStateAt(pi) as RamState), cells: held.cells });
+          restoredRam = true;
+        }
+        heldRamCells.clear();
+        if (restoredRam) s.settle();
         sim = { sim: s, compiled };
         set((st) => ({
           powered: true,
+          lastRun: null,
           error: null,
           changedPrims: new Set(),
           replayTimePs: null,
@@ -3397,6 +3669,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           tool: { kind: 'select' } as Tool,
           rev: st.rev + 1,
         }));
+        noteStaleContents(compiled);
       } catch (e) {
         set({ error: e instanceof Error ? e.message : String(e), powered: false });
         sim = null;
@@ -3519,6 +3792,80 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       } else set({ waveformOpen: true });
     },
 
+    setDockTab: (tab) => {
+      if (tab === 'memory') {
+        replayIdx = null;
+        set({ dockTab: tab, replayTimePs: null, hoverTrackPath: null });
+      } else set({ dockTab: tab });
+    },
+
+    memoryRams: () => {
+      // Same array while the compile stands, or a drag under power resets the live view.
+      if (sim) {
+        if (liveRamList?.compiled !== sim.compiled)
+          liveRamList = { compiled: sim.compiled, rams: listRams(sim.compiled) };
+        return { rams: liveRamList.rams };
+      }
+      const { board, chipLib } = get();
+      if (ramListCache?.board === board && ramListCache.chipLib === chipLib)
+        return ramListCache.result;
+      let result: { rams: RamEntry[] } | { error: string };
+      try {
+        result = { rams: listRams(compileBoard()) };
+      } catch (e) {
+        result = { error: e instanceof Error ? e.message : String(e) };
+      }
+      ramListCache = { board, chipLib, result };
+      return result;
+    },
+
+    ramLive: (index) => {
+      if (!sim) return null;
+      const prim = sim.compiled.primitives[index];
+      if (prim?.kind !== 'ram') return null;
+      const live = sim.sim;
+      const { cells } = live.primitiveStateAt(index) as RamState;
+      const inputs = prim.inputs.map((net) => live.netValue(net));
+      return { cells, address: ramAddress(prim.params, inputs) };
+    },
+
+    setRamPreload: (entry, text) => {
+      const st = get();
+      if (st.powered || activeTab().kind !== 'board' || entry.misfit) return false;
+      const target = entry.target;
+      const id = target.kind === 'preload' ? target.componentId : target.instanceId;
+      if (!st.board.components.some((c) => c.id === id)) return false;
+      edit('memory', (d) => {
+        d.components = d.components.map((c) => {
+          if (c.id !== id) return c;
+          if (target.kind === 'contents')
+            return { ...c, contents: { ...(c as ChipInstance).contents, [target.key]: text } };
+          const params = { ...c.params };
+          // An absent preload is all X, the same as an empty one.
+          if (text === '') delete params['preload'];
+          else params['preload'] = text;
+          return { ...c, params };
+        });
+      });
+      heldRamCells.delete(entry.componentId);
+      return true;
+    },
+
+    keepLastRun: (entry) => {
+      const run = offeredRun(get(), entry.componentId);
+      if (!run) return;
+      if (!get().setRamPreload(entry, printPreload(run, entry.width))) return;
+      // Keeping one RAM's run is not the edit that retires the other RAMs' offers.
+      set((s) => {
+        if (!s.lastRun) return {};
+        const runs = new Map(s.lastRun.runs);
+        runs.delete(entry.componentId);
+        return { lastRun: runs.size > 0 ? { board: s.board, chipLib: s.chipLib, runs } : null };
+      });
+    },
+
+    heldRamIds: () => new Set(heldRamCells.keys()),
+
     setReplayTime: (t) => {
       if (t !== null && sim && !replayIdx)
         replayIdx = buildReplayIndex(sim.compiled, sim.sim.traceRecords());
@@ -3573,7 +3920,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       // Accumulated across every spec in the batch, not first-wins -- two
       // co-selected components can each independently raise a conflict.
       const conflicts: LabelConflictRow[] = [];
+      let driverError: string | null = null;
       edit('params', (d) => {
+        const before = cloneCircuit(d);
         specs.forEach((spec, i) => {
           // Read/mutate the same running draft `d` so a spec later in the
           // list sees any pin-drop/rewire an earlier spec already made.
@@ -3588,7 +3937,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           if (Object.keys(spec.params).some((k) => /width/i.test(k) || k === 'pinView'))
             anyWidthLike = true;
         });
+        driverError = revertOnDriverConflict(before, d);
       });
+      if (driverError) {
+        set({ error: driverError });
+        return false;
+      }
       if (conflicts.length) {
         // Two specs in the batch can each reach the same net (e.g. renaming
         // a switch AND the LED it already drives together) -- dedupe by net
@@ -3616,12 +3970,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       try {
         // Reuse the live sim's compile when powered; otherwise compile fresh
         // (same lowering as power()) so STA works on an unpowered board too.
-        const compiled =
-          sim?.compiled ??
-          compile(
-            lowerCircuit(st.board),
-            new Map([...st.chipLib].map(([id, def]) => [id, lowerCircuit(def)])),
-          );
+        const compiled = sim?.compiled ?? compile(lowerCircuit(st.board), lowerLibrary(st.chipLib));
         const report = analyzeTiming(compiled, { column: st.timing.datasheet });
         set({ staReport: { report, compiled }, error: null });
       } catch (e) {
@@ -3788,8 +4137,8 @@ export function pinNet(
   if (pi === undefined) return undefined;
   const prim = compiled.primitives[pi]!;
   const specPins = getPrimitive(comp.kind).pins(comp.params ?? {});
-  const ins = specPins.filter((p) => p.dir === 'in');
-  const outs = specPins.filter((p) => p.dir === 'out');
+  const ins = inputSlotPins(specPins);
+  const outs = outputSlotPins(specPins);
   const oi = outs.findIndex((p) => p.name === pinName);
   if (oi >= 0) return prim.outputs[oi];
   const ii = ins.findIndex((p) => p.name === pinName);

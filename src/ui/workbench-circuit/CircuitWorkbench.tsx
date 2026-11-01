@@ -9,7 +9,13 @@ import {
   type LedShape,
   type Theme,
 } from '../../render/theme';
-import { screenToWorld, worldToScreen, type Vec2, type Viewport } from '../../render/scene';
+import {
+  keepCentreOnHeightLoss,
+  screenToWorld,
+  worldToScreen,
+  type Vec2,
+  type Viewport,
+} from '../../render/scene';
 import {
   useCircuitStore,
   VARIABLE_ARITY_GATES,
@@ -40,10 +46,12 @@ import {
   collectPinTargets,
   labelExempt,
   nearestCompatiblePin,
+  occupancyKey,
   smartConnectTargets,
+  wiredPinKeys,
   type PinTarget,
 } from './pinTargets';
-import { groupRects, renderBoard } from './editorScene';
+import { groupNameBox, groupRects, renderBoard } from './editorScene';
 import { groupContaining, groupHandleAt, groupMemberIds } from './groupHit';
 import { useCompact, useLandscape } from '../compact';
 import { useBackLayer } from '../backStack';
@@ -78,15 +86,19 @@ import type {
   Component,
   ComponentKind,
   Junction,
+  PaletteSlot,
   ParamValue,
   PinDir,
   Point,
   Wire,
   WireEnd,
 } from '../../core/model/types';
+import { ColorSwatches } from './ColorSwatches';
+import { wireDisplayInfo } from './wireDisplay';
+import { recoloredWire, styledGroup } from '../../core/model/palette';
+import { isOutputSlot } from '../../core/model/pinSlots';
 import {
   alignDeltas,
-  computeWireRoutes,
   cornerBeatsSegment,
   distributeDeltas,
   dragCorner,
@@ -107,12 +119,15 @@ import {
   rotatePointAround,
   rotatePointSnapped,
   stretchWirePoints,
+  pointAlongPolyline,
   tAlongPolyline,
   wiresCrossedBy,
   type AlignMode,
   type DistributeAxis,
 } from './wireGeom';
+import { circuitBounds, circuitRoutes, componentGeometry } from './routeCache';
 import {
+  inoutFaces,
   outputAlignedWithInputs,
   smartConnect,
   smartConnectChainWithin,
@@ -144,9 +159,14 @@ import { extractInternalSelection } from './duplicate';
 import { getPrefs, usePrefsStore } from '../prefs';
 import { sevenSegCommon } from '../../core/sim/primitives/display';
 import { clearParam, STATEFUL_KINDS, type ClearMode } from '../../core/sim/primitives/sequential';
+import {
+  RAM_DEFAULT_ADDRESS_BITS,
+  RAM_DEFAULT_WIDTH,
+  RAM_MAX_ADDRESS_BITS,
+} from '../../core/sim/primitives/ram';
 import { COUNTER_DEFAULT_WIDTH } from '../../core/sim/primitives/counter';
 import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
-import { busLabelHitPoints, wireBusWidth } from './busBadge';
+import { busLabelHitPoints } from './busBadge';
 import { useContributeMenus, useMenuCommand } from '../menu/MenuProvider';
 import type { Menu } from '../menu/menuModel';
 import { SHORTCUTS, historyKey } from '../menu/shortcuts';
@@ -169,7 +189,7 @@ import {
   isBubbleEligibleGate,
   normalizeGateComponent,
 } from '../../core/gates/bubbleModel';
-import { connectedPins, netWireIds } from '../../core/gates/netGraph';
+import { connectedPins, netWireIds, netWiresOf } from '../../core/gates/netGraph';
 import {
   absorbInverterIntoDriver,
   isStandaloneInverter,
@@ -354,7 +374,8 @@ const isOnWireStart = (w: WiringStart): w is { kind: 'onWire'; worldPos: Vec2 } 
 
 // Owner decision 2026-07-10: post-2x-rescale default density; retune after TV review.
 const DEFAULT_ZOOM = 0.8;
-const MIN_ZOOM = 0.25;
+// Low enough for a bus board to fit a 320px phone; the grid hides itself well before this.
+const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
 const ZOOM_FACTOR = 1.1;
 const DEFAULT_VIEW: Viewport = { panX: -16, panY: -24, zoom: DEFAULT_ZOOM };
@@ -396,6 +417,10 @@ function textMeasureContext(): CanvasRenderingContext2D | null {
 }
 
 const WIDTH_LABEL_KINDS = new Set(['inport', 'outport', 'probe', 'busdisplay', 'led']);
+// Long enough to spin up a budget phone's vibration motor.
+const LIFT_BUZZ_MS = 30;
+// A pull draws no caption, so its overlay offers the width alone.
+const PULL_KINDS = new Set(['pullup', 'pulldown']);
 // Distinctive-shape gate kinds get a shape-accurate click hit-test instead
 // of bbox; lasso/routing stay bbox, via GATE_SHAPE_KINDS being scoped to
 // click dispatch only.
@@ -405,6 +430,15 @@ const GATE_SHAPE_KINDS = new Set<string>(GATE_KINDS);
  *  second row (Shift+Enter). A port, a net label and a clock are excluded on
  *  purpose: their text is a net identifier, not a caption. */
 const CAPTION_KINDS = new Set(['led', 'probe', 'busdisplay', 'toggle', 'switch', 'button']);
+
+/** The wires a wire colour overlay restyles. */
+function styledWireIds(se: {
+  ids: ReadonlySet<string>;
+  netIds: ReadonlySet<string>;
+  wholeNet: boolean;
+}): ReadonlySet<string> {
+  return se.wholeNet ? se.netIds : se.ids;
+}
 
 export function CircuitWorkbench() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -444,10 +478,27 @@ export function CircuitWorkbench() {
     };
     window.addEventListener('pointerdown', dismiss, true);
     window.addEventListener('keydown', dismiss, true);
+    // The popup is placed once, in viewport pixels; a rotation would strand it.
+    window.addEventListener('resize', dismiss);
     return () => {
       window.removeEventListener('pointerdown', dismiss, true);
       window.removeEventListener('keydown', dismiss, true);
+      window.removeEventListener('resize', dismiss);
     };
+  }, [lassoMenuOpen]);
+  const lassoPopupRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const popup = lassoPopupRef.current;
+    const anchor = lassoMenuRef.current;
+    if (!lassoMenuOpen || !popup || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const { x, y } = clampPopupToCanvas(
+      { compLeft: r.left, compTop: r.top, compRight: r.right, compBottom: r.bottom },
+      { w: popup.offsetWidth, h: popup.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight },
+    );
+    popup.style.left = `${x}px`;
+    popup.style.top = `${y}px`;
   }, [lassoMenuOpen]);
   const lassoFreehandRef = useRef(lassoFreehand);
   lassoFreehandRef.current = lassoFreehand;
@@ -542,6 +593,35 @@ export function CircuitWorkbench() {
     flash?: boolean;
   } | null>(null);
   const clockEditBoxRef = useRef<HTMLDivElement | null>(null);
+  // Group or wire colour overlay. Picks preview on the canvas and commit
+  // together, so the whole visit is one undo step.
+  const [styleEdit, setStyleEdit] = useState<
+    | {
+        kind: 'group';
+        id: string;
+        screen: Vec2;
+        anchor: PopupAnchor;
+        name: string;
+        color: PaletteSlot | null;
+        tab: boolean;
+        flash?: boolean;
+      }
+    | {
+        kind: 'wire';
+        ids: ReadonlySet<string>;
+        /** `ids` plus every wire on their nets, for the whole-net option. */
+        netIds: ReadonlySet<string>;
+        wholeNet: boolean;
+        screen: Vec2;
+        anchor: PopupAnchor;
+        /** Undefined while the wires disagree and nothing has been picked. */
+        color: PaletteSlot | null | undefined;
+      }
+    | null
+  >(null);
+  const styleEditBoxRef = useRef<HTMLDivElement | null>(null);
+  const styleEditRef = useRef(styleEdit);
+  styleEditRef.current = styleEdit;
   // Width/param overlay (double-click, clock precedent): one shape for
   // every width-editable kind; unused fields per kind stay undefined.
   const [paramEdit, setParamEdit] = useState<{
@@ -562,6 +642,7 @@ export function CircuitWorkbench() {
     clear?: ClearMode;
     hasLoad?: boolean;
     parallelOut?: boolean;
+    outputEnable?: boolean;
     inputs?: number;
     /** Gate-kind swap (variable-arity gates only): same pin vocabulary, so
      *  every wire survives the change. */
@@ -637,6 +718,13 @@ export function CircuitWorkbench() {
   const longPressTimer = useRef(0);
   // A pan drag ends with a click too; this tells a tap from a drag.
   const panMovedRef = useRef(false);
+  // Touch hold-to-move: where the finger went down, as a world point taken
+  // before the pan could drift it, and whether the hold has lifted something.
+  const holdRef = useRef<{ pointerId: number; target: Element; world: Vec2 } | null>(null);
+  const liftedRef = useRef<{ x: number; y: number } | null>(null);
+  // The click that trails a hold's release must not act as a tap: it would
+  // collapse the selection, or flip the switch that was held.
+  const suppressClickRef = useRef(false);
 
   const store = useCircuitStore;
   const rev = useCircuitStore((s) => s.rev);
@@ -646,6 +734,7 @@ export function CircuitWorkbench() {
   // Declared here rather than beside the menus: the redraw effect below lists
   // it, and a dep array is read during render.
   const alwaysShowBusWidth = usePrefsStore((s) => s.prefs.alwaysShowPinBusWidth);
+  const showWireColors = usePrefsStore((s) => s.prefs.showWireColors);
   // Free-running, the pump owns time and a single delta is invisible under it;
   // settled with no self-timed source, there is nothing to step to. Recomputed
   // off rev, which every simulation mutation bumps.
@@ -817,6 +906,11 @@ export function CircuitWorkbench() {
   // The drawer's tab and the phone's outside-tap close the panel without
   // clearing analyzeOpen; toggling on analyzeOpen alone ate the next press.
   const analyzeShown = analyzeOpen && drawerControl.open;
+  // A phone has no room for the closed drawer's tab: it sat over the board until another board
+  // opened. The toolbar button brings it back.
+  useEffect(() => {
+    if (compact && analyzeOpen && !drawerControl.open) setAnalyzeOpen(false);
+  }, [compact, analyzeOpen, drawerControl.open]);
   useReferenceDrawer(
     useMemo(
       () =>
@@ -955,7 +1049,8 @@ export function CircuitWorkbench() {
     if (!canvas || !theme) return;
     const ctx = canvas.getContext('2d')!;
     const st = store.getState();
-    let board: Circuit = st.activeCircuit();
+    const committed = st.activeCircuit();
+    let board: Circuit = committed;
     const drag = dragRef.current;
     if (drag && drag.ids.size) {
       // M4.3: live-preview the drag-stretch too (not just the moved
@@ -998,6 +1093,21 @@ export function CircuitWorkbench() {
           return pending ? { ...c, params: { ...c.params, ...pending } } : c;
         }),
       };
+    const se = styleEditRef.current;
+    if (se?.kind === 'group' && board.groups)
+      board = {
+        ...board,
+        groups: board.groups.map((g) =>
+          g.id === se.id ? styledGroup(g, se.name, se.color, se.tab) : g,
+        ),
+      };
+    else if (se?.kind === 'wire' && se.color !== undefined) {
+      const color = se.color;
+      board = {
+        ...board,
+        wires: board.wires.map((w) => (styledWireIds(se).has(w.id) ? recoloredWire(w, color) : w)),
+      };
+    }
     const wd = wireDragRef.current;
     if (wd)
       board = {
@@ -1018,11 +1128,13 @@ export function CircuitWorkbench() {
     const wireTip = hoverPin ?? bends[bends.length - 1];
     const tipBends = hoverPin ? bends : bends.slice(0, -1);
     try {
-      renderBoard(ctx, theme, {
+      const glyphsPending = renderBoard(ctx, theme, {
         board,
+        routeBase: board === committed ? undefined : committed,
         chipLib: st.chipLib,
         viewport: viewportRef.current,
         selection: st.selection,
+        lifted: liftedRef.current !== null,
         changed: st.changedComponentIds(prefix),
         stale: st.staleInstances,
         pinSignal: (id, pin) => st.pinSignal(id, pin, prefix),
@@ -1120,6 +1232,7 @@ export function CircuitWorkbench() {
             }
           : undefined,
       });
+      if (glyphsPending) scheduleDraw();
       if (st.error?.startsWith('draw: ')) store.setState({ error: null });
     } catch (e) {
       // A drawing bug degrades to the toolbar error strip, never a blank app.
@@ -1179,7 +1292,10 @@ export function CircuitWorkbench() {
     // The renderer reads this preference straight out of the prefs store, so
     // nothing else here notices when it flips.
     alwaysShowBusWidth,
+    showWireColors,
     showSubExprs,
+    // The colour overlay previews on the canvas without touching the store.
+    styleEdit,
   ]);
 
   // Entering/leaving bubble mode cancels any in-flight editing gesture; the
@@ -1194,8 +1310,13 @@ export function CircuitWorkbench() {
     bubbleDragRef.current = null;
     ghostRef.current.cancel();
     setHoverPin(undefined);
+    setStyleEdit(null);
     drawRef.current();
   }, [mode]);
+
+  // A colour overlay belongs to the circuit it was opened on: another tab or
+  // view-only must not inherit it, or Done would restyle there.
+  useEffect(() => setStyleEdit(null), [activeTab.id, viewOnly]);
 
   // Leaving place mode drops the pending ghost; selecting any other tool also
   // exits Shift+D/Ctrl+V's duplicate-stamp ghost the same way (mirrors place
@@ -1270,7 +1391,9 @@ export function CircuitWorkbench() {
     const dirs = new Map(resolveComponentPins(c, def).map((p) => [p.name, p]));
     return [...symbolBounds(c, theme, def).pins].flatMap(([name, pos]) => {
       const meta = dirs.get(name);
-      return meta ? [{ name, pos, width: meta.width, dir: meta.dir }] : [];
+      if (!meta) return [];
+      const { width, dir, threeState } = meta;
+      return [{ name, pos, width, dir, ...(threeState ? { threeState } : {}) }];
     });
   };
 
@@ -1286,11 +1409,17 @@ export function CircuitWorkbench() {
     };
   };
 
+  const wavePanelRef = useRef<HTMLDivElement>(null);
+  const dockHeightRef = useRef(0);
+
   const fitView = () => {
     const canvas = canvasRef.current;
     const theme = themeRef.current;
     const st = store.getState();
     if (!canvas || !theme) return;
+    // A fit frames the dock height of this moment; a rotation's resize arriving after it must not
+    // shift the fitted view again.
+    if (wavePanelRef.current) dockHeightRef.current = wavePanelRef.current.offsetHeight;
     const circuit = st.activeCircuit();
     if (circuit.components.length === 0) {
       setViewport(DEFAULT_VIEW);
@@ -1377,6 +1506,21 @@ export function CircuitWorkbench() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [running, store]);
+
+  // On a phone the dock takes its height from the board's bottom edge, and with the top-left kept
+  // a 120px canvas showed none of the circuit. Keeps the zoom and the centred world point.
+  useEffect(() => {
+    const panel = wavePanelRef.current;
+    if (!compact || !panel) return;
+    dockHeightRef.current = panel.offsetHeight;
+    const ro = new ResizeObserver(() => {
+      const lostPx = panel.offsetHeight - dockHeightRef.current;
+      dockHeightRef.current = panel.offsetHeight;
+      if (lostPx !== 0) setViewport((vp) => keepCentreOnHeightLoss(vp, lostPx));
+    });
+    ro.observe(panel);
+    return () => ro.disconnect();
+  }, [compact, viewOnly]);
 
   const fitRef = useRef(fitView);
   fitRef.current = fitView;
@@ -1707,12 +1851,10 @@ export function CircuitWorkbench() {
   const resolveWireEnd = (end: WireEnd): Vec2 | undefined => {
     const st = store.getState();
     const theme = themeRef.current!;
-    if (end.kind === 'pin') {
-      const comp = st.activeCircuit().components.find((c) => c.id === end.component);
-      if (!comp) return undefined;
-      const def = comp.defId ? st.chipLib.get(comp.defId) : undefined;
-      return symbolBounds(comp, theme, def).pins.get(end.pin);
-    }
+    if (end.kind === 'pin')
+      return componentGeometry(st.activeCircuit().components, st.chipLib, theme)
+        .get(end.component)
+        ?.pins.get(end.pin);
     if (end.kind === 'junction')
       return st.activeCircuit().junctions.find((j) => j.id === end.junction)?.pos;
     return end.pos; // 'free' and 'tap' both carry their own click point
@@ -2310,33 +2452,20 @@ export function CircuitWorkbench() {
   };
 
   // M4.5: single source of truth for every wire's on-screen route, shared by
-  // every hit-test below -- computed fresh from the live store each call
-  // (cheap at this app's circuit sizes), so it can never drift from what
+  // every hit-test below -- read through the same cache as the draw loop,
+  // keyed on the live store's arrays, so it can never drift from what
   // editorScene.ts's draw loop rendered from the exact same inputs (the
   // M4.2 follow-up "route-consistency bug": a private per-call route here
   // used to check a different, invisible path than the one on screen).
   const componentBoundsMap = (): Map<string, Rect> => {
     const st = store.getState();
-    const theme = themeRef.current!;
-    return new Map(
-      st
-        .activeCircuit()
-        .components.map((c) => [
-          c.id,
-          symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds,
-        ]),
-    );
+    return circuitBounds(st.activeCircuit().components, st.chipLib, themeRef.current!);
   };
 
-  const computeRoutes = (): Map<string, Vec2[]> => {
+  const computeRoutes = (): ReadonlyMap<string, Vec2[]> => {
     const st = store.getState();
     const theme = themeRef.current!;
-    return computeWireRoutes(
-      st.activeCircuit().wires,
-      resolveWireEnd,
-      componentBoundsMap(),
-      theme.gridSchematic,
-    );
+    return circuitRoutes(st.activeCircuit(), st.chipLib, theme, theme.gridSchematic);
   };
 
   /** Hit -> the shape cornerBeatsSegment arbitrates on. */
@@ -2428,13 +2557,11 @@ export function CircuitWorkbench() {
     };
   };
 
-  /** The id a press here would act on, in the precedence onPointerDown
-   *  resolves handles by: component, then the wire NODES (junction, free end),
-   *  then the bus label, then a bend vertex, then a plain segment. Touch needs
-   *  it in two more places than the mouse does -- a tap selects with it, and
-   *  the pan rule asks whether the press landed on something already selected
-   *  -- and all three have to agree on what "the thing under here" means.
-   *  Corner-vs-segment goes through cornerBeatsSegment for the same reason. */
+  /** The id a press here would act on, in the precedence grabAt resolves
+   *  handles by: component, then the wire NODES (junction, free end), then the
+   *  bus label, then a bend vertex, then a plain segment. A touch tap selects
+   *  with it, so it has to agree with grabAt on what "the thing under here"
+   *  means. Corner-vs-segment goes through cornerBeatsSegment for the same reason. */
   const handleIdAt = (world: Vec2): string | undefined => {
     const hit = topComponentAt(world);
     if (hit) return hit.id;
@@ -2456,15 +2583,8 @@ export function CircuitWorkbench() {
     const theme = themeRef.current;
     const circuit = st.activeCircuit();
     if (!theme || !circuit.groups?.length) return undefined;
-    const rects = groupRects(
-      circuit,
-      (id) => {
-        const c = circuit.components.find((c) => c.id === id);
-        if (!c) return undefined;
-        return symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds;
-      },
-      theme.gridSchematic,
-    );
+    const geo = componentGeometry(circuit.components, st.chipLib, theme);
+    const rects = groupRects(circuit, (id) => geo.get(id)?.bounds, theme.gridSchematic);
     return { circuit, rects };
   };
 
@@ -2490,14 +2610,16 @@ export function CircuitWorkbench() {
         groups: circuit.groups,
         rects,
         tol: MIN_HIT_RADIUS / viewportRef.current.zoom,
-        nameHeight: theme.glyphText,
-        measureName: (name) => {
-          if (!ctx) return oneLine(name).length * theme.glyphText * 0.6;
-          ctx.save();
-          ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
-          const w = ctx.measureText(oneLine(name)).width;
-          ctx.restore();
-          return w;
+        nameBox: (group, rect) => {
+          const name = oneLine(group.name);
+          let width = name.length * theme.glyphText * 0.6;
+          if (ctx) {
+            ctx.save();
+            ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
+            width = ctx.measureText(name).width;
+            ctx.restore();
+          }
+          return groupNameBox(group, rect, width, theme);
         },
       },
       world,
@@ -2569,11 +2691,12 @@ export function CircuitWorkbench() {
     const theme = themeRef.current!;
     const radius = MIN_HIT_RADIUS / viewportRef.current.zoom;
     const routes = computeRoutes();
+    const display = wireDisplayInfo(circuit, st.chipLib);
     let best: { wire: Wire; d: number } | undefined;
     for (const wire of circuit.wires) {
       const pts = routes.get(wire.id);
       if (!pts || pts.length < 2) continue;
-      if (wireBusWidth(circuit, st.chipLib, wire) <= 1) continue;
+      if ((display.get(wire.id)?.width ?? 1) <= 1) continue;
       for (const p of busLabelHitPoints(pts, wire.busLabelT, theme.gridSchematic)) {
         const d = Math.hypot(p.x - world.x, p.y - world.y);
         if (d <= radius && (!best || d < best.d)) best = { wire, d };
@@ -2598,6 +2721,12 @@ export function CircuitWorkbench() {
       .pins(comp.params ?? {})
       .find((p) => p.name === end.pin)?.dir;
   };
+  const endDrives = (end: WireEnd): boolean => {
+    const dir = wireEndDir(end);
+    return dir !== undefined && isOutputSlot(dir);
+  };
+  // A spliced part's plain output would join the second driver and fight it.
+  const splicesInto = (wire: Wire): boolean => !(endDrives(wire.a) && endDrives(wire.b));
 
   // Every free pin a component contributes, in VISUAL reading order (4a): top
   // to bottom, then left to right -- not raw pin-declaration `order`, which
@@ -2607,10 +2736,55 @@ export function CircuitWorkbench() {
   // rotation/mirror, so sorting by it is orientation-correct for any pose.
   const visualPinSort = (a: PinTarget, b: PinTarget): number =>
     a.worldPos.y - b.worldPos.y || a.worldPos.x - b.worldPos.x;
-  const freeOutPins = (targets: PinTarget[], componentId: string): PinTarget[] =>
-    targets.filter((t) => t.componentId === componentId && t.dir === 'out').sort(visualPinSort);
-  const freeInPins = (targets: PinTarget[], componentId: string): PinTarget[] =>
-    targets.filter((t) => t.componentId === componentId && t.dir === 'in').sort(visualPinSort);
+  const componentBody = (id: string): Rect | undefined => {
+    const st = store.getState();
+    const c = st.activeCircuit().components.find((x) => x.id === id);
+    if (!c) return undefined;
+    return symbolBounds(c, themeRef.current!, c.defId ? st.chipLib.get(c.defId) : undefined).bounds;
+  };
+  const componentCenter = (id: string): Vec2 | undefined => {
+    const b = componentBody(id);
+    return b && { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  };
+  // `toward` admits the component's bidirectional pins that face it: they read
+  // from, or drive, whatever lies on their side. A wired one may fan out further
+  // but never takes a second wire as a target.
+  const facingInouts = (
+    targets: PinTarget[],
+    componentId: string,
+    toward: Vec2 | undefined,
+    asTarget: boolean,
+  ): PinTarget[] => {
+    if (!toward) return [];
+    const body = componentBody(componentId);
+    if (!body) return [];
+    const wired = asTarget ? wiredPinKeys(store.getState().activeCircuit().wires) : undefined;
+    return targets.filter(
+      (t) =>
+        t.componentId === componentId &&
+        t.dir === 'inout' &&
+        !wired?.has(occupancyKey(t.componentId, t.pinName)) &&
+        inoutFaces(t, body, toward),
+    );
+  };
+  const freeOutPins = (targets: PinTarget[], componentId: string, toward?: Vec2): PinTarget[] =>
+    [
+      ...targets.filter((t) => t.componentId === componentId && t.dir === 'out'),
+      ...facingInouts(targets, componentId, toward, false),
+    ].sort(visualPinSort);
+  const freeInPins = (targets: PinTarget[], componentId: string, toward?: Vec2): PinTarget[] =>
+    [
+      ...targets.filter((t) => t.componentId === componentId && t.dir === 'in'),
+      ...facingInouts(targets, componentId, toward, true),
+    ].sort(visualPinSort);
+  const meanPoint = (points: readonly (Vec2 | undefined)[]): Vec2 | undefined => {
+    const ps = points.filter((p): p is Vec2 => p !== undefined);
+    if (ps.length === 0) return undefined;
+    return {
+      x: ps.reduce((a, p) => a + p.x, 0) / ps.length,
+      y: ps.reduce((a, p) => a + p.y, 0) / ps.length,
+    };
+  };
 
   // Spatial priority for smart-connect matching: closest column (on `axis`)
   // to `ref` wins first (a switch column feeding a gate/mux several rows tall
@@ -2716,11 +2890,14 @@ export function CircuitWorkbench() {
           id: c.id,
           pos: c.pos,
           center: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
+          bounds: b,
           hasAnyInputPinSpec: resolveComponentPins(c, def).some((p) => p.dir === 'in'),
           freeIns: freeInPins(availTargets, c.id),
           freeOuts: freeOutPins(availTargets, c.id),
           isInPort: c.kind === 'inport',
           wiredIns: freeInPins(targets, c.id).filter((p) => !p.free),
+          inouts: availTargets.filter((t) => t.componentId === c.id && t.dir === 'inout'),
+          wiredInouts: wiredPinKeys(circuit.wires),
         };
       });
       return smartConnectChainWithin(chainComps, st.selection, rotation).pairs;
@@ -2752,8 +2929,12 @@ export function CircuitWorkbench() {
     // flipping the inferred direction backwards before the label-aware
     // fallback at the bottom of this function ever gets a chance to run.
     const labelSources = selectionIds.length > 0 && selectionIds.every(isInPort);
-    const selectionOuts = selectionIds.flatMap((id) => freeOutPins(availTargets, id));
-    const selectionIns = selectionIds.flatMap((id) => freeInPins(availTargets, id));
+    const hoveredCenter = componentCenter(targetId);
+    const selectionCenter = meanPoint(selectionIds.map(componentCenter));
+    const selectionOuts = selectionIds.flatMap((id) =>
+      freeOutPins(availTargets, id, hoveredCenter),
+    );
+    const selectionIns = selectionIds.flatMap((id) => freeInPins(availTargets, id, hoveredCenter));
     // smartConnect() itself re-filters every target/source by its own `.free`
     // flag (a plain per-pin occupancy bit, no notion of who's asking) -- an
     // exempted pin pulled in from the wider `targets` pool still reads as
@@ -2764,7 +2945,7 @@ export function CircuitWorkbench() {
     // source (a switch) can also cycle onto an already-labeled-only input,
     // not just another label onto an already-driven one.
     const singleSourceId = selectionIds.length === 1 ? selectionIds[0] : undefined;
-    const hoveredFreeIns = freeInPins(targets, targetId)
+    const hoveredFreeIns = freeInPins(targets, targetId, selectionCenter)
       .filter(
         (t) =>
           t.free ||
@@ -2773,7 +2954,7 @@ export function CircuitWorkbench() {
             labelExempt(circuit.components, circuit.wires, targets, singleSourceId, t)),
       )
       .map((t) => (t.free ? t : { ...t, free: true }));
-    const hoveredFreeOuts = freeOutPins(availTargets, targetId);
+    const hoveredFreeOuts = freeOutPins(availTargets, targetId, selectionCenter);
     let hoveredIsSource =
       (hoveredFreeIns.length === 0 && hoveredFreeOuts.length > 0) ||
       (hoveredFreeOuts.length > 0 && selectionOuts.length === 0 && selectionIns.length > 0);
@@ -2799,24 +2980,21 @@ export function CircuitWorkbench() {
     ) {
       const selComp = circuit.components.find((c) => c.id === selectionIds[0]);
       if (selComp) {
-        const centerOf = (c: Component) => {
-          const def = c.defId ? st.chipLib.get(c.defId) : undefined;
-          const b = symbolBounds(c, theme, def).bounds;
-          return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-        };
-        const hovCenter = centerOf(hoveredComp);
-        const selCenter = centerOf(selComp);
+        const bodyOf = (c: Component) =>
+          symbolBounds(c, theme, c.defId ? st.chipLib.get(c.defId) : undefined).bounds;
+        const hovBody = bodyOf(hoveredComp);
+        const selBody = bodyOf(selComp);
         const hoveredAsSourceAligned = outputAlignedWithInputs(
           hoveredFreeOuts[0]!.worldPos,
-          hovCenter,
+          hovBody,
           selectionIns.map((p) => p.worldPos),
-          selCenter,
+          selBody,
         );
         const selectionAsSourceAligned = outputAlignedWithInputs(
           selectionOuts[0]!.worldPos,
-          selCenter,
+          selBody,
           hoveredFreeIns.map((p) => p.worldPos),
-          hovCenter,
+          hovBody,
         );
         if (hoveredAsSourceAligned && !selectionAsSourceAligned) hoveredIsSource = true;
       }
@@ -2835,7 +3013,7 @@ export function CircuitWorkbench() {
       // the hovered part is the single source here, so it's always the
       // `from` side regardless of how many target components are selected.
       const targetPins = selectionComps
-        .flatMap((c) => freeInPins(targets, c.id))
+        .flatMap((c) => freeInPins(targets, c.id, hoveredCenter))
         .filter(
           (t) => t.free || labelExempt(circuit.components, circuit.wires, targets, targetId, t),
         )
@@ -2853,7 +3031,7 @@ export function CircuitWorkbench() {
       ref,
       axis,
     );
-    const sources = selectionComps.flatMap((c) => freeOutPins(availTargets, c.id));
+    const sources = selectionComps.flatMap((c) => freeOutPins(availTargets, c.id, hoveredCenter));
     return connect(sources, targetPins);
   };
 
@@ -2983,7 +3161,7 @@ export function CircuitWorkbench() {
       const pts = computeRoutes().get(wh.wire.id);
       const segA = pts?.[wh.seg];
       const segB = pts?.[wh.seg + 1];
-      if (!segA || !segB) return undefined;
+      if (!segA || !segB || !splicesInto(wh.wire)) return undefined;
       return {
         wire: wh.wire,
         seg: wh.seg,
@@ -2997,7 +3175,7 @@ export function CircuitWorkbench() {
     const found = findSpliceWire(refPoint, bodyBounds, circuit.wires, (w) => routes.get(w.id));
     if (!found) return undefined;
     const wire = circuit.wires.find((w) => w.id === found.wireId);
-    if (!wire) return undefined;
+    if (!wire || !splicesInto(wire)) return undefined;
     return {
       wire,
       seg: found.seg,
@@ -3034,9 +3212,8 @@ export function CircuitWorkbench() {
     const st = store.getState();
     const theme = themeRef.current!;
     const grid = theme.gridSchematic;
-    const aDir = wireEndDir(hit.wire.a);
-    const bDir = wireEndDir(hit.wire.b);
-    const aUpstream = aDir === 'out' || (aDir === undefined && bDir !== 'out');
+    const aUpstream =
+      endDrives(hit.wire.a) || (wireEndDir(hit.wire.a) === undefined && !endDrives(hit.wire.b));
     const upstreamEnd = aUpstream ? hit.wire.a : hit.wire.b;
     const downstreamEnd = aUpstream ? hit.wire.b : hit.wire.a;
     const resolvedRot: NonNullable<Component['rot']> =
@@ -3520,6 +3697,7 @@ export function CircuitWorkbench() {
   useBackLayer(coarse && wiring ? discardWire : null);
   // And closes a param editor unsaved, as Esc does.
   useBackLayer(coarse && paramEdit ? () => setParamEdit(null) : null);
+  useBackLayer(coarse && styleEdit ? () => setStyleEdit(null) : null);
 
   /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
    *  a cut, a suggestion, a duplicate ghost. Shared by Esc and by a press
@@ -3578,6 +3756,9 @@ export function CircuitWorkbench() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     store.getState().clearTransientError();
+    // A press elsewhere on the canvas is done picking, as with any popover.
+    if (styleEditRef.current) commitStyleEdit();
+    suppressClickRef.current = false;
     if (e.pointerType === 'touch') {
       reduceGesture(gestureRef.current, {
         kind: 'down',
@@ -3595,20 +3776,27 @@ export function CircuitWorkbench() {
         freeEndDragRef.current = null;
         busLabelDragRef.current = null;
         cutRef.current = null;
+        holdRef.current = null;
+        liftedRef.current = null;
         draw();
         window.clearTimeout(longPressTimer.current);
         const [a, b] = pts;
         if (a && b) beginPinch(Math.hypot(a.x - b.x, a.y - b.y), (a.x + b.x) / 2, (a.y + b.y) / 2);
         return;
       }
-      // Long press is the touch stand-in for Shift: the precise variant.
+      // A hold lifts what is under the finger for a drag; one with nothing to
+      // lift is the plain long press, the touch stand-in for Shift.
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = window.setTimeout(() => {
         const intent = reduceGesture(gestureRef.current, {
           kind: 'tick',
           t: e.timeStamp + LONG_PRESS_MS,
         });
-        if (intent.kind === 'longPress') onLongPress(intent.x, intent.y);
+        if (intent.kind !== 'longPress') return;
+        if (liftHold()) {
+          liftedRef.current = { x: intent.x, y: intent.y };
+          draw();
+        } else onLongPress(intent.x, intent.y);
       }, LONG_PRESS_MS);
     }
     if (e.button === 1) {
@@ -3649,11 +3837,8 @@ export function CircuitWorkbench() {
       (e.target as Element).setPointerCapture(e.pointerId);
       return;
     }
-    // The touch grammar's one rule: a bare finger drag is ALWAYS a pan, and
-    // editing starts from a handle. A finger has no hover to aim with and no
-    // modifier to qualify itself, so dragging the board around must never be
-    // ambiguous with lassoing or dragging a part. Press something already
-    // selected to move it; press anywhere else and the board moves instead.
+    // The touch grammar's one rule: a bare finger drag ALWAYS pans, and moving
+    // takes a hold first (liftHold), so a selected group cannot swallow a pan.
     // ...but a pending ghost outranks it. Every bare touch press pans, so a
     // duplicate raised from the action bar could never be put down: the press
     // that resolves a proposal is not a navigation gesture. The resolution
@@ -3666,20 +3851,9 @@ export function CircuitWorkbench() {
       !duplicateRef.current
     ) {
       if (tryButtonPress(e)) return;
-      const world = toWorld(e);
-      // Components are not the only things worth dragging. Asking only
-      // topComponentAt here meant every press on a wire, a junction, a bend or
-      // a free end panned instead, so none of them could be moved by finger at
-      // all. Past this point a touch press behaves exactly like a mouse press
-      // at the same spot.
-      const handleId = handleIdAt(world);
-      const selected = store.getState().selection;
-      // A group border is not in `selection` (the members are), so it needs
-      // asking for separately or a finger on the border would always pan.
-      if ((!handleId || !selected.has(handleId)) && !groupHandleHitAt(world)) {
-        beginPan(e);
-        return;
-      }
+      holdRef.current = { pointerId: e.pointerId, target: e.target as Element, world: toWorld(e) };
+      beginPan(e);
+      return;
     }
     // Momentary button press-and-hold: takes precedence over the normal
     // select/lasso path so a button's circle is always pressable while
@@ -3846,12 +4020,8 @@ export function CircuitWorkbench() {
       let end =
         isFreeStart(from) || isOnWireStart(from)
           ? nearestFree(targets, world, hitScale(theme))
-          : nearestCompatiblePin(
-              targets,
-              world,
-              { width: from.width, dir: from.dir },
-              hitScale(theme),
-              (t) => labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
+          : nearestCompatiblePin(targets, world, from, hitScale(theme), (t) =>
+              labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
             );
       // A pin's loose (2x) snap radius otherwise makes any junction sitting
       // close to it practically unreachable -- whichever is actually nearer
@@ -4060,6 +4230,64 @@ export function CircuitWorkbench() {
       setHoverPin(pinHit.worldPos);
       return;
     }
+    if (grabAt(world, e.pointerId, e.target as Element, e) !== 'none') return;
+    // Empty canvas: a drag lasso-selects (decision-8), Shift+drag pans, the
+    // trackpad's binding with no middle button (P2.4).
+    if (e.shiftKey) {
+      beginPan(e);
+      return;
+    }
+    if (!e.ctrlKey) st.setSelection(new Set());
+    lassoRef.current = {
+      start: world,
+      current: world,
+      base: e.ctrlKey ? new Set(st.selection) : new Set(),
+      path: lassoFreehandRef.current ? [world] : [],
+    };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+
+  /** A touch hold under the select tool picks up what the finger is on, ends
+   *  the pan it started as, and says so by a buzz and the selection box.
+   *  Powered keeps the plain long press, since nothing may move then. */
+  const liftHold = (): boolean => {
+    const hold = holdRef.current;
+    if (
+      !hold ||
+      // Read now, not from the render the hold began in: power may have come on since.
+      store.getState().powered ||
+      store.getState().tool.kind !== 'select' ||
+      wiringRef.current ||
+      smartConnectRef.current ||
+      duplicateRef.current
+    )
+      return false;
+    if (
+      grabAt(hold.world, hold.pointerId, hold.target, { ctrlKey: false, altKey: false }) === 'none'
+    )
+      return false;
+    // Undo the pan's sub-slop drift, or the drag starts off the finger.
+    const pan = panRef.current;
+    if (pan) setViewport({ ...viewportRef.current, panX: pan.startPan.x, panY: pan.startPan.y });
+    panRef.current = null;
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function')
+      navigator.vibrate(LIFT_BUZZ_MS);
+    draw();
+    return true;
+  };
+
+  /**
+   * Selects what sits at `world` and arms its drag: a part, bend, junction,
+   * free end, bus label or wire segment, else a group's border or name. The
+   * mouse press and the touch lift share it so both pick the same thing.
+   */
+  const grabAt = (
+    world: Vec2,
+    pointerId: number,
+    target: Element,
+    keys: { ctrlKey: boolean; altKey: boolean },
+  ): 'grabbed' | 'none' => {
+    const st = store.getState();
     const hit = topComponentAt(world);
     // B3a: junction and free-end (the NODES) win before any wire geometry --
     // a junction sits on every route it joins, and an avoidance elbow can land
@@ -4080,7 +4308,7 @@ export function CircuitWorkbench() {
     const wh = takeCorner ? undefined : segCand;
     const hitId = hit?.id ?? corner?.wire.id ?? jh?.id ?? fh?.wire.id ?? wh?.wire.id ?? bl?.id;
     if (hitId) {
-      if (e.ctrlKey) {
+      if (keys.ctrlKey) {
         // Ctrl+click toggles membership without starting a drag (decision-8).
         // No drag begins here, so unlike every other selection path this one
         // never lands in onPointerUp's dx=0/dy=0 `else draw()` fallback --
@@ -4095,28 +4323,31 @@ export function CircuitWorkbench() {
         else next.add(hitId);
         st.setSelection(next);
         draw();
-        return;
+        return 'grabbed';
       }
       const sel = st.selection.has(hitId) ? st.selection : new Set([hitId]);
       st.setSelection(sel);
       if (hit) {
-        dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: e.altKey };
-        (e.target as Element).setPointerCapture(e.pointerId);
+        dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: keys.altKey };
+        target.setPointerCapture(pointerId);
       } else if (corner) {
         beginCornerDrag(corner.wire, corner.idx, corner.displayPts);
-        (e.target as Element).setPointerCapture(e.pointerId);
+        target.setPointerCapture(pointerId);
       } else if (jh) {
         // Junctions aren't components; reuse the drag machinery (moveSelection
         // already translates selected junction positions too). Detach doesn't
         // apply -- a dragged junction just moves, wires follow it live.
         dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: false };
-        (e.target as Element).setPointerCapture(e.pointerId);
+        target.setPointerCapture(pointerId);
       } else if (fh) {
         // Dragging a wire end is the one wiring gesture still reachable while
         // powered, and releasing it on a pin would re-attach the wire: a real
         // topology change, which used to drop power without warning. Refuse the
         // gesture instead, so wiring never powers the board off behind you.
-        if (powered) return reportBlocked('powered-wire', [fh.wire.id]);
+        if (powered) {
+          reportBlocked('powered-wire', [fh.wire.id]);
+          return 'grabbed';
+        }
         const endPos = fh.wire[fh.end];
         freeEndDragRef.current = {
           wireId: fh.wire.id,
@@ -4124,15 +4355,15 @@ export function CircuitWorkbench() {
           pos: endPos.kind === 'free' ? { ...endPos.pos } : { ...world },
           moved: false,
         };
-        (e.target as Element).setPointerCapture(e.pointerId);
+        target.setPointerCapture(pointerId);
       } else if (bl) {
         busLabelDragRef.current = { wireId: bl.id, t: bl.busLabelT ?? 0.5, moved: false };
-        (e.target as Element).setPointerCapture(e.pointerId);
+        target.setPointerCapture(pointerId);
       } else if (wh) {
         beginWireDrag(wh.wire, wh.seg, world);
-        (e.target as Element).setPointerCapture(e.pointerId);
+        target.setPointerCapture(pointerId);
       }
-      return;
+      return 'grabbed';
     }
     // Grabbing a group's border or its name takes the whole group: its own
     // components, its descendants', and the junctions the border encloses.
@@ -4141,31 +4372,15 @@ export function CircuitWorkbench() {
     if (gh) {
       const members = groupMemberIds(st.activeCircuit(), gh.id, gh.rect);
       if (members.size > 0) {
-        const sel = e.ctrlKey ? new Set([...st.selection, ...members]) : members;
+        const sel = keys.ctrlKey ? new Set([...st.selection, ...members]) : members;
         st.setSelection(sel);
-        dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: e.altKey };
-        (e.target as Element).setPointerCapture(e.pointerId);
+        dragRef.current = { ids: sel, last: world, dx: 0, dy: 0, detach: keys.altKey };
+        target.setPointerCapture(pointerId);
         draw();
-        return;
+        return 'grabbed';
       }
     }
-    // Empty canvas in Select mode: empty-drag lasso-selects (decision-8).
-    // Shift+left-drag is an alternate pan binding (P2.4) alongside middle-drag
-    // -- trackpad users get a pan gesture with no middle button. Shift is
-    // otherwise only a keydown-tap modifier here (Shift+D/Shift+F), so it
-    // never collides with a held-during-drag reading.
-    if (e.shiftKey) {
-      beginPan(e);
-      return;
-    }
-    if (!e.ctrlKey) st.setSelection(new Set());
-    lassoRef.current = {
-      start: world,
-      current: world,
-      base: e.ctrlKey ? new Set(st.selection) : new Set(),
-      path: lassoFreehandRef.current ? [world] : [],
-    };
-    (e.target as Element).setPointerCapture(e.pointerId);
+    return 'none';
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -4324,12 +4539,8 @@ export function CircuitWorkbench() {
       const snap = from
         ? isFreeStart(from) || isOnWireStart(from)
           ? nearestFree(targets, world, hitScale(theme))
-          : nearestCompatiblePin(
-              targets,
-              world,
-              { width: from.width, dir: from.dir },
-              hitScale(theme),
-              (t) => labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
+          : nearestCompatiblePin(targets, world, from, hitScale(theme), (t) =>
+              labelExempt(circuit.components, circuit.wires, targets, from.componentId, t),
             )
         : nearestFree(targets, world, hitScale(theme));
       // A free end lands on the grid, the way a placed bend already does, so
@@ -4393,6 +4604,23 @@ export function CircuitWorkbench() {
   const onPointerUp = (e?: React.PointerEvent) => {
     if (e && e.pointerType === 'touch') {
       window.clearTimeout(longPressTimer.current);
+      const lifted = liftedRef.current;
+      holdRef.current = null;
+      liftedRef.current = null;
+      if (lifted) {
+        suppressClickRef.current = true;
+        draw();
+        const point = gestureRef.current.points.find((p) => p.id === e.pointerId);
+        // Held and let go in place: the long press it would have been. A cancel
+        // only drops the lift.
+        if (point && !point.moved) {
+          dragRef.current = null;
+          wireDragRef.current = null;
+          freeEndDragRef.current = null;
+          busLabelDragRef.current = null;
+          if (e.type !== 'pointercancel') onLongPress(lifted.x, lifted.y);
+        }
+      }
       reduceGesture(gestureRef.current, { kind: 'up', id: e.pointerId, t: e.timeStamp });
       // One finger lifted: end the pinch rather than reinterpreting the
       // remaining finger's position as a drag from where the pinch started.
@@ -4567,6 +4795,10 @@ export function CircuitWorkbench() {
     // reverted click-to-toggle, see toggleInput's comment). `button` is
     // momentary and handled in onPointerDown/Up instead (press-and-hold).
     if (mode === 'bubble') return;
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     const rect = canvasRef.current!.getBoundingClientRect();
     const world = screenToWorld(viewportRef.current, {
       x: e.clientX - rect.left,
@@ -4620,6 +4852,97 @@ export function CircuitWorkbench() {
   const onCanvasDoubleClick = (e: React.MouseEvent) =>
     openParamsAt(e.clientX, e.clientY, e.shiftKey);
 
+  /** Wire colour for `wire`, or for every selected wire when it is one of
+   *  them, so a lassoed bus is coloured in one visit. */
+  const openWireStyle = (wire: Wire, at: Vec2) => {
+    const st = store.getState();
+    const ids = st.selection.has(wire.id)
+      ? new Set(st.activeCircuit().wires.flatMap((w) => (st.selection.has(w.id) ? [w.id] : [])))
+      : new Set([wire.id]);
+    const colors = new Set(
+      st.activeCircuit().wires.flatMap((w) => (ids.has(w.id) ? [w.color ?? null] : [])),
+    );
+    const anchor = anchorFromBounds({ x: at.x, y: at.y, w: 0, h: 0 });
+    setStyleEdit({
+      kind: 'wire',
+      ids,
+      netIds: netWiresOf(st.activeCircuit(), ids),
+      wholeNet: false,
+      anchor,
+      screen: { x: anchor.compLeft, y: anchor.compBottom },
+      color: colors.size === 1 ? [...colors][0] : undefined,
+    });
+  };
+
+  const openGroupStyle = (id: string) => {
+    const group = store
+      .getState()
+      .activeCircuit()
+      .groups?.find((g) => g.id === id);
+    const rect = currentGroupRects()?.rects.get(id);
+    if (!group || !rect) return;
+    const anchor = anchorFromBounds({ ...rect, h: 0 });
+    setStyleEdit({
+      kind: 'group',
+      id,
+      anchor,
+      screen: { x: anchor.compLeft, y: anchor.compBottom },
+      name: group.name,
+      color: group.color ?? null,
+      tab: !!group.tab,
+    });
+  };
+
+  /** Off a component: a wire (segment, corner, free end or bus badge, in the
+   *  pointer's own order) opens its colour, a group's border or name its
+   *  style. A junction is no one wire, so it opens nothing. */
+  const openStyleAt = (world: Vec2) => {
+    if (store.getState().tool.kind !== 'select' || wiringRef.current) return;
+    const id = handleIdAt(world);
+    if (id !== undefined) {
+      const wire = store
+        .getState()
+        .activeCircuit()
+        .wires.find((w) => w.id === id);
+      if (wire) openWireStyle(wire, world);
+      return;
+    }
+    const group = groupHandleHitAt(world);
+    if (group) openGroupStyle(group.id);
+  };
+
+  /** Commits what the overlay shows; false keeps it open (a taken name). */
+  const commitStyleEdit = (): boolean => {
+    const se = styleEditRef.current;
+    if (!se) return true;
+    const st = store.getState();
+    if (se.kind === 'wire') {
+      if (se.color !== undefined) st.colorWires(styledWireIds(se), se.color);
+      setStyleEdit(null);
+      return true;
+    }
+    const group = st.activeCircuit().groups?.find((g) => g.id === se.id);
+    if (!group) {
+      setStyleEdit(null);
+      return true;
+    }
+    // Powered since the name was typed: the rename cannot apply, so say so
+    // rather than saving the rest and dropping it.
+    if (powered && se.name.trim() !== group.name) {
+      setStyleEdit({ ...se, flash: true });
+      return false;
+    }
+    // Powered, the name is greyed out: it is in every compiled path.
+    const ok = st.styleGroup(se.id, {
+      ...(powered ? {} : { name: se.name }),
+      color: se.color,
+      tab: se.tab,
+    });
+    if (ok) setStyleEdit(null);
+    else setStyleEdit({ ...se, flash: true });
+    return ok;
+  };
+
   // Double-tap is not available to us -- iOS reserves it for zoom -- so on
   // touch this is reached by a long press instead. One body, so the parameter
   // overlay behaves identically whichever way it was opened.
@@ -4631,7 +4954,10 @@ export function CircuitWorkbench() {
       y: clientY - rect.top,
     });
     const c = topComponentAt(world);
-    if (!c) return;
+    if (!c) {
+      openStyleAt(world);
+      return;
+    }
     // Parameter edits are topology-affecting board edits -- never pop up
     // while powered (the live sim would be edited out from under itself).
     if (c.kind === 'clock' && powered) {
@@ -4687,8 +5013,10 @@ export function CircuitWorkbench() {
       c.kind === 'sevenseg' ||
       c.kind === 'mux' ||
       c.kind === 'demux' ||
+      c.kind === 'transceiver' ||
       VARIABLE_ARITY_GATES.has(c.kind) ||
-      WIDTH_LABEL_KINDS.has(c.kind)
+      WIDTH_LABEL_KINDS.has(c.kind) ||
+      PULL_KINDS.has(c.kind)
     ) {
       const theme = themeRef.current!;
       const bounds = symbolBounds(c, theme).bounds;
@@ -4699,12 +5027,11 @@ export function CircuitWorkbench() {
             ? COUNTER_DEFAULT_WIDTH
             : c.kind === 'shiftreg'
               ? SHIFTREG_DEFAULT_WIDTH
-              : 1),
+              : c.kind === 'ram'
+                ? RAM_DEFAULT_WIDTH
+                : 1),
       );
-      // Every kind reaching this branch is name-able (Task 1a) -- the branch's
-      // own condition list above is the actual gate on which kinds get an
-      // overlay at all.
-      const labelable = true;
+      const labelable = !PULL_KINDS.has(c.kind);
       const noWidthField =
         c.kind === 'decoder' ||
         c.kind === 'encoder' ||
@@ -4784,6 +5111,7 @@ export function CircuitWorkbench() {
               asyncClear: c.params?.['asyncClear'] === true,
             }
           : {}),
+        ...(c.kind === 'register' ? { outputEnable: c.params?.['outputEnable'] === true } : {}),
         ...(c.kind === 'srlatch'
           ? { form: c.params?.['form'] === 'nand' ? ('nand' as const) : ('nor' as const) }
           : {}),
@@ -4797,6 +5125,9 @@ export function CircuitWorkbench() {
           ? { hasEnable: c.params?.['hasEnable'] === true }
           : {}),
         ...(c.kind === 'shiftreg' ? { parallelOut: c.params?.['parallelOut'] !== false } : {}),
+        ...(c.kind === 'ram'
+          ? { inputs: Number(c.params?.['addressBits'] ?? RAM_DEFAULT_ADDRESS_BITS) }
+          : {}),
         ...(c.kind === 'mux'
           ? {
               inputs: Number(c.params?.['selectBits'] ?? 2),
@@ -4862,7 +5193,7 @@ export function CircuitWorkbench() {
       const key =
         pe.kind === 'mux' || pe.kind === 'demux'
           ? 'selectBits'
-          : pe.kind === 'decoder' || pe.kind === 'encoder'
+          : pe.kind === 'decoder' || pe.kind === 'encoder' || pe.kind === 'ram'
             ? 'addressBits'
             : 'inputs';
       p[key] = pe.inputs;
@@ -4902,7 +5233,7 @@ export function CircuitWorkbench() {
 
   const paramEditCheckbox = (
     pe: NonNullable<typeof paramEdit>,
-    key: 'asyncSet' | 'asyncClear' | 'hasLoad' | 'hasEnable' | 'parallelOut',
+    key: 'asyncSet' | 'asyncClear' | 'hasLoad' | 'hasEnable' | 'parallelOut' | 'outputEnable',
     label: string,
   ) =>
     paramEditFieldVisible(pe, key) && (
@@ -4953,6 +5284,8 @@ export function CircuitWorkbench() {
         return pe.hasLoad;
       case 'parallelOut':
         return pe.parallelOut;
+      case 'outputEnable':
+        return pe.outputEnable;
       case 'selSide':
         return pe.selSide;
       case 'initial':
@@ -5102,6 +5435,11 @@ export function CircuitWorkbench() {
       if (paramEdit.kind === 'counter' && paramEdit.hasEnable !== undefined)
         params['hasEnable'] = paramEdit.hasEnable;
       if (paramEdit.kind === 'shiftreg') params['parallelOut'] = paramEdit.parallelOut !== false;
+      if (paramEdit.kind === 'register') params['outputEnable'] = !!paramEdit.outputEnable;
+      if (paramEdit.kind === 'ram') {
+        if (paramEdit.inputs === undefined || !Number.isFinite(paramEdit.inputs)) return flash();
+        params['addressBits'] = clampInt(paramEdit.inputs, 1, RAM_MAX_ADDRESS_BITS);
+      }
     } else if (paramEdit.kind === 'adder' || paramEdit.kind === 'comparator') {
       if (paramEdit.kind === 'comparator') params['hasCascade'] = !!paramEdit.hasCascade;
       params['pinView'] = serializePinView(paramEdit.pinView);
@@ -5208,6 +5546,27 @@ export function CircuitWorkbench() {
     }
   }, [clockEdit?.id]);
 
+  useLayoutEffect(() => {
+    if (!styleEdit || !styleEditBoxRef.current || !canvasRef.current) return;
+    const popupRect = styleEditBoxRef.current.getBoundingClientRect();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const { x, y } = clampPopupToCanvas(
+      styleEdit.anchor,
+      { w: popupRect.width, h: popupRect.height },
+      { w: canvasRect.width, h: canvasRect.height },
+    );
+    if (x !== styleEdit.screen.x || y !== styleEdit.screen.y) {
+      setStyleEdit((cur) => (cur ? { ...cur, screen: { x, y } } : cur));
+    }
+  }, [styleEdit?.kind, styleEdit?.anchor]);
+
+  // Keys must reach the overlay even when it has no field to focus (a wire,
+  // or a group while powered), or Esc and Enter would act on the board.
+  useLayoutEffect(() => {
+    const box = styleEditBoxRef.current;
+    if (box && !box.contains(document.activeElement)) box.focus();
+  }, [styleEdit?.anchor]);
+
   // --- Menu bar contribution -------------------------------------------------
   // Rebuilt whenever the state these handlers read changes: a menu item is a
   // closure, and a stale one acts on a stale value. The commands themselves are
@@ -5226,6 +5585,12 @@ export function CircuitWorkbench() {
       (c) => (c.kind === 'buf' || c.kind === 'not') && Number(c.params?.['width'] ?? 1) <= 1,
     );
     const groupedSelected = selected.some((c) => c.group);
+    const selectedWire = st()
+      .activeCircuit()
+      .wires.find((w) => selection.has(w.id));
+    const selectedGroups = new Set(selected.map((c) => c.group));
+    const styleGroupId = selectedGroups.size === 1 ? [...selectedGroups][0] : undefined;
+    const styleBlocked = mode === 'bubble' || viewOnly;
     const subExprsApply = activeTab.kind === 'board' && hasSubExpressions(st().board, st().chipLib);
     return [
       {
@@ -5354,6 +5719,22 @@ export function CircuitWorkbench() {
             disabled: !groupedSelected,
             run: () => st().ungroupSelection(),
           },
+          {
+            id: 'wireColour',
+            label: 'Wire colour...',
+            disabled: styleBlocked || !selectedWire,
+            run: () => {
+              const pts = selectedWire && computeRoutes().get(selectedWire.id);
+              if (selectedWire && pts)
+                openWireStyle(selectedWire, pointAlongPolyline(pts, 0.5).pos);
+            },
+          },
+          {
+            id: 'groupStyle',
+            label: 'Group name and colour...',
+            disabled: styleBlocked || !styleGroupId,
+            run: () => styleGroupId && openGroupStyle(styleGroupId),
+          },
           { separator: true },
           ...ALIGN_ITEMS.map(([mode, label]) => ({
             id: `align-${mode}`,
@@ -5390,6 +5771,12 @@ export function CircuitWorkbench() {
             label: 'View only (no editing)',
             checked: viewOnly,
             run: () => setViewOnly((v) => !v),
+          },
+          {
+            id: 'wireColours',
+            label: 'Wire colours',
+            checked: showWireColors,
+            run: () => usePrefsStore.getState().setPref('showWireColors', !showWireColors),
           },
           {
             id: 'subExpressions',
@@ -5477,6 +5864,7 @@ export function CircuitWorkbench() {
     mode,
     viewOnly,
     showSubExprs,
+    showWireColors,
     activeTab.kind,
     buildBlocked,
   ]);
@@ -5682,7 +6070,7 @@ export function CircuitWorkbench() {
                   {lassoFreehand ? 'Lasso' : 'Marquee'}
                 </ToolBtn>
                 {lassoMenuOpen && (
-                  <div className="menubar__popup tool-split__popup" role="menu">
+                  <div ref={lassoPopupRef} className="menubar__popup tool-split__popup" role="menu">
                     {SELECT_SHAPES.map(([freehand, label]) => (
                       <button
                         type="button"
@@ -6061,8 +6449,17 @@ export function CircuitWorkbench() {
           {/* Nothing that edits the board is offered while it is powered. Tapping
               a switch to drive it selected it too, so Delete and the rest
               appeared over a board that cannot be edited at all. */}
+          {/* A selection left from earlier taps kept the bar up over an open
+              overlay, covering its Done row on a narrow phone. */}
           <SelectionActionBar
-            visible={coarse && selection.size > 0 && connectPairs === 0 && !powered}
+            visible={
+              coarse &&
+              selection.size > 0 &&
+              connectPairs === 0 &&
+              !powered &&
+              !styleEdit &&
+              !paramEdit
+            }
           />
           {staReport &&
             activeTab.kind === 'board' &&
@@ -6077,6 +6474,7 @@ export function CircuitWorkbench() {
                 <StaCard
                   path={data.path}
                   sequential={staReport.report.sequential}
+                  directionBreaks={staReport.report.directionBreaks}
                   onClose={() => store.getState().clearSta()}
                 />
               ) : null;
@@ -6157,6 +6555,83 @@ export function CircuitWorkbench() {
                 ns
               </label>
               <span className="circuit-clock-edit__hint">Enter saves · Esc cancels</span>
+            </div>
+          )}
+          {styleEdit && (
+            <div
+              ref={styleEditBoxRef}
+              className="circuit-param-edit"
+              tabIndex={-1}
+              style={{ left: styleEdit.screen.x, top: styleEdit.screen.y }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') commitStyleEdit();
+                else if (e.key === 'Escape') setStyleEdit(null);
+              }}
+            >
+              {styleEdit.kind === 'group' ? (
+                <>
+                  <label>
+                    name
+                    <input
+                      type="text"
+                      autoFocus={!powered}
+                      disabled={powered}
+                      title={
+                        powered ? 'Power off to rename: the name is in every net path' : undefined
+                      }
+                      className={styleEdit.flash ? 'circuit-pin-rename--warn' : undefined}
+                      value={styleEdit.name}
+                      onChange={(e) =>
+                        setStyleEdit({ ...styleEdit, name: e.target.value, flash: false })
+                      }
+                    />
+                  </label>
+                  <ColorSwatches
+                    value={styleEdit.color}
+                    noneLabel="plain"
+                    onPick={(color) => setStyleEdit({ ...styleEdit, color })}
+                  />
+                  <label>
+                    title tab
+                    <input
+                      type="checkbox"
+                      disabled={!styleEdit.color}
+                      checked={styleEdit.tab && !!styleEdit.color}
+                      onChange={(e) => setStyleEdit({ ...styleEdit, tab: e.target.checked })}
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {styledWireIds(styleEdit).size > 1
+                      ? `wire colour, ${styledWireIds(styleEdit).size} wires`
+                      : 'wire colour'}
+                  </span>
+                  <ColorSwatches
+                    value={styleEdit.color}
+                    noneLabel="none"
+                    onPick={(color) => setStyleEdit({ ...styleEdit, color })}
+                  />
+                  {styleEdit.netIds.size > styleEdit.ids.size && (
+                    <label>
+                      whole net
+                      <input
+                        type="checkbox"
+                        checked={styleEdit.wholeNet}
+                        onChange={(e) => setStyleEdit({ ...styleEdit, wholeNet: e.target.checked })}
+                      />
+                    </label>
+                  )}
+                </>
+              )}
+              <div className="circuit-param-edit__actions">
+                <span className="circuit-param-edit__hint">Enter saves · Esc cancels</span>
+                <button type="button" className="tool-btn" onClick={commitStyleEdit}>
+                  Done
+                </button>
+              </div>
             </div>
           )}
           {paramEdit && (
@@ -6299,6 +6774,23 @@ export function CircuitWorkbench() {
                   )}
                 </>
               )}
+              {paramEdit.kind === 'ram' && paramEditFieldVisible(paramEdit, 'addressBits') && (
+                <label>
+                  address bits
+                  <input
+                    type="number"
+                    min={1}
+                    max={RAM_MAX_ADDRESS_BITS}
+                    className={paramEdit.flash ? 'circuit-pin-rename--warn' : undefined}
+                    value={paramEdit.inputs ?? RAM_DEFAULT_ADDRESS_BITS}
+                    onChange={(e) => {
+                      const inputs = Number(e.target.value);
+                      setParamEdit((cur) => (cur ? { ...cur, inputs, flash: false } : cur));
+                    }}
+                    {...paramEditFocusHandlers(setParamEdit, 'addressBits', paramEdit.kind)}
+                  />
+                </label>
+              )}
               {paramEdit.kind === 'encoder' && paramEditFieldVisible(paramEdit, 'addressBits') && (
                 <label>
                   address bits
@@ -6338,6 +6830,8 @@ export function CircuitWorkbench() {
                   {paramEditCheckbox(paramEdit, 'asyncClear', 'clear pin')}
                 </>
               )}
+              {paramEdit.kind === 'register' &&
+                paramEditCheckbox(paramEdit, 'outputEnable', 'output enable')}
               {paramEdit.kind === 'srlatch' && paramEditFieldVisible(paramEdit, 'form') && (
                 <label>
                   form
@@ -6595,7 +7089,7 @@ export function CircuitWorkbench() {
         </div>
       </div>
 
-      <WaveformPanel />
+      <WaveformPanel rootRef={wavePanelRef} />
 
       {building && (
         <BuildCircuitDialog

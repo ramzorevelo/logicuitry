@@ -10,6 +10,7 @@ import {
   type PinTarget,
 } from './pinTargets';
 import type { Component, ComponentKind, Wire } from '../../core/model/types';
+import { mayShareNet } from '../../core/model/pinSlots';
 import type { Theme } from '../../render/theme';
 import { makeTestTheme } from '../../render/theme.fixture';
 // Side-effect imports: register glyph geometry so symbolBounds resolves.
@@ -369,5 +370,72 @@ describe('a passive (net label) pin is a wiring wildcard', () => {
   it('smartConnectTargets drops label pins -- a label joins by name, not a wire', () => {
     const targets = [t({ componentId: 'L1', dir: 'passive' }), t({ componentId: 'g', dir: 'in' })];
     expect(smartConnectTargets(targets, []).map((x) => x.componentId)).toEqual(['g']);
+  });
+});
+
+describe('three-state and bidirectional pairing', () => {
+  const cursor = { x: 0, y: 0 };
+  const near = (target: Partial<PinTarget>, wanted: Parameters<typeof nearestCompatiblePin>[2]) =>
+    nearestCompatiblePin([pin(target)], cursor, wanted, 1);
+
+  it('pairs two drivers when at least one can float', () => {
+    expect(
+      near({ dir: 'out', threeState: true }, { width: 1, dir: 'out', threeState: true }),
+    ).toBeDefined();
+    expect(near({ dir: 'inout' }, { width: 1, dir: 'out', threeState: true })).toBeDefined();
+    expect(near({ dir: 'inout' }, { width: 1, dir: 'inout' })).toBeDefined();
+    expect(near({ dir: 'out', threeState: true }, { width: 1, dir: 'out' })).toBeDefined();
+    expect(near({ dir: 'inout' }, { width: 1, dir: 'out' })).toBeDefined();
+    expect(near({ dir: 'out' }, { width: 1, dir: 'out' })).toBeUndefined();
+  });
+
+  it('pairs a bidirectional pin with an input either way round', () => {
+    expect(near({ dir: 'in' }, { width: 1, dir: 'inout' })).toBeDefined();
+    expect(near({ dir: 'inout' }, { width: 1, dir: 'in' })).toBeDefined();
+  });
+
+  it('marks a register q three-state only with output enable, and a RAM q always', () => {
+    const components: Component[] = [
+      { id: 'r', kind: 'register', pos: { x: 0, y: 0 }, params: { width: 4 } },
+      {
+        id: 'ro',
+        kind: 'register',
+        pos: { x: 200, y: 0 },
+        params: { width: 4, outputEnable: true },
+      },
+      { id: 'm', kind: 'ram', pos: { x: 400, y: 0 }, params: { width: 4, addressBits: 2 } },
+    ];
+    const targets = collectPinTargets(components, [], theme, new Map());
+    const q = (id: string) => targets.find((x) => x.componentId === id && x.pinName === 'q');
+    expect(q('r')!.threeState).toBeUndefined();
+    expect(q('ro')!.threeState).toBe(true);
+    expect(q('m')!.threeState).toBe(true);
+  });
+
+  it('collects both transceiver sides as wireable targets, a left of b', () => {
+    const components: Component[] = [
+      { id: 'x', kind: 'transceiver', pos: { x: 0, y: 0 }, params: { width: 8 } },
+    ];
+    const targets = collectPinTargets(components, [], theme, new Map());
+    const of = (id: string, name: string) =>
+      targets.find((x) => x.componentId === id && x.pinName === name);
+    expect(of('x', 'a')).toMatchObject({ dir: 'inout', width: 8, free: true });
+    expect(of('x', 'b')).toMatchObject({ dir: 'inout', width: 8, free: true });
+    expect(of('x', 'a')!.worldPos.x).toBeLessThan(of('x', 'b')!.worldPos.x);
+    expect(of('x', 'a')!.worldPos.y).toBe(of('x', 'b')!.worldPos.y);
+  });
+});
+
+describe('mayShareNet', () => {
+  it('lets readers meet anything and drivers meet when either floats', () => {
+    expect(mayShareNet({ dir: 'in' }, { dir: 'out' })).toBe(true);
+    expect(mayShareNet({ dir: 'passive' }, { dir: 'out' })).toBe(true);
+    expect(mayShareNet({ dir: 'out' }, { dir: 'out' })).toBe(false);
+    expect(mayShareNet({ dir: 'out', threeState: true }, { dir: 'out', threeState: true })).toBe(
+      true,
+    );
+    expect(mayShareNet({ dir: 'out', threeState: true }, { dir: 'inout' })).toBe(true);
+    expect(mayShareNet({ dir: 'out' }, { dir: 'inout' })).toBe(true);
+    expect(mayShareNet({ dir: 'out' }, { dir: 'out', threeState: true })).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { printExpr } from '../boolean/expr';
-import { board, comp, wire } from '../model/testFixtures';
+import { board, chipDef, comp, pin, wire } from '../model/testFixtures';
 import type { ChipLibrary, Component } from '../model/types';
 import { builtinChipLibrary } from '../parts/packages';
 import { gateExpressions, hasSubExpressions } from './subexpr';
@@ -79,6 +79,20 @@ describe('gateExpressions', () => {
       wires: [wire('w1', ['u3', outPin.name], ['g', 'a'])],
     });
     expect(pinsOf(b, lib)).toEqual({ 'g.y': "[U3.13]'" });
+  });
+
+  it('names an inout chip pin like an output', () => {
+    const def = chipDef({
+      id: 'io-chip',
+      name: 'io',
+      pins: [pin('io', 'inout', 'P', 0)],
+      components: [comp('P', 'outport')],
+    });
+    const b = board({
+      components: [{ ...comp('u1', 'chip'), defId: def.id, label: 'U1' }, comp('g', 'not')],
+      wires: [wire('w1', ['u1', 'io'], ['g', 'a'])],
+    });
+    expect(pinsOf(b, new Map([[def.id, def]]))).toEqual({ 'g.y': "[U1.io]'" });
   });
 
   it('leaves a combinational loop and what reads it unlabelled', () => {

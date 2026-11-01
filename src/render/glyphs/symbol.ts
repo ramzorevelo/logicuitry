@@ -31,6 +31,7 @@ export interface ResolvedPin {
    *  PrimitivePin). Falls back to `name` when unset. */
   label?: string;
   activeLow?: boolean;
+  threeState?: boolean;
 }
 
 /** Pin list for a primitive kind, straight from its PrimitiveSpec. */
@@ -277,6 +278,7 @@ const FIXED_BODY_NAME_KINDS = new Set([
   'srlatch',
   'counter',
   'shiftreg',
+  'ram',
   'mux',
   'demux',
   'decoder',
@@ -284,6 +286,7 @@ const FIXED_BODY_NAME_KINDS = new Set([
   'adder',
   'comparator',
   'parity',
+  'transceiver',
 ]);
 
 /** The name drawn INSIDE a glyph's body -- distinct from the user's label,

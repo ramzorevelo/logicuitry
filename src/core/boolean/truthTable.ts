@@ -7,6 +7,7 @@ import type { CompiledCircuit } from '../model/compile';
 import * as bv from '../value/busValue';
 import type { BusValue } from '../value/busValue';
 import { getPrimitive } from '../sim/primitives/registry';
+import { inputSlotPins } from '../model/pinSlots';
 import { STATEFUL_KINDS } from '../sim/primitives/sequential';
 import { BooleanEvalError, evaluateNets } from './evaluate';
 
@@ -68,15 +69,37 @@ function resolveInputPinNet(circuit: CompiledCircuit, path: string): number | un
   if (owner === undefined) return undefined;
   const prim = circuit.primitives[owner]!;
   const pinName = path.slice(dot + 1);
-  const index = getPrimitive(prim.kind)
-    .pins(prim.params)
-    .filter((p) => p.dir === 'in')
-    .findIndex((p) => p.name === pinName);
+  const index = inputSlotPins(getPrimitive(prim.kind).pins(prim.params)).findIndex(
+    (p) => p.name === pinName,
+  );
   return index < 0 ? undefined : prim.inputs[index];
 }
 
 /** A flip-flop, latch or other stored state sits behind an output. */
-export class StoredStateError extends BooleanEvalError {}
+export class StoredStateError extends BooleanEvalError {
+  constructor(
+    message: string,
+    readonly kind?: string,
+  ) {
+    super(message);
+  }
+}
+
+/** A bidirectional pin is on the board: it reads the net it drives, which no
+ *  single evaluation pass can order, wherever it sits. */
+export class BidirectionalPinError extends BooleanEvalError {}
+
+export function refuseBidirectional(circuit: CompiledCircuit): void {
+  for (const prim of circuit.primitives)
+    if (
+      getPrimitive(prim.kind)
+        .pins(prim.params)
+        .some((p) => p.dir === 'inout')
+    )
+      throw new BidirectionalPinError(
+        `not purely combinational: ${prim.path} has a bidirectional pin`,
+      );
+}
 
 /**
  * Throws when a stateful primitive feeds any of `nets`: its outputs depend on
@@ -96,7 +119,10 @@ function refuseStoredState(
       if (seeded.has(i)) continue;
       const prim = circuit.primitives[i]!;
       if (STATEFUL_KINDS.has(prim.kind))
-        throw new StoredStateError(`not purely combinational: ${prim.path} stores state`);
+        throw new StoredStateError(
+          `not purely combinational: ${prim.path} stores state`,
+          prim.kind,
+        );
       for (const n of prim.inputs) {
         if (seen.has(n)) continue;
         seen.add(n);
@@ -119,6 +145,7 @@ export function buildTruthTable(
   if (inputPaths.length === 0) throw new RangeError('truth table needs at least one input');
   if (inputPaths.length > MAX_TABLE_INPUTS)
     throw new RangeError(`truth table inputs ${inputPaths.length} exceeds max ${MAX_TABLE_INPUTS}`);
+  refuseBidirectional(circuit);
 
   // A bare path must be 1-bit (a width-N net silently reading bit 0 is a
   // wrong answer with no error); `path[i]` addresses bit i of a wide terminal.

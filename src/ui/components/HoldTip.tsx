@@ -9,14 +9,41 @@
 // already exist as `title`, and threading a handler through four toolbars and
 // two workbenches to say the same thing would be worse.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useCoarsePointer } from '../pointerKind';
 import { LONG_PRESS_MS, TAP_SLOP } from '../workbench-circuit/touchGestures';
 
 interface Tip {
   text: string;
-  x: number;
-  y: number;
+  anchor: TipAnchor;
+}
+
+interface TipAnchor {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Gap between the button and the tip, and the least room kept to any screen
+ *  edge, in CSS pixels. */
+const TIP_GAP = 6;
+const EDGE_MARGIN = 8;
+
+/** Centred under the button, slid sideways to stay on screen, and above the
+ *  button when there is no room below. Uses the tip's measured size: a fixed
+ *  clamp on its centre let a long tip overhang a narrow phone. */
+export function holdTipPosition(
+  anchor: TipAnchor,
+  tip: { w: number; h: number },
+  viewport: { w: number; h: number },
+): { x: number; y: number } {
+  const centred = (anchor.left + anchor.right) / 2 - tip.w / 2;
+  const x = Math.max(EDGE_MARGIN, Math.min(centred, viewport.w - EDGE_MARGIN - tip.w));
+  const below = anchor.bottom + TIP_GAP;
+  const fitsBelow = below + tip.h <= viewport.h - EDGE_MARGIN;
+  const y = fitsBelow ? below : Math.max(EDGE_MARGIN, anchor.top - TIP_GAP - tip.h);
+  return { x, y };
 }
 
 /** Buttons that opt in. Palette items keep their own text labels and their own
@@ -26,6 +53,22 @@ const SELECTOR = '.tool-btn[title]';
 export function HoldTip() {
   const coarse = useCoarsePointer();
   const [tip, setTip] = useState<Tip | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = tipRef.current;
+    if (!tip || !el) return;
+    // Measured from the left edge: unplaced, a fixed box sits at its static
+    // position and can shrink to the room right of it, then wrap.
+    el.style.left = '0px';
+    const { x, y } = holdTipPosition(
+      tip.anchor,
+      { w: el.offsetWidth, h: el.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight },
+    );
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }, [tip]);
 
   useEffect(() => {
     if (!coarse) return;
@@ -52,10 +95,10 @@ export function HoldTip() {
         const r = btn.getBoundingClientRect();
         fired = true;
         swallowClick = true;
-        // Centred on the button, but kept off both edges: the first and last
-        // buttons of a toolbar are exactly where a centred tip would overhang.
-        const x = Math.min(Math.max(r.left + r.width / 2, 72), window.innerWidth - 72);
-        setTip({ text: btn.getAttribute('title') ?? '', x, y: r.bottom });
+        setTip({
+          text: btn.getAttribute('title') ?? '',
+          anchor: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+        });
       }, LONG_PRESS_MS);
     };
 
@@ -95,7 +138,7 @@ export function HoldTip() {
 
   if (!tip) return null;
   return (
-    <div className="hold-tip" role="tooltip" style={{ left: `${tip.x}px`, top: `${tip.y}px` }}>
+    <div ref={tipRef} className="hold-tip" role="tooltip">
       {tip.text}
     </div>
   );

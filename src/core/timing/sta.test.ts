@@ -641,6 +641,37 @@ describe('analyzeTiming: timing shapes', () => {
     ]);
   });
 
+  it('times a register with oe, clr and en2: en2 is sampled, clr and oe only arrive', () => {
+    const b = board({
+      components: [
+        comp('ck', 'clock'),
+        comp('rg', 'register', { outputEnable: true, clear: 'async', dualEnable: true }),
+        comp('ff', 'dff'),
+      ],
+      wires: [
+        wire('w1', ['ck', 'y'], ['rg', 'clk']),
+        wire('w2', ['ck', 'y'], ['ff', 'clk']),
+        wire('w3', ['ff', 'q'], ['rg', 'd']),
+        wire('w4', ['ff', 'qn'], ['rg', 'en']),
+        wire('w5', ['ff', 'qn'], ['rg', 'en2']),
+        wire('w6', ['ff', 'q'], ['rg', 'oe']),
+        wire('w7', ['ff', 'q'], ['rg', 'clr']),
+        wire('w8', ['rg', 'q'], ['ff', 'd']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const rows = r.sequential!.paths.map((p) => `${p.launch}->${p.capture}.${p.capturePin}`);
+    expect(rows.sort()).toEqual([
+      'main/ff->main/rg.d',
+      'main/ff->main/rg.en',
+      'main/ff->main/rg.en2',
+      'main/rg->main/ff.d',
+    ]);
+    expect(r.endpoints.map((e) => e.endpoint)).toEqual(
+      expect.arrayContaining(['main/rg.clr', 'main/rg.oe']),
+    );
+  });
+
   it('drops a clock-inhibited shift register out of sequential analysis', () => {
     const b = board({
       components: [

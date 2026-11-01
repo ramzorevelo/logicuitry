@@ -3,6 +3,19 @@
   "$id": "lcir/common.schema.json",
   "title": "Shared definitions for Logicuitry file formats",
   "$defs": {
+    "paletteSlot": { "enum": ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"] },
+    "group": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "parent": { "type": "string" },
+        "color": { "$ref": "#/$defs/paletteSlot" },
+        "tab": { "type": "boolean" }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
     "point": {
       "type": "object",
       "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
@@ -27,12 +40,18 @@
         "params": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/paramValue" }
+        },
+        "contents": {
+          "type": "object",
+          "propertyNames": { "minLength": 1 },
+          "additionalProperties": { "type": "string" }
         }
       },
       "required": ["id", "kind", "pos"],
       "additionalProperties": false,
       "if": { "properties": { "kind": { "const": "chip" } } },
-      "then": { "required": ["id", "kind", "pos", "defId"] }
+      "then": { "required": ["id", "kind", "pos", "defId"] },
+      "else": { "not": { "required": ["contents"] } }
     },
     "bitRange": {
       "type": "object",
@@ -93,7 +112,8 @@
         "a": { "$ref": "#/$defs/wireEnd" },
         "b": { "$ref": "#/$defs/wireEnd" },
         "points": { "type": "array", "items": { "$ref": "#/$defs/point" } },
-        "busLabelT": { "type": "number", "minimum": 0, "maximum": 1 }
+        "busLabelT": { "type": "number", "minimum": 0, "maximum": 1 },
+        "color": { "$ref": "#/$defs/paletteSlot" }
       },
       "required": ["id", "a", "b", "points"],
       "additionalProperties": false

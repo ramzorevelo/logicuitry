@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { rectContains, Scene, screenToWorld, worldToScreen, type Node } from './scene';
+import {
+  inflateRect,
+  keepCentreOnHeightLoss,
+  polylineBounds,
+  rectContains,
+  Scene,
+  screenToWorld,
+  visibleWorldRect,
+  worldToScreen,
+  type Node,
+} from './scene';
 import { hitTest, padHitRect } from './hitTest';
 
 const node = (id: string, x: number, y: number, w: number, h: number): Node => ({
@@ -16,10 +26,39 @@ describe('scene: viewport transform', () => {
     expect(round.y).toBeCloseTo(p.y, 10);
   });
 
+  it('keepCentreOnHeightLoss holds the centre point as the screen shrinks and grows back', () => {
+    const vp = { panX: 7, panY: 20, zoom: 0.5 };
+    const centre = screenToWorld(vp, { x: 160, y: 200 });
+    const shrunk = keepCentreOnHeightLoss(vp, 150);
+    expect(screenToWorld(shrunk, { x: 160, y: 125 })).toEqual(centre);
+    expect(shrunk.panX).toBe(vp.panX);
+    expect(shrunk.zoom).toBe(vp.zoom);
+    expect(keepCentreOnHeightLoss(shrunk, -150)).toEqual(vp);
+  });
+
   it('applies pan then zoom about the origin', () => {
     const vp = { panX: 5, panY: 0, zoom: 3 };
     expect(worldToScreen(vp, { x: 5, y: 0 })).toEqual({ x: 0, y: 0 });
     expect(worldToScreen(vp, { x: 6, y: 0 })).toEqual({ x: 3, y: 0 });
+  });
+});
+
+describe('scene: culling helpers', () => {
+  it('visibleWorldRect covers the screen at the current pan and zoom', () => {
+    const vp = { panX: 100, panY: -50, zoom: 2 };
+    const r = visibleWorldRect(vp, 800, 600);
+    expect(r).toEqual({ x: 100, y: -50, w: 400, h: 300 });
+    expect(screenToWorld(vp, { x: 800, y: 600 })).toEqual({ x: r.x + r.w, y: r.y + r.h });
+  });
+
+  it('polylineBounds encloses every point, inflateRect pads each side', () => {
+    const b = polylineBounds([
+      { x: 5, y: 9 },
+      { x: -3, y: 9 },
+      { x: -3, y: 2 },
+    ]);
+    expect(b).toEqual({ x: -3, y: 2, w: 8, h: 7 });
+    expect(inflateRect(b, 2)).toEqual({ x: -5, y: 0, w: 12, h: 11 });
   });
 });
 

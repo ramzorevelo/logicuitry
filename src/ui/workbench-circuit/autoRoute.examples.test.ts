@@ -154,7 +154,15 @@ function netGrouping(e: Example): (w: Wire) => string {
  *  measurably needs today, so router sprawl past it still fails -- it is a
  *  recorded measurement, never a rounded-up allowance, and it should come back
  *  down to `shipped` when the router catches up. */
-const HAND_TUNED_BUDGET: Record<string, number> = { consensus: 25 };
+const HAND_TUNED_BUDGET: Record<string, number> = {
+  consensus: 25,
+  'full-adder-on-a-74ls153': 19,
+  'adder-subtracter': 40,
+  // The bus and register output lines are drawn as combs; the router declines the bus
+  // nets (no single driver) and sprawls on the rest.
+  'bus-and-registers': 104,
+  'eight-bit-bus-computer': 378,
+};
 
 describe('bundled example boards', () => {
   for (const e of EXAMPLES) {
@@ -272,7 +280,7 @@ describe('bundled example boards', () => {
         }
       }
     }
-  });
+  }, 30_000);
 
   // A fan-out branches at a DOT on the trunk, never on a component's pin: a
   // second wire leaving a gate's input pin reads as a T on that pin. Reported

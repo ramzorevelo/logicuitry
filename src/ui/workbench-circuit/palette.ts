@@ -5,6 +5,7 @@ import type { ChipDef, ComponentKind, ParamValue } from '../../core/model/types'
 import { getPackage } from '../../core/parts/packages';
 import { COUNTER_DEFAULT_WIDTH } from '../../core/sim/primitives/counter';
 import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
+import { RAM_DEFAULT_ADDRESS_BITS, RAM_DEFAULT_WIDTH } from '../../core/sim/primitives/ram';
 
 export type PaletteGroup =
   | 'Inputs'
@@ -80,6 +81,12 @@ export const PALETTE: PaletteItem[] = [
     group: 'Sequential',
     params: { width: SHIFTREG_DEFAULT_WIDTH },
   },
+  {
+    kind: 'ram',
+    label: 'RAM',
+    group: 'Sequential',
+    params: { width: RAM_DEFAULT_WIDTH, addressBits: RAM_DEFAULT_ADDRESS_BITS },
+  },
   { kind: 'led', label: 'LED', group: 'Outputs' },
   { kind: 'led', label: 'LED array', group: 'Outputs', params: { width: 8 } },
   { kind: 'ledmatrix', label: 'LED matrix', group: 'Outputs', params: { rows: 8, cols: 8 } },
@@ -97,6 +104,9 @@ export const PALETTE: PaletteItem[] = [
   { kind: 'netlabel', label: 'Net label', group: 'Wiring' },
   { kind: 'vcc', label: 'VCC', group: 'Wiring' },
   { kind: 'gnd', label: 'GND', group: 'Wiring' },
+  { kind: 'pullup', label: 'Pull-up', group: 'Wiring' },
+  { kind: 'pulldown', label: 'Pull-down', group: 'Wiring' },
+  { kind: 'transceiver', label: 'Bus transceiver', group: 'Wiring', params: { width: 8 } },
 ];
 
 /** Built-in chips the rail lists in their own group, not under 74 series. */
@@ -113,6 +123,8 @@ export const PART_SUBGROUPS = [
   'Arithmetic',
   'Flip-flops and registers',
   'Counters and shift registers',
+  'Bus',
+  'Memory',
 ] as const;
 
 export interface PartRow {
@@ -148,6 +160,7 @@ const squash = (s: string) => s.toLowerCase().replace(/[\s._'’-]+/g, '');
 const FIND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   DFF: ['D flip-flop'],
   'Shift reg': ['shift register'],
+  RAM: ['memory'],
   MUX: ['multiplexer'],
   DEMUX: ['demultiplexer'],
   Switch: ['toggle'],

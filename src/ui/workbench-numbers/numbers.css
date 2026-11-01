@@ -551,6 +551,11 @@
   gap: 2px;
 }
 
+/* Width holds two digits; its share goes to sign, which clipped "unsigned" at 320. */
+.app-shell--compact .numbers-workbench__modes > .numbers-workbench__width {
+  flex-grow: 0.6;
+}
+
 /* A segmented control has to divide its row evenly. Left to shrink-wrap it
    gives "Convert" a third of the width and "Compute" the rest, which reads as
    a bug rather than as two equal choices. */
@@ -574,6 +579,12 @@
 .app-shell--compact .convert-tab__group,
 .app-shell--compact .compute-tab__group {
   align-self: stretch;
+}
+
+/* Label, hex and dec in one row ran 45px past a 320 screen and scrolled the whole body. */
+.app-shell--compact .value-entry__head {
+  flex-wrap: wrap;
+  row-gap: var(--space-unit);
 }
 
 /* Touch targets. */

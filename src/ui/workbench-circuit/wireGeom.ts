@@ -4,6 +4,7 @@
 
 import type { Rect, Vec2 } from '../../render/scene';
 import type { Wire, WireEnd } from '../../core/model/types';
+import { GridIndex } from './gridIndex';
 
 /** Corner of a single-elbow route between a and b. flip picks which axis leads:
  *  false -> horizontal then vertical, true -> vertical then horizontal. */
@@ -183,10 +184,87 @@ export function routeOverlapsWires(
   return false;
 }
 
+type Segment = readonly [Vec2, Vec2];
+
+/** Bodies and already-routed wire segments, indexed: every route tries some 36 candidates, and
+ *  scanning the whole board for each made a drag on the bus computer cost a phone frame. */
+interface RouteObstacles {
+  bodies: GridIndex<Rect>;
+  wires: GridIndex<Segment>;
+}
+
+/** World units per index cell: about one gate across, so a candidate segment meets few cells. */
+const CELL_GRID_STEPS = 8;
+
+function routeObstacles(
+  bodies: readonly Rect[],
+  wires: readonly (readonly Vec2[])[],
+  grid: number,
+): RouteObstacles {
+  const obs: RouteObstacles = {
+    bodies: new GridIndex(grid * CELL_GRID_STEPS),
+    wires: new GridIndex(grid * CELL_GRID_STEPS),
+  };
+  for (const r of bodies) obs.bodies.insert(r, r.x, r.y, r.x + r.w, r.y + r.h);
+  for (const w of wires) addWireObstacle(obs, w);
+  return obs;
+}
+
+function addWireObstacle(obs: RouteObstacles, pts: readonly Vec2[]): void {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i]!;
+    const q = pts[i + 1]!;
+    obs.wires.insert(
+      [p, q],
+      Math.min(p.x, q.x),
+      Math.min(p.y, q.y),
+      Math.max(p.x, q.x),
+      Math.max(p.y, q.y),
+    );
+  }
+}
+
+/** Calls `test` on every candidate near each segment of `pts`; true at the first hit. */
+function someNear<T>(
+  index: GridIndex<T>,
+  pts: readonly Vec2[],
+  test: (p: Vec2, q: Vec2, item: T) => boolean,
+): boolean {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i]!;
+    const q = pts[i + 1]!;
+    const near = index.some(
+      Math.min(p.x, q.x),
+      Math.min(p.y, q.y),
+      Math.max(p.x, q.x),
+      Math.max(p.y, q.y),
+      (item) => test(p, q, item),
+    );
+    if (near) return true;
+  }
+  return false;
+}
+
+const crossesBody = (pts: readonly Vec2[], obs: RouteObstacles) =>
+  someNear(obs.bodies, pts, (p, q, r) => segmentCrossesRect(p, q, r));
+
+const overlapsWire = (pts: readonly Vec2[], obs: RouteObstacles) =>
+  someNear(obs.wires, pts, (p, q, [b0, b1]) => segmentsOverlapCollinear(p, q, b0, b1));
+
+/** Proper crossings of `pts` with the routed wires, each segment pair counted once. */
+function crossingCount(pts: readonly Vec2[], obs: RouteObstacles): number {
+  let n = 0;
+  someNear(obs.wires, pts, (p, q, [b0, b1]) => {
+    if (segmentsIntersect(p, q, b0, b1)) n++;
+    return false;
+  });
+  return n;
+}
+
 /** Single-elbow route a -> b that tries to avoid crossing through any of
- *  `obstacles` (other components' bounding boxes) and, secondarily,
- *  overlapping any of `wireObstacles` (other wires' already-routed
- *  polylines) -- tries both elbow orientations, a two-elbow (Z) detour, then
+ *  `obs.bodies` (other components' bounding boxes) and, secondarily,
+ *  overlapping any of `obs.wires` (other wires' already-routed
+ *  segments) -- tries both elbow orientations, a two-elbow (Z) detour, then
  *  a few mid-coordinate-shifted two-elbow variants on BOTH axes (x-shifted
  *  for a horizontal-flow detour, y-shifted for a vertical-flow one; nearest
  *  grid step first, both signs) to dodge a collinear overlap, then just gives up and
@@ -201,8 +279,7 @@ export function routeOverlapsWires(
 function routeWithStub(
   a: Vec2,
   b: Vec2,
-  obstacles: readonly Rect[],
-  wireObstacles: readonly Vec2[][],
+  obs: RouteObstacles,
   grid: number,
   prefer?: RoutePreference,
 ): Vec2[] {
@@ -283,11 +360,11 @@ function routeWithStub(
   const sane = candidates.filter((c) => !hasCollinearReversal(c.raw));
   const pool = sane.length ? sane : candidates;
   const best = pool[0] ?? first;
-  if (obstacles.length === 0 && wireObstacles.length === 0) return best.pts;
-  const clearsBody = (c: { pts: Vec2[] }) => !polylineCrossesAny(c.pts, obstacles);
-  const clean = (c: { pts: Vec2[] }) => clearsBody(c) && !routeOverlapsWires(c.pts, wireObstacles);
+  if (obs.bodies.size === 0 && obs.wires.size === 0) return best.pts;
+  const clearsBody = (c: { pts: Vec2[] }) => !crossesBody(c.pts, obs);
+  const clean = (c: { pts: Vec2[] }) => clearsBody(c) && !overlapsWire(c.pts, obs);
   if (prefer?.avoidCrossings) {
-    const fewest = fewestCrossings(pool.filter(clean), wireObstacles);
+    const fewest = fewestCrossings(pool.filter(clean), obs);
     if (fewest) return fewest.pts;
   } else for (const c of pool) if (clean(c)) return c.pts;
   for (const c of pool) if (clearsBody(c)) return c.pts;
@@ -305,20 +382,30 @@ export function routeAvoiding(
   grid = 16,
   prefer?: RoutePreference,
 ): Vec2[] {
-  const pts = routeWithStub(a, b, obstacles, wireObstacles, grid, prefer);
-  if (!(prefer?.laneFrom || prefer?.laneTo) || !polylineCrossesAny(pts, obstacles)) return pts;
-  return routeWithStub(a, b, obstacles, wireObstacles, grid, { ...prefer, laneFrom: 0, laneTo: 0 });
+  return routeAround(a, b, routeObstacles(obstacles, wireObstacles, grid), grid, prefer);
 }
 
-/** The first of `pool` crossing the fewest of `wireObstacles`, undefined when it is empty. */
+function routeAround(
+  a: Vec2,
+  b: Vec2,
+  obs: RouteObstacles,
+  grid: number,
+  prefer?: RoutePreference,
+): Vec2[] {
+  const pts = routeWithStub(a, b, obs, grid, prefer);
+  if (!(prefer?.laneFrom || prefer?.laneTo) || !crossesBody(pts, obs)) return pts;
+  return routeWithStub(a, b, obs, grid, { ...prefer, laneFrom: 0, laneTo: 0 });
+}
+
+/** The first of `pool` crossing the fewest routed wires, undefined when it is empty. */
 function fewestCrossings<T extends { pts: Vec2[] }>(
   pool: readonly T[],
-  wireObstacles: readonly Vec2[][],
+  obs: RouteObstacles,
 ): T | undefined {
   let best: T | undefined;
   let bestCount = Infinity;
   for (const c of pool) {
-    const n = crossingCount(c.pts, wireObstacles);
+    const n = crossingCount(c.pts, obs);
     if (n < bestCount) {
       best = c;
       bestCount = n;
@@ -326,15 +413,6 @@ function fewestCrossings<T extends { pts: Vec2[] }>(
     if (n === 0) break;
   }
   return best;
-}
-
-function crossingCount(pts: readonly Vec2[], wireObstacles: readonly Vec2[][]): number {
-  let n = 0;
-  for (let i = 0; i < pts.length - 1; i++)
-    for (const other of wireObstacles)
-      for (let j = 0; j < other.length - 1; j++)
-        if (segmentsIntersect(pts[i]!, pts[i + 1]!, other[j]!, other[j + 1]!)) n++;
-  return n;
 }
 
 /** Ensures the first/last legs of a stored-bend-point wire stay orthogonal
@@ -380,6 +458,13 @@ export function wireDisplayPoints(
     : routeAvoiding(a, b, obstacles, wireObstacles, grid);
 }
 
+/** Routes to keep as they are: every wire not in `dirty` takes its entry in
+ *  `routes` instead of routing, and still blocks the wires routed after it. */
+export interface RouteReuse {
+  routes: ReadonlyMap<string, Vec2[]>;
+  dirty: ReadonlySet<string>;
+}
+
 /** The single source of truth for every wire's on-screen route, computed
  *  once and shared by drawing and every hit-test (wireAt, beginWireDrag,
  *  idsInRect, insert-on-wire) -- routing a wire around another wire makes
@@ -398,9 +483,9 @@ export function computeWireRoutes(
   resolveEnd: (end: WireEnd) => Vec2 | undefined,
   boundsById: ReadonlyMap<string, Rect>,
   grid: number,
+  reuse?: RouteReuse,
 ): Map<string, Vec2[]> {
-  const wireObstacles: Vec2[][] = [];
-  const bodyObstacles = [...boundsById.values()];
+  const obs = routeObstacles([...boundsById.values()], [], grid);
   const sideOf = (end: WireEnd, at: Vec2): Side | undefined =>
     end.kind === 'pin' ? pinExitSide(at, boundsById.get(end.component)) : undefined;
   const placed = wires.flatMap((wire): PlacedWire[] => {
@@ -433,13 +518,15 @@ export function computeWireRoutes(
       laneTo: nest.lanes.get(laneKey(i, 'b')) ?? 0,
       avoidCrossings: nest.nested.has(i),
     };
-    const stored = wire.points.length ? orthogonalPolyline(a, wire.points, b) : undefined;
+    const kept = reuse?.dirty.has(wire.id) ? undefined : reuse?.routes.get(wire.id);
+    const stored = !kept && wire.points.length ? orthogonalPolyline(a, wire.points, b) : undefined;
     const pts =
-      stored && !polylineCrossesAny(stored, bodyObstacles) && !hasCollinearReversal(stored)
+      kept ??
+      (stored && !crossesBody(stored, obs) && !hasCollinearReversal(stored)
         ? stored
-        : routeAvoiding(a, b, bodyObstacles, wireObstacles, grid, prefer);
+        : routeAround(a, b, obs, grid, prefer));
     computed.set(wire.id, pts);
-    wireObstacles.push(pts);
+    addWireObstacle(obs, pts);
   }
   // Board order, whatever order they were routed in: callers draw in map order.
   return new Map(placed.map(({ wire }) => [wire.id, computed.get(wire.id)!]));
@@ -517,17 +604,30 @@ function outerFirstOrder(
   count: number,
   outerOf: ReadonlyMap<number, ReadonlySet<number>>,
 ): number[] {
-  const all = Array.from({ length: count }, (_, i) => i);
-  if (outerOf.size === 0) return all;
   const order: number[] = [];
-  const done = new Set<number>();
+  if (outerOf.size === 0) {
+    for (let i = 0; i < count; i++) order.push(i);
+    return order;
+  }
+  const done = new Uint8Array(count);
+  const ready = (i: number) => {
+    const outers = outerOf.get(i);
+    if (!outers) return true;
+    for (const o of outers) if (!done[o]) return false;
+    return true;
+  };
+  // Everything before `first` is done, so each pick scans from there, not from 0.
+  let first = 0;
   while (order.length < count) {
-    const ready = all.find(
-      (i) => !done.has(i) && [...(outerOf.get(i) ?? [])].every((o) => done.has(o)),
-    );
-    const next = ready ?? all.find((i) => !done.has(i))!;
+    while (done[first]) first++;
+    let next = first;
+    for (let i = first; i < count; i++)
+      if (!done[i] && ready(i)) {
+        next = i;
+        break;
+      }
     order.push(next);
-    done.add(next);
+    done[next] = 1;
   }
   return order;
 }

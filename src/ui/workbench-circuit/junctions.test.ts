@@ -363,3 +363,43 @@ describe('collapseJunctions', () => {
     expect(draft.wires).toHaveLength(1);
   });
 });
+
+describe('wire colour across splits and merges', () => {
+  it('both halves of a split keep the colour', () => {
+    const draft = baseCircuit();
+    draft.wires[0]!.color = 'g3';
+    const hit = findWireHit(draft.wires, { x: 50, y: 1 }, 10, resolve)!;
+    let n = 0;
+    splitWireAtHit(draft, hit, 'j1', () => `w${n++}`);
+    expect(draft.wires.map((w) => w.color)).toEqual(['g3', 'g3']);
+  });
+
+  it('a collapsed pass-through keeps a coloured leg', () => {
+    const draft: Circuit = {
+      components: [],
+      junctions: [{ id: 'j1', pos: { x: 50, y: 0 } }],
+      wires: [
+        {
+          id: 'w1',
+          a: { kind: 'free', pos: { x: 0, y: 0 } },
+          b: { kind: 'junction', junction: 'j1' },
+          points: [],
+        },
+        {
+          id: 'w2',
+          a: { kind: 'junction', junction: 'j1' },
+          b: { kind: 'free', pos: { x: 100, y: 0 } },
+          points: [],
+          color: 'g6',
+        },
+      ],
+    };
+    collapseJunctions(
+      draft,
+      () => 'merged',
+      (end) => (end.kind === 'free' ? end.pos : undefined),
+    );
+    expect(draft.wires).toHaveLength(1);
+    expect(draft.wires[0]!.color).toBe('g6');
+  });
+});

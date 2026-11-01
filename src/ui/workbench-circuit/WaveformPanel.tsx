@@ -2,7 +2,15 @@
 // sim's trace ring buffer via core/timing/traceView + render/waveform; the
 // cursor drives store-level scrub-replay so the schematic recolors in sync.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { useCircuitStore } from './circuitStore';
 import { Toggle } from '../components/Toggle';
 import {
@@ -30,15 +38,28 @@ import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { getPrefs } from '../prefs';
 import { useCompact } from '../compact';
 import { effectiveWindow, type Win } from './waveWindow';
+import { MemoryPanel, useMemoryAvailable } from './MemoryPanel';
+import { clampPopupToCanvas } from './paramEdit';
+import type { DockTab } from './circuitStore';
 
 /** Pending Δt measure: first clicked edge, waiting for the second. */
 interface MeasureState {
   t0: number;
 }
 
-export function WaveformPanel() {
+export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement> }) {
   const store = useCircuitStore;
-  const open = useCircuitStore((s) => s.waveformOpen);
+  const dockOpen = useCircuitStore((s) => s.waveformOpen);
+  const dockTab = useCircuitStore((s) => s.dockTab);
+  const memoryAvailable = useMemoryAvailable();
+  const memoryShown = dockOpen && memoryAvailable && dockTab === 'memory';
+  // `open` is the waveform view's own: the Memory tab hides it but keeps this
+  // component, and with it the track order, hiding and window, mounted.
+  const open = dockOpen && !memoryShown;
+  // Memory can also appear without a tab click (back on the board tab, a RAM placed).
+  useEffect(() => {
+    if (memoryShown) store.getState().setDockTab('memory');
+  }, [memoryShown, store]);
   const powered = useCircuitStore((s) => s.powered);
   const running = useCircuitStore((s) => s.running);
   const timing = useCircuitStore((s) => s.timing);
@@ -140,9 +161,15 @@ export function WaveformPanel() {
         setSignalsOpen(false);
       }
     };
+    const close = () => setSignalsOpen(false);
     document.addEventListener('pointerdown', onDocPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
-  }, [signalsOpen]);
+    // Placed once in viewport pixels on a phone; a rotation would strand it.
+    if (compact) window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [signalsOpen, compact]);
 
   // Rebuilding the view copies the whole trace ring buffer and re-segments
   // every track, so it must NOT run per rev bump: while free-running, pump()
@@ -210,6 +237,25 @@ export function WaveformPanel() {
       ...(staReport?.report.worst ? { glitchWindowPs: staReport.report.worst.totalTpdPs } : {}),
     });
   }, [open, viewLen, effectiveWin, column, thresholdNs, powered, store, staReport]);
+
+  // Fixed on a phone, placed from its button: the compact header scrolls sideways and a
+  // scroller clips an absolute child.
+  const signalsPopRef = useRef<HTMLDivElement>(null);
+  const trackCount = view?.tracks.length ?? 0;
+  useLayoutEffect(() => {
+    const pop = signalsPopRef.current;
+    const anchor = signalsRef.current;
+    if (!compact || !signalsOpen || !pop || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const { x, y } = clampPopupToCanvas(
+      { compLeft: r.left, compTop: r.top, compRight: r.right, compBottom: r.bottom },
+      { w: pop.offsetWidth, h: pop.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight },
+    );
+    pop.style.left = `${x}px`;
+    pop.style.top = `${y}px`;
+    // The popover mounts with the first trace and grows with the track count.
+  }, [compact, signalsOpen, trackCount]);
 
   // Owner decision (generalized, Task 1d follow-up): only ONE track per net
   // starts checked -- the same canonical pick the glitch scan already hosts
@@ -781,8 +827,8 @@ export function WaveformPanel() {
   const hasBands = !!view?.tracks.some((t) => t.bands.length);
 
   return (
-    <div className={`wave-panel${open ? ' wave-panel--open' : ''}`}>
-      {open && (
+    <div ref={rootRef} className={`wave-panel${dockOpen ? ' wave-panel--open' : ''}`}>
+      {dockOpen && (
         <div
           className="wave-panel__resize"
           title="Drag to resize the panel"
@@ -805,14 +851,21 @@ export function WaveformPanel() {
         />
       )}
       <div className="wave-panel__header">
-        <button
-          type="button"
-          className="tool-btn"
-          title="Toggle the waveform panel"
-          onClick={() => store.getState().setWaveformOpen(!open)}
-        >
-          {open ? '▾ Waveforms' : '▸ Waveforms'}
-        </button>
+        {memoryAvailable ? (
+          <span className="dock-tabs" role="tablist">
+            <DockTabButton tab="waves" label="Waveforms" shown={open} />
+            <DockTabButton tab="memory" label="Memory" shown={memoryShown} />
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="tool-btn"
+            title="Toggle the waveform panel"
+            onClick={() => store.getState().setWaveformOpen(!open)}
+          >
+            {open ? '▾ Waveforms' : '▸ Waveforms'}
+          </button>
+        )}
         {open && (
           <>
             <label className="wave-panel__toggle" title="Keep the whole recorded trace in view">
@@ -907,7 +960,7 @@ export function WaveformPanel() {
                 Signals{hiddenTracks.size ? ` (${hiddenTracks.size} hidden)` : ''}
               </button>
               {signalsOpen && view && (
-                <div className="wave-panel__signals-pop">
+                <div ref={signalsPopRef} className="wave-panel__signals-pop">
                   {view.tracks.map((t) => (
                     <label key={t.path}>
                       <input
@@ -965,6 +1018,15 @@ export function WaveformPanel() {
           </>
         )}
       </div>
+      {memoryShown && (
+        <div
+          className="wave-panel__body wave-panel__body--memory"
+          ref={wrapRef}
+          style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
+        >
+          <MemoryPanel />
+        </div>
+      )}
       {open && (
         <div
           className="wave-panel__body"
@@ -1048,5 +1110,28 @@ export function WaveformPanel() {
         </div>
       )}
     </div>
+  );
+}
+
+/** A dock tab: picks its view, or folds the dock when that view is already up. */
+function DockTabButton({ tab, label, shown }: { tab: DockTab; label: string; shown: boolean }) {
+  const pick = () => {
+    const st = useCircuitStore.getState();
+    if (shown) return st.setWaveformOpen(false);
+    st.setDockTab(tab);
+    st.setWaveformOpen(true);
+  };
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={shown}
+      aria-pressed={shown}
+      className="tool-btn"
+      title={shown ? `Fold the ${label.toLowerCase()} panel` : `Show ${label.toLowerCase()}`}
+      onClick={pick}
+    >
+      {shown ? `▾ ${label}` : `▸ ${label}`}
+    </button>
   );
 }

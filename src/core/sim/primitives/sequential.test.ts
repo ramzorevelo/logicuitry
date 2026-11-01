@@ -148,6 +148,95 @@ describe('register enableLow', () => {
   });
 });
 
+describe('register outputEnable', () => {
+  const params = { width: 4, outputEnable: true };
+  const loaded = () =>
+    new Bench(register, params).set({ d: '1010', clk: '0', en: '1', oe: '1' }).clock();
+
+  it('adds oe after en and marks q three-state only when set', () => {
+    expect(register.pins(params).map((p) => p.name)).toEqual(['d', 'clk', 'en', 'oe', 'q']);
+    expect(register.pins(params).find((p) => p.name === 'q')?.threeState).toBe(true);
+    expect(register.pins({ width: 4 }).map((p) => p.name)).toEqual(['d', 'clk', 'en', 'q']);
+    expect(register.pins({ width: 4 }).find((p) => p.name === 'q')?.threeState).toBeUndefined();
+  });
+
+  it('floats q at oe 0, gives X at oe X, and keeps the stored word', () => {
+    const b = loaded();
+    expect(b.out('q')).toBe('1010');
+    expect(b.set({ oe: '0' }).out('q')).toBe('ZZZZ');
+    expect(b.set({ oe: 'X' }).out('q')).toBe('XXXX');
+    expect(b.set({ oe: '1' }).out('q')).toBe('1010');
+  });
+
+  it('loads while oe is 0', () => {
+    const b = loaded().set({ oe: '0', d: '0110' }).clock();
+    expect(b.set({ oe: '1' }).out('q')).toBe('0110');
+  });
+});
+
+describe('register async clear', () => {
+  const params = { width: 4, clear: 'async' };
+  const bench = () =>
+    new Bench(register, params).set({ d: '1111', clk: '0', en: '1', clr: '0' }).clock();
+
+  it('adds clr after en, active high', () => {
+    expect(register.pins(params).map((p) => p.name)).toEqual(['d', 'clk', 'en', 'clr', 'q']);
+    expect(register.pins(params).find((p) => p.name === 'clr')?.activeLow).toBeUndefined();
+  });
+
+  it('clears at once and beats the clock while asserted', () => {
+    const b = bench();
+    expect(b.out('q')).toBe('1111');
+    expect(b.set({ clr: '1' }).out('q')).toBe('0000');
+    b.clock();
+    expect(b.out('q')).toBe('0000');
+  });
+
+  it('ignores an edge in the evaluation that releases it, then loads', () => {
+    const c = bench().set({ clr: '1' }).set({ clk: '0' }).set({ clr: '0', clk: '1' });
+    expect(c.out('q')).toBe('0000');
+    c.clock();
+    expect(c.out('q')).toBe('1111');
+  });
+
+  it('an unknown clr keeps only the bits that agree with cleared', () => {
+    expect(bench().set({ clr: 'X' }).out('q')).toBe('XXXX');
+    expect(bench().set({ clr: '1' }).set({ clr: 'X' }).out('q')).toBe('0000');
+  });
+});
+
+describe('register dualEnable', () => {
+  const params = { width: 4, dualEnable: true };
+  const loads = (en: string, en2: string, p: Params = params) =>
+    new Bench(register, p).set({ d: '0101', clk: '0', en, en2 }).clock().out('q');
+
+  it('adds en2 after en', () => {
+    expect(register.pins(params).map((p) => p.name)).toEqual(['d', 'clk', 'en', 'en2', 'q']);
+  });
+
+  it('loads only with both enables asserted', () => {
+    expect(loads('1', '1')).toBe('0101');
+    expect(loads('1', '0')).toBe('XXXX');
+    expect(loads('0', '1')).toBe('XXXX');
+  });
+
+  it('holds a stored word when either enable is off', () => {
+    const b = new Bench(register, params).set({ d: '0101', clk: '0', en: '1', en2: '1' }).clock();
+    b.set({ d: '1111', en2: '0' }).clock();
+    expect(b.out('q')).toBe('0101');
+  });
+
+  it('with enableLow both are active low', () => {
+    const low = { ...params, enableLow: true };
+    const flagged = register.pins(low).filter((p) => p.activeLow);
+    expect(flagged.map((p) => p.name)).toEqual(['en', 'en2']);
+    expect(loads('0', '0', low)).toBe('0101');
+    const b = new Bench(register, low).set({ d: '0101', clk: '0', en: '0', en2: '0' }).clock();
+    b.set({ d: '1111', en2: '1' }).clock();
+    expect(b.out('q')).toBe('0101');
+  });
+});
+
 describe('srlatch', () => {
   // [S, R] as their asserted levels; the NAND form drives the complements.
   const forms = [

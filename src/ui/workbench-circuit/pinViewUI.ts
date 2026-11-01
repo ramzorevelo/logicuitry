@@ -11,6 +11,7 @@ import {
   serializePinView,
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
+import { RAM_DEFAULT_ADDRESS_BITS } from '../../core/sim/primitives/ram';
 import type { ParamValue } from '../../core/model/types';
 import type { Params } from '../../core/sim/primitives/types';
 
@@ -92,6 +93,13 @@ export function pinViewGroupsFor(kind: string, params: Record<string, ParamValue
     const addressBits = Number(params['addressBits'] ?? 2);
     const groups: PinViewGroup[] = [{ key: 'i', label: 'inputs' }];
     if (addressBits > 1) groups.push({ key: 'a', label: 'a' });
+    return groups;
+  }
+  if (kind === 'ram') {
+    const groups: PinViewGroup[] = [];
+    if (Number(params['addressBits'] ?? RAM_DEFAULT_ADDRESS_BITS) > 1)
+      groups.push({ key: 'a', label: 'a' });
+    if (width > 1) groups.push({ key: 'd', label: 'd' }, { key: 'q', label: 'q' });
     return groups;
   }
   return [];

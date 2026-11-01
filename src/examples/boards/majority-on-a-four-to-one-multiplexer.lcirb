@@ -1,0 +1,233 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "majority-on-a-four-to-one-multiplexer",
+  "name": "Majority on a four-to-one multiplexer",
+  "components": [
+    {
+      "id": "k0",
+      "kind": "constant",
+      "pos": {
+        "x": 176,
+        "y": 96
+      },
+      "label": "0",
+      "params": {
+        "value": 0
+      }
+    },
+    {
+      "id": "c",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 136
+      },
+      "label": "C"
+    },
+    {
+      "id": "k1",
+      "kind": "constant",
+      "pos": {
+        "x": 176,
+        "y": 200
+      },
+      "label": "1",
+      "params": {
+        "value": 1
+      }
+    },
+    {
+      "id": "m",
+      "kind": "mux",
+      "pos": {
+        "x": 336,
+        "y": 96
+      },
+      "params": {
+        "selectBits": 2
+      }
+    },
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 328
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 376
+      },
+      "label": "B"
+    },
+    {
+      "id": "y",
+      "kind": "led",
+      "pos": {
+        "x": 520,
+        "y": 112
+      },
+      "label": "Y"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "k0",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d0"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "c",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d1"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d2"
+      },
+      "points": [
+        {
+          "x": 328,
+          "y": 168
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "k1",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 264,
+          "y": 184
+        },
+        {
+          "x": 264,
+          "y": 240
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "s1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 376,
+          "y": 344
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "s0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 392,
+          "y": 392
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 328,
+        "y": 152
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

@@ -44,7 +44,7 @@ describe('dirty against the saved board', () => {
     expect(s.hasTabEdits()).toBe(false);
     const def = {
       format: 'lcir.chip' as const,
-      formatVersion: 5 as const,
+      formatVersion: 7 as const,
       id: 'mine',
       name: 'mine',
       version: 1,

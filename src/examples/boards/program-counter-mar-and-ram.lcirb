@@ -1,0 +1,5674 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 9,
+  "id": "program-counter-mar-and-ram",
+  "name": "Program counter, MAR and RAM",
+  "components": [
+    {
+      "id": "clk",
+      "kind": "clock",
+      "pos": {
+        "x": 40,
+        "y": -48
+      },
+      "label": "CLK",
+      "params": {
+        "periodPs": 200000
+      }
+    },
+    {
+      "id": "clr",
+      "kind": "toggle",
+      "pos": {
+        "x": 208,
+        "y": -48
+      },
+      "label": "CLR",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "ce",
+      "kind": "toggle",
+      "pos": {
+        "x": 344,
+        "y": -48
+      },
+      "label": "CE",
+      "params": {
+        "initial": 0
+      }
+    },
+    {
+      "id": "nco",
+      "kind": "toggle",
+      "pos": {
+        "x": 480,
+        "y": -48
+      },
+      "label": "/CO",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "nj",
+      "kind": "toggle",
+      "pos": {
+        "x": 616,
+        "y": -48
+      },
+      "label": "/J",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "nmi",
+      "kind": "toggle",
+      "pos": {
+        "x": 752,
+        "y": -48
+      },
+      "label": "/MI",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "ri",
+      "kind": "toggle",
+      "pos": {
+        "x": 888,
+        "y": -48
+      },
+      "label": "RI",
+      "params": {
+        "initial": 0
+      }
+    },
+    {
+      "id": "nro",
+      "kind": "toggle",
+      "pos": {
+        "x": 1024,
+        "y": -48
+      },
+      "label": "/RO",
+      "params": {
+        "initial": 1
+      }
+    },
+    {
+      "id": "prog",
+      "kind": "toggle",
+      "pos": {
+        "x": 1176,
+        "y": -48
+      },
+      "label": "PROG",
+      "params": {
+        "initial": 0
+      }
+    },
+    {
+      "id": "wr",
+      "kind": "button",
+      "pos": {
+        "x": 1344,
+        "y": -48
+      },
+      "label": "WRITE"
+    },
+    {
+      "id": "addr",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 120
+      },
+      "label": "ADDR",
+      "params": {
+        "width": 4,
+        "initial": 0,
+        "pinView": "y=expanded"
+      }
+    },
+    {
+      "id": "data",
+      "kind": "toggle",
+      "pos": {
+        "x": 40,
+        "y": 240
+      },
+      "label": "DATA",
+      "params": {
+        "width": 8,
+        "initial": 0,
+        "pinView": "y=expanded"
+      }
+    },
+    {
+      "id": "pcx",
+      "kind": "chip",
+      "pos": {
+        "x": 536,
+        "y": 96
+      },
+      "defId": "74LS245",
+      "label": "PC OUT"
+    },
+    {
+      "id": "mar",
+      "kind": "chip",
+      "pos": {
+        "x": 536,
+        "y": 320
+      },
+      "defId": "74LS173",
+      "label": "MAR"
+    },
+    {
+      "id": "dl",
+      "kind": "chip",
+      "pos": {
+        "x": 536,
+        "y": 512
+      },
+      "defId": "74LS157",
+      "label": "DATA LO MUX"
+    },
+    {
+      "id": "dh",
+      "kind": "chip",
+      "pos": {
+        "x": 536,
+        "y": 720
+      },
+      "defId": "74LS157",
+      "label": "DATA HI MUX"
+    },
+    {
+      "id": "rx",
+      "kind": "chip",
+      "pos": {
+        "x": 536,
+        "y": 928
+      },
+      "defId": "74LS245",
+      "label": "RAM OUT"
+    },
+    {
+      "id": "am",
+      "kind": "chip",
+      "pos": {
+        "x": 288,
+        "y": 320
+      },
+      "defId": "74LS157",
+      "label": "ADDR MUX"
+    },
+    {
+      "id": "rl",
+      "kind": "chip",
+      "pos": {
+        "x": 288,
+        "y": 512
+      },
+      "defId": "74LS189",
+      "label": "RAM LO",
+      "contents": {
+        "u1": "E F 0 0 0 0 0 0 0 0 0 0 0 0 C E"
+      }
+    },
+    {
+      "id": "rh",
+      "kind": "chip",
+      "pos": {
+        "x": 288,
+        "y": 720
+      },
+      "defId": "74LS189",
+      "label": "RAM HI",
+      "contents": {
+        "u1": "1 2 E F 0 0 0 0 0 0 0 0 0 0 1 0"
+      }
+    },
+    {
+      "id": "il",
+      "kind": "chip",
+      "pos": {
+        "x": 288,
+        "y": 928
+      },
+      "defId": "74LS04",
+      "label": "RAM LO INV"
+    },
+    {
+      "id": "ih",
+      "kind": "chip",
+      "pos": {
+        "x": 288,
+        "y": 1088
+      },
+      "defId": "74LS04",
+      "label": "RAM HI INV"
+    },
+    {
+      "id": "pc",
+      "kind": "chip",
+      "pos": {
+        "x": 904,
+        "y": 96
+      },
+      "defId": "74LS161",
+      "label": "PC"
+    },
+    {
+      "id": "bus",
+      "kind": "led",
+      "pos": {
+        "x": 904,
+        "y": 320
+      },
+      "label": "BUS",
+      "params": {
+        "width": 8,
+        "pinView": "a=expanded"
+      }
+    },
+    {
+      "id": "ctl",
+      "kind": "chip",
+      "pos": {
+        "x": 40,
+        "y": 400
+      },
+      "defId": "74LS04",
+      "label": "CTRL INV"
+    },
+    {
+      "id": "nd",
+      "kind": "chip",
+      "pos": {
+        "x": 40,
+        "y": 560
+      },
+      "defId": "74LS00",
+      "label": "WRITE GATE"
+    },
+    {
+      "id": "pd0",
+      "kind": "pulldown",
+      "pos": {
+        "x": 708,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd1",
+      "kind": "pulldown",
+      "pos": {
+        "x": 724,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd2",
+      "kind": "pulldown",
+      "pos": {
+        "x": 740,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd3",
+      "kind": "pulldown",
+      "pos": {
+        "x": 756,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd4",
+      "kind": "pulldown",
+      "pos": {
+        "x": 772,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd5",
+      "kind": "pulldown",
+      "pos": {
+        "x": 788,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd6",
+      "kind": "pulldown",
+      "pos": {
+        "x": 804,
+        "y": 1152
+      }
+    },
+    {
+      "id": "pd7",
+      "kind": "pulldown",
+      "pos": {
+        "x": 820,
+        "y": 1152
+      }
+    },
+    {
+      "id": "ln34",
+      "kind": "netlabel",
+      "pos": {
+        "x": 112,
+        "y": -40
+      },
+      "label": "CLK"
+    },
+    {
+      "id": "ln35",
+      "kind": "netlabel",
+      "pos": {
+        "x": -16,
+        "y": 408
+      },
+      "label": "CLK",
+      "mirror": true
+    },
+    {
+      "id": "ln36",
+      "kind": "netlabel",
+      "pos": {
+        "x": 848,
+        "y": 120
+      },
+      "label": "CLK",
+      "mirror": true
+    },
+    {
+      "id": "ln37",
+      "kind": "netlabel",
+      "pos": {
+        "x": 480,
+        "y": 424
+      },
+      "label": "CLK",
+      "mirror": true
+    },
+    {
+      "id": "ln38",
+      "kind": "netlabel",
+      "pos": {
+        "x": 256,
+        "y": -40
+      },
+      "label": "CLR"
+    },
+    {
+      "id": "ln39",
+      "kind": "netlabel",
+      "pos": {
+        "x": -16,
+        "y": 440
+      },
+      "label": "CLR",
+      "mirror": true
+    },
+    {
+      "id": "ln40",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 344
+      },
+      "label": "CLR"
+    },
+    {
+      "id": "ln41",
+      "kind": "netlabel",
+      "pos": {
+        "x": 392,
+        "y": -40
+      },
+      "label": "CE"
+    },
+    {
+      "id": "ln42",
+      "kind": "netlabel",
+      "pos": {
+        "x": 856,
+        "y": 200
+      },
+      "label": "CE",
+      "mirror": true
+    },
+    {
+      "id": "ln43",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1016,
+        "y": 200
+      },
+      "label": "CE"
+    },
+    {
+      "id": "ln44",
+      "kind": "netlabel",
+      "pos": {
+        "x": 528,
+        "y": -40
+      },
+      "label": "/CO"
+    },
+    {
+      "id": "ln45",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 120
+      },
+      "label": "/CO"
+    },
+    {
+      "id": "ln46",
+      "kind": "netlabel",
+      "pos": {
+        "x": 664,
+        "y": -40
+      },
+      "label": "/J"
+    },
+    {
+      "id": "ln47",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1016,
+        "y": 216
+      },
+      "label": "/J"
+    },
+    {
+      "id": "ln48",
+      "kind": "netlabel",
+      "pos": {
+        "x": 800,
+        "y": -40
+      },
+      "label": "/MI"
+    },
+    {
+      "id": "ln49",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 440
+      },
+      "label": "/MI"
+    },
+    {
+      "id": "ln50",
+      "kind": "netlabel",
+      "pos": {
+        "x": 936,
+        "y": -40
+      },
+      "label": "RI"
+    },
+    {
+      "id": "ln51",
+      "kind": "netlabel",
+      "pos": {
+        "x": -8,
+        "y": 568
+      },
+      "label": "RI",
+      "mirror": true
+    },
+    {
+      "id": "ln52",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1072,
+        "y": -40
+      },
+      "label": "/RO"
+    },
+    {
+      "id": "ln53",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 952
+      },
+      "label": "/RO"
+    },
+    {
+      "id": "ln54",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1224,
+        "y": -40
+      },
+      "label": "PROG"
+    },
+    {
+      "id": "ln55",
+      "kind": "netlabel",
+      "pos": {
+        "x": -24,
+        "y": 616
+      },
+      "label": "PROG",
+      "mirror": true
+    },
+    {
+      "id": "ln56",
+      "kind": "netlabel",
+      "pos": {
+        "x": 224,
+        "y": 328
+      },
+      "label": "PROG",
+      "mirror": true
+    },
+    {
+      "id": "ln57",
+      "kind": "netlabel",
+      "pos": {
+        "x": 472,
+        "y": 520
+      },
+      "label": "PROG",
+      "mirror": true
+    },
+    {
+      "id": "ln58",
+      "kind": "netlabel",
+      "pos": {
+        "x": 472,
+        "y": 728
+      },
+      "label": "PROG",
+      "mirror": true
+    },
+    {
+      "id": "ln59",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1392,
+        "y": -40
+      },
+      "label": "WRITE"
+    },
+    {
+      "id": "ln60",
+      "kind": "netlabel",
+      "pos": {
+        "x": -32,
+        "y": 632
+      },
+      "label": "WRITE",
+      "mirror": true
+    },
+    {
+      "id": "ln61",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 168
+      },
+      "label": "SA0"
+    },
+    {
+      "id": "ln62",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 360
+      },
+      "label": "SA0",
+      "mirror": true
+    },
+    {
+      "id": "ln63",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 152
+      },
+      "label": "SA1"
+    },
+    {
+      "id": "ln64",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 408
+      },
+      "label": "SA1",
+      "mirror": true
+    },
+    {
+      "id": "ln65",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 136
+      },
+      "label": "SA2"
+    },
+    {
+      "id": "ln66",
+      "kind": "netlabel",
+      "pos": {
+        "x": 400,
+        "y": 424
+      },
+      "label": "SA2"
+    },
+    {
+      "id": "ln67",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 120
+      },
+      "label": "SA3"
+    },
+    {
+      "id": "ln68",
+      "kind": "netlabel",
+      "pos": {
+        "x": 400,
+        "y": 376
+      },
+      "label": "SA3"
+    },
+    {
+      "id": "ln69",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 352
+      },
+      "label": "SD0"
+    },
+    {
+      "id": "ln70",
+      "kind": "netlabel",
+      "pos": {
+        "x": 432,
+        "y": 552
+      },
+      "label": "SD0",
+      "mirror": true
+    },
+    {
+      "id": "ln71",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 336
+      },
+      "label": "SD1"
+    },
+    {
+      "id": "ln72",
+      "kind": "netlabel",
+      "pos": {
+        "x": 432,
+        "y": 600
+      },
+      "label": "SD1",
+      "mirror": true
+    },
+    {
+      "id": "ln73",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 320
+      },
+      "label": "SD2"
+    },
+    {
+      "id": "ln74",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 616
+      },
+      "label": "SD2"
+    },
+    {
+      "id": "ln75",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 304
+      },
+      "label": "SD3"
+    },
+    {
+      "id": "ln76",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 568
+      },
+      "label": "SD3"
+    },
+    {
+      "id": "ln77",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 288
+      },
+      "label": "SD4"
+    },
+    {
+      "id": "ln78",
+      "kind": "netlabel",
+      "pos": {
+        "x": 432,
+        "y": 760
+      },
+      "label": "SD4",
+      "mirror": true
+    },
+    {
+      "id": "ln79",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 272
+      },
+      "label": "SD5"
+    },
+    {
+      "id": "ln80",
+      "kind": "netlabel",
+      "pos": {
+        "x": 432,
+        "y": 808
+      },
+      "label": "SD5",
+      "mirror": true
+    },
+    {
+      "id": "ln81",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 256
+      },
+      "label": "SD6"
+    },
+    {
+      "id": "ln82",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 824
+      },
+      "label": "SD6"
+    },
+    {
+      "id": "ln83",
+      "kind": "netlabel",
+      "pos": {
+        "x": 88,
+        "y": 240
+      },
+      "label": "SD7"
+    },
+    {
+      "id": "ln84",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 776
+      },
+      "label": "SD7"
+    },
+    {
+      "id": "ln85",
+      "kind": "netlabel",
+      "pos": {
+        "x": -24,
+        "y": 424
+      },
+      "label": "/CLK",
+      "mirror": true
+    },
+    {
+      "id": "ln86",
+      "kind": "netlabel",
+      "pos": {
+        "x": -24,
+        "y": 584
+      },
+      "label": "/CLK",
+      "mirror": true
+    },
+    {
+      "id": "ln87",
+      "kind": "netlabel",
+      "pos": {
+        "x": -24,
+        "y": 456
+      },
+      "label": "/CLR",
+      "mirror": true
+    },
+    {
+      "id": "ln88",
+      "kind": "netlabel",
+      "pos": {
+        "x": 840,
+        "y": 104
+      },
+      "label": "/CLR",
+      "mirror": true
+    },
+    {
+      "id": "ln89",
+      "kind": "netlabel",
+      "pos": {
+        "x": 0,
+        "y": 472
+      },
+      "label": "W",
+      "mirror": true
+    },
+    {
+      "id": "ln90",
+      "kind": "netlabel",
+      "pos": {
+        "x": 152,
+        "y": 664
+      },
+      "label": "W"
+    },
+    {
+      "id": "ln91",
+      "kind": "netlabel",
+      "pos": {
+        "x": -16,
+        "y": 488
+      },
+      "label": "/WE",
+      "mirror": true
+    },
+    {
+      "id": "ln92",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 552
+      },
+      "label": "/WE",
+      "mirror": true
+    },
+    {
+      "id": "ln93",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 760
+      },
+      "label": "/WE",
+      "mirror": true
+    },
+    {
+      "id": "ln94",
+      "kind": "netlabel",
+      "pos": {
+        "x": -8,
+        "y": 600
+      },
+      "label": "W1",
+      "mirror": true
+    },
+    {
+      "id": "ln95",
+      "kind": "netlabel",
+      "pos": {
+        "x": 152,
+        "y": 632
+      },
+      "label": "W1"
+    },
+    {
+      "id": "ln96",
+      "kind": "netlabel",
+      "pos": {
+        "x": -8,
+        "y": 648
+      },
+      "label": "W2",
+      "mirror": true
+    },
+    {
+      "id": "ln97",
+      "kind": "netlabel",
+      "pos": {
+        "x": 152,
+        "y": 648
+      },
+      "label": "W2"
+    },
+    {
+      "id": "vctl",
+      "kind": "vcc",
+      "pos": {
+        "x": 152,
+        "y": 368
+      }
+    },
+    {
+      "id": "gctl",
+      "kind": "gnd",
+      "pos": {
+        "x": -16,
+        "y": 520
+      }
+    },
+    {
+      "id": "vnd",
+      "kind": "vcc",
+      "pos": {
+        "x": 152,
+        "y": 528
+      }
+    },
+    {
+      "id": "gnd",
+      "kind": "gnd",
+      "pos": {
+        "x": -16,
+        "y": 680
+      }
+    },
+    {
+      "id": "vpc",
+      "kind": "vcc",
+      "pos": {
+        "x": 1016,
+        "y": 64
+      }
+    },
+    {
+      "id": "gpc",
+      "kind": "gnd",
+      "pos": {
+        "x": 848,
+        "y": 232
+      }
+    },
+    {
+      "id": "vpcx",
+      "kind": "vcc",
+      "pos": {
+        "x": 648,
+        "y": 64
+      }
+    },
+    {
+      "id": "gpcx",
+      "kind": "gnd",
+      "pos": {
+        "x": 480,
+        "y": 264
+      }
+    },
+    {
+      "id": "vmar",
+      "kind": "vcc",
+      "pos": {
+        "x": 648,
+        "y": 288
+      }
+    },
+    {
+      "id": "gmar",
+      "kind": "gnd",
+      "pos": {
+        "x": 480,
+        "y": 456
+      }
+    },
+    {
+      "id": "vam",
+      "kind": "vcc",
+      "pos": {
+        "x": 400,
+        "y": 288
+      }
+    },
+    {
+      "id": "gam",
+      "kind": "gnd",
+      "pos": {
+        "x": 232,
+        "y": 456
+      }
+    },
+    {
+      "id": "vdl",
+      "kind": "vcc",
+      "pos": {
+        "x": 648,
+        "y": 480
+      }
+    },
+    {
+      "id": "gdl",
+      "kind": "gnd",
+      "pos": {
+        "x": 480,
+        "y": 648
+      }
+    },
+    {
+      "id": "vdh",
+      "kind": "vcc",
+      "pos": {
+        "x": 648,
+        "y": 688
+      }
+    },
+    {
+      "id": "gdh",
+      "kind": "gnd",
+      "pos": {
+        "x": 480,
+        "y": 856
+      }
+    },
+    {
+      "id": "vrl",
+      "kind": "vcc",
+      "pos": {
+        "x": 400,
+        "y": 480
+      }
+    },
+    {
+      "id": "grl",
+      "kind": "gnd",
+      "pos": {
+        "x": 232,
+        "y": 648
+      }
+    },
+    {
+      "id": "vrh",
+      "kind": "vcc",
+      "pos": {
+        "x": 400,
+        "y": 688
+      }
+    },
+    {
+      "id": "grh",
+      "kind": "gnd",
+      "pos": {
+        "x": 232,
+        "y": 856
+      }
+    },
+    {
+      "id": "vil",
+      "kind": "vcc",
+      "pos": {
+        "x": 400,
+        "y": 896
+      }
+    },
+    {
+      "id": "gil",
+      "kind": "gnd",
+      "pos": {
+        "x": 232,
+        "y": 1048
+      }
+    },
+    {
+      "id": "vih",
+      "kind": "vcc",
+      "pos": {
+        "x": 400,
+        "y": 1056
+      }
+    },
+    {
+      "id": "gih",
+      "kind": "gnd",
+      "pos": {
+        "x": 232,
+        "y": 1208
+      }
+    },
+    {
+      "id": "vrx",
+      "kind": "vcc",
+      "pos": {
+        "x": 648,
+        "y": 896
+      }
+    },
+    {
+      "id": "grx",
+      "kind": "gnd",
+      "pos": {
+        "x": 480,
+        "y": 1096
+      }
+    },
+    {
+      "id": "tgnd",
+      "kind": "gnd",
+      "pos": {
+        "x": 1320,
+        "y": 8
+      }
+    },
+    {
+      "id": "tglab",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1368,
+        "y": 0
+      },
+      "label": "GND"
+    },
+    {
+      "id": "lt126",
+      "kind": "netlabel",
+      "pos": {
+        "x": 480,
+        "y": 328
+      },
+      "label": "GND",
+      "mirror": true
+    },
+    {
+      "id": "lt127",
+      "kind": "netlabel",
+      "pos": {
+        "x": 480,
+        "y": 344
+      },
+      "label": "GND",
+      "mirror": true
+    },
+    {
+      "id": "lt128",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 424
+      },
+      "label": "GND"
+    },
+    {
+      "id": "lt129",
+      "kind": "netlabel",
+      "pos": {
+        "x": 400,
+        "y": 344
+      },
+      "label": "GND"
+    },
+    {
+      "id": "lt130",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 536
+      },
+      "label": "GND"
+    },
+    {
+      "id": "lt131",
+      "kind": "netlabel",
+      "pos": {
+        "x": 648,
+        "y": 744
+      },
+      "label": "GND"
+    },
+    {
+      "id": "lt132",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 536
+      },
+      "label": "GND",
+      "mirror": true
+    },
+    {
+      "id": "lt133",
+      "kind": "netlabel",
+      "pos": {
+        "x": 232,
+        "y": 744
+      },
+      "label": "GND",
+      "mirror": true
+    },
+    {
+      "id": "tvcc",
+      "kind": "vcc",
+      "pos": {
+        "x": 1320,
+        "y": 56
+      }
+    },
+    {
+      "id": "tvlab",
+      "kind": "netlabel",
+      "pos": {
+        "x": 1368,
+        "y": 40
+      },
+      "label": "VCC"
+    },
+    {
+      "id": "lt136",
+      "kind": "netlabel",
+      "pos": {
+        "x": 480,
+        "y": 104
+      },
+      "label": "VCC",
+      "mirror": true
+    },
+    {
+      "id": "lt137",
+      "kind": "netlabel",
+      "pos": {
+        "x": 480,
+        "y": 936
+      },
+      "label": "VCC",
+      "mirror": true
+    }
+  ],
+  "wires": [
+    {
+      "id": "w97",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "A1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "QA"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 128
+        },
+        {
+          "x": 464,
+          "y": 56
+        },
+        {
+          "x": 1064,
+          "y": 56
+        },
+        {
+          "x": 1064,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w70",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "1Q"
+      },
+      "points": [
+        {
+          "x": 208,
+          "y": 352
+        },
+        {
+          "x": 208,
+          "y": 272
+        },
+        {
+          "x": 464,
+          "y": 272
+        },
+        {
+          "x": 464,
+          "y": 384
+        },
+        {
+          "x": 528,
+          "y": 384
+        },
+        {
+          "x": 528,
+          "y": 368
+        }
+      ]
+    },
+    {
+      "id": "w80",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "1Y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 384
+        }
+      ]
+    },
+    {
+      "id": "w81",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "A0"
+      },
+      "points": []
+    },
+    {
+      "id": "w82",
+      "a": {
+        "kind": "junction",
+        "junction": "j2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "A0"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 736
+        }
+      ]
+    },
+    {
+      "id": "w62",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "D1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "1Y"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 576
+        },
+        {
+          "x": 280,
+          "y": 672
+        },
+        {
+          "x": 408,
+          "y": 672
+        },
+        {
+          "x": 408,
+          "y": 576
+        }
+      ]
+    },
+    {
+      "id": "w60",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "D1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "1Y"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 784
+        },
+        {
+          "x": 280,
+          "y": 880
+        },
+        {
+          "x": 408,
+          "y": 880
+        },
+        {
+          "x": 408,
+          "y": 784
+        }
+      ]
+    },
+    {
+      "id": "w83",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/O1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "1A"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 592
+        },
+        {
+          "x": 232,
+          "y": 648
+        },
+        {
+          "x": 208,
+          "y": 648
+        },
+        {
+          "x": 208,
+          "y": 688
+        },
+        {
+          "x": 168,
+          "y": 688
+        },
+        {
+          "x": 168,
+          "y": 944
+        }
+      ]
+    },
+    {
+      "id": "w74",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/O1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "1A"
+      },
+      "points": [
+        {
+          "x": 200,
+          "y": 800
+        },
+        {
+          "x": 200,
+          "y": 1104
+        }
+      ]
+    },
+    {
+      "id": "w64",
+      "a": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "1Y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A1"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 960
+        },
+        {
+          "x": 280,
+          "y": 912
+        },
+        {
+          "x": 392,
+          "y": 912
+        },
+        {
+          "x": 392,
+          "y": 928
+        },
+        {
+          "x": 400,
+          "y": 928
+        },
+        {
+          "x": 400,
+          "y": 960
+        }
+      ]
+    },
+    {
+      "id": "w79",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "1Y"
+      },
+      "points": [
+        {
+          "x": 528,
+          "y": 1024
+        },
+        {
+          "x": 528,
+          "y": 1232
+        },
+        {
+          "x": 272,
+          "y": 1232
+        },
+        {
+          "x": 272,
+          "y": 1120
+        }
+      ]
+    },
+    {
+      "id": "w98",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "A2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "QB"
+      },
+      "points": [
+        {
+          "x": 384,
+          "y": 144
+        },
+        {
+          "x": 384,
+          "y": -8
+        },
+        {
+          "x": 1112,
+          "y": -8
+        },
+        {
+          "x": 1112,
+          "y": 160
+        }
+      ]
+    },
+    {
+      "id": "w71",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "2Q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "2A"
+      },
+      "points": [
+        {
+          "x": 528,
+          "y": 384
+        },
+        {
+          "x": 528,
+          "y": 392
+        },
+        {
+          "x": 472,
+          "y": 392
+        },
+        {
+          "x": 472,
+          "y": 456
+        },
+        {
+          "x": 392,
+          "y": 456
+        },
+        {
+          "x": 392,
+          "y": 480
+        },
+        {
+          "x": 280,
+          "y": 480
+        },
+        {
+          "x": 280,
+          "y": 512
+        },
+        {
+          "x": 216,
+          "y": 512
+        },
+        {
+          "x": 216,
+          "y": 400
+        }
+      ]
+    },
+    {
+      "id": "w92",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "2Y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "points": [
+        {
+          "x": 280,
+          "y": 432
+        },
+        {
+          "x": 280,
+          "y": 456
+        },
+        {
+          "x": 288,
+          "y": 456
+        }
+      ]
+    },
+    {
+      "id": "w93",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "A1"
+      },
+      "points": [
+        {
+          "x": 272,
+          "y": 496
+        },
+        {
+          "x": 272,
+          "y": 520
+        },
+        {
+          "x": 224,
+          "y": 520
+        },
+        {
+          "x": 224,
+          "y": 576
+        },
+        {
+          "x": 256,
+          "y": 576
+        },
+        {
+          "x": 256,
+          "y": 648
+        },
+        {
+          "x": 288,
+          "y": 648
+        },
+        {
+          "x": 288,
+          "y": 688
+        },
+        {
+          "x": 384,
+          "y": 688
+        },
+        {
+          "x": 384,
+          "y": 712
+        },
+        {
+          "x": 392,
+          "y": 712
+        },
+        {
+          "x": 392,
+          "y": 720
+        },
+        {
+          "x": 400,
+          "y": 720
+        },
+        {
+          "x": 400,
+          "y": 752
+        }
+      ]
+    },
+    {
+      "id": "w94",
+      "a": {
+        "kind": "junction",
+        "junction": "j4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "A1"
+      },
+      "points": [
+        {
+          "x": 392,
+          "y": 496
+        },
+        {
+          "x": 392,
+          "y": 512
+        },
+        {
+          "x": 400,
+          "y": 512
+        },
+        {
+          "x": 400,
+          "y": 544
+        }
+      ]
+    },
+    {
+      "id": "w67",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "D2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "2Y"
+      },
+      "points": [
+        {
+          "x": 216,
+          "y": 608
+        },
+        {
+          "x": 216,
+          "y": 704
+        },
+        {
+          "x": 392,
+          "y": 704
+        },
+        {
+          "x": 392,
+          "y": 648
+        },
+        {
+          "x": 488,
+          "y": 648
+        },
+        {
+          "x": 488,
+          "y": 624
+        }
+      ]
+    },
+    {
+      "id": "w65",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "D2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "2Y"
+      },
+      "points": [
+        {
+          "x": 216,
+          "y": 816
+        },
+        {
+          "x": 216,
+          "y": 904
+        },
+        {
+          "x": 280,
+          "y": 904
+        },
+        {
+          "x": 280,
+          "y": 896
+        },
+        {
+          "x": 392,
+          "y": 896
+        },
+        {
+          "x": 392,
+          "y": 856
+        },
+        {
+          "x": 488,
+          "y": 856
+        },
+        {
+          "x": 488,
+          "y": 832
+        }
+      ]
+    },
+    {
+      "id": "w84",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/O2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "2A"
+      },
+      "points": [
+        {
+          "x": 272,
+          "y": 624
+        },
+        {
+          "x": 272,
+          "y": 720
+        },
+        {
+          "x": 152,
+          "y": 720
+        },
+        {
+          "x": 152,
+          "y": 976
+        }
+      ]
+    },
+    {
+      "id": "w75",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/O2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "2A"
+      },
+      "points": [
+        {
+          "x": 184,
+          "y": 832
+        },
+        {
+          "x": 184,
+          "y": 1136
+        }
+      ]
+    },
+    {
+      "id": "w69",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "2Y"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 976
+        },
+        {
+          "x": 416,
+          "y": 1048
+        },
+        {
+          "x": 392,
+          "y": 1048
+        },
+        {
+          "x": 392,
+          "y": 1072
+        },
+        {
+          "x": 280,
+          "y": 1072
+        },
+        {
+          "x": 280,
+          "y": 992
+        }
+      ]
+    },
+    {
+      "id": "w85",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A6"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "2Y"
+      },
+      "points": [
+        {
+          "x": 488,
+          "y": 1040
+        },
+        {
+          "x": 488,
+          "y": 1096
+        },
+        {
+          "x": 432,
+          "y": 1096
+        },
+        {
+          "x": 432,
+          "y": 1280
+        },
+        {
+          "x": 200,
+          "y": 1280
+        },
+        {
+          "x": 200,
+          "y": 1152
+        }
+      ]
+    },
+    {
+      "id": "w99",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "A3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "QC"
+      },
+      "points": [
+        {
+          "x": 520,
+          "y": 160
+        },
+        {
+          "x": 520,
+          "y": 280
+        },
+        {
+          "x": 1072,
+          "y": 280
+        },
+        {
+          "x": 1072,
+          "y": 176
+        }
+      ]
+    },
+    {
+      "id": "w57",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "3Q"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "3A"
+      },
+      "points": [
+        {
+          "x": 528,
+          "y": 400
+        },
+        {
+          "x": 528,
+          "y": 408
+        },
+        {
+          "x": 400,
+          "y": 408
+        },
+        {
+          "x": 400,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "w76",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "3Y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 408,
+          "y": 448
+        },
+        {
+          "x": 408,
+          "y": 472
+        },
+        {
+          "x": 448,
+          "y": 472
+        },
+        {
+          "x": 448,
+          "y": 544
+        },
+        {
+          "x": 400,
+          "y": 544
+        }
+      ]
+    },
+    {
+      "id": "w77",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "A2"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": []
+    },
+    {
+      "id": "w78",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "A2"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 560
+        },
+        {
+          "x": 416,
+          "y": 640
+        },
+        {
+          "x": 424,
+          "y": 640
+        },
+        {
+          "x": 424,
+          "y": 680
+        },
+        {
+          "x": 440,
+          "y": 680
+        },
+        {
+          "x": 440,
+          "y": 752
+        },
+        {
+          "x": 400,
+          "y": 752
+        },
+        {
+          "x": 400,
+          "y": 768
+        }
+      ]
+    },
+    {
+      "id": "w68",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "D3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "3Y"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 624
+        },
+        {
+          "x": 464,
+          "y": 720
+        },
+        {
+          "x": 520,
+          "y": 720
+        },
+        {
+          "x": 520,
+          "y": 688
+        },
+        {
+          "x": 624,
+          "y": 688
+        },
+        {
+          "x": 624,
+          "y": 680
+        },
+        {
+          "x": 648,
+          "y": 680
+        },
+        {
+          "x": 648,
+          "y": 640
+        }
+      ]
+    },
+    {
+      "id": "w66",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "D3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "3Y"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 832
+        },
+        {
+          "x": 464,
+          "y": 928
+        },
+        {
+          "x": 520,
+          "y": 928
+        },
+        {
+          "x": 520,
+          "y": 896
+        },
+        {
+          "x": 624,
+          "y": 896
+        },
+        {
+          "x": 624,
+          "y": 888
+        },
+        {
+          "x": 648,
+          "y": 888
+        },
+        {
+          "x": 648,
+          "y": 848
+        }
+      ]
+    },
+    {
+      "id": "w96",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/O3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "3A"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 640
+        },
+        {
+          "x": 416,
+          "y": 680
+        },
+        {
+          "x": 296,
+          "y": 680
+        },
+        {
+          "x": 296,
+          "y": 712
+        },
+        {
+          "x": 224,
+          "y": 712
+        },
+        {
+          "x": 224,
+          "y": 752
+        },
+        {
+          "x": 120,
+          "y": 752
+        },
+        {
+          "x": 120,
+          "y": 1008
+        }
+      ]
+    },
+    {
+      "id": "w95",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/O3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "3A"
+      },
+      "points": [
+        {
+          "x": 400,
+          "y": 848
+        },
+        {
+          "x": 400,
+          "y": 888
+        },
+        {
+          "x": 296,
+          "y": 888
+        },
+        {
+          "x": 296,
+          "y": 920
+        },
+        {
+          "x": 136,
+          "y": 920
+        },
+        {
+          "x": 136,
+          "y": 1168
+        }
+      ]
+    },
+    {
+      "id": "w73",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "3Y"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 992
+        },
+        {
+          "x": 448,
+          "y": 1264
+        },
+        {
+          "x": 216,
+          "y": 1264
+        },
+        {
+          "x": 216,
+          "y": 1024
+        }
+      ]
+    },
+    {
+      "id": "w87",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "3Y"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 1056
+        },
+        {
+          "x": 512,
+          "y": 1096
+        },
+        {
+          "x": 520,
+          "y": 1096
+        },
+        {
+          "x": 520,
+          "y": 1112
+        },
+        {
+          "x": 544,
+          "y": 1112
+        },
+        {
+          "x": 544,
+          "y": 1248
+        },
+        {
+          "x": 288,
+          "y": 1248
+        },
+        {
+          "x": 288,
+          "y": 1208
+        },
+        {
+          "x": 280,
+          "y": 1208
+        },
+        {
+          "x": 280,
+          "y": 1184
+        }
+      ]
+    },
+    {
+      "id": "w100",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "A4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "QD"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 176
+        },
+        {
+          "x": 448,
+          "y": 80
+        },
+        {
+          "x": 640,
+          "y": 80
+        },
+        {
+          "x": 640,
+          "y": 104
+        },
+        {
+          "x": 696,
+          "y": 104
+        },
+        {
+          "x": 696,
+          "y": 80
+        },
+        {
+          "x": 1008,
+          "y": 80
+        },
+        {
+          "x": 1008,
+          "y": 96
+        },
+        {
+          "x": 1016,
+          "y": 96
+        },
+        {
+          "x": 1016,
+          "y": 192
+        }
+      ]
+    },
+    {
+      "id": "w59",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "4A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "4Q"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 368
+        },
+        {
+          "x": 512,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "w88",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "4Y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "points": [
+        {
+          "x": 456,
+          "y": 400
+        },
+        {
+          "x": 456,
+          "y": 472
+        },
+        {
+          "x": 464,
+          "y": 472
+        },
+        {
+          "x": 464,
+          "y": 528
+        },
+        {
+          "x": 424,
+          "y": 528
+        },
+        {
+          "x": 424,
+          "y": 568
+        },
+        {
+          "x": 400,
+          "y": 568
+        }
+      ]
+    },
+    {
+      "id": "w89",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "A3"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "points": []
+    },
+    {
+      "id": "w90",
+      "a": {
+        "kind": "junction",
+        "junction": "j3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "A3"
+      },
+      "points": [
+        {
+          "x": 400,
+          "y": 664
+        },
+        {
+          "x": 456,
+          "y": 664
+        },
+        {
+          "x": 456,
+          "y": 736
+        },
+        {
+          "x": 424,
+          "y": 736
+        },
+        {
+          "x": 424,
+          "y": 768
+        },
+        {
+          "x": 400,
+          "y": 768
+        },
+        {
+          "x": 400,
+          "y": 784
+        }
+      ]
+    },
+    {
+      "id": "w63",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "D4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "4Y"
+      },
+      "points": [
+        {
+          "x": 424,
+          "y": 592
+        },
+        {
+          "x": 424,
+          "y": 632
+        },
+        {
+          "x": 448,
+          "y": 632
+        },
+        {
+          "x": 448,
+          "y": 704
+        },
+        {
+          "x": 640,
+          "y": 704
+        },
+        {
+          "x": 640,
+          "y": 648
+        },
+        {
+          "x": 712,
+          "y": 648
+        },
+        {
+          "x": 712,
+          "y": 592
+        }
+      ]
+    },
+    {
+      "id": "w61",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "D4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "4Y"
+      },
+      "points": [
+        {
+          "x": 424,
+          "y": 800
+        },
+        {
+          "x": 424,
+          "y": 840
+        },
+        {
+          "x": 448,
+          "y": 840
+        },
+        {
+          "x": 448,
+          "y": 912
+        },
+        {
+          "x": 640,
+          "y": 912
+        },
+        {
+          "x": 640,
+          "y": 856
+        },
+        {
+          "x": 712,
+          "y": 856
+        },
+        {
+          "x": 712,
+          "y": 800
+        }
+      ]
+    },
+    {
+      "id": "w91",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/O4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "4A"
+      },
+      "points": [
+        {
+          "x": 432,
+          "y": 608
+        },
+        {
+          "x": 432,
+          "y": 592
+        },
+        {
+          "x": 496,
+          "y": 592
+        },
+        {
+          "x": 496,
+          "y": 632
+        },
+        {
+          "x": 472,
+          "y": 632
+        },
+        {
+          "x": 472,
+          "y": 712
+        },
+        {
+          "x": 448,
+          "y": 712
+        },
+        {
+          "x": 448,
+          "y": 752
+        },
+        {
+          "x": 496,
+          "y": 752
+        },
+        {
+          "x": 496,
+          "y": 840
+        },
+        {
+          "x": 456,
+          "y": 840
+        },
+        {
+          "x": 456,
+          "y": 936
+        },
+        {
+          "x": 432,
+          "y": 936
+        },
+        {
+          "x": 432,
+          "y": 1024
+        }
+      ]
+    },
+    {
+      "id": "w86",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/O4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "4A"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 816
+        },
+        {
+          "x": 416,
+          "y": 848
+        },
+        {
+          "x": 424,
+          "y": 848
+        },
+        {
+          "x": 424,
+          "y": 888
+        },
+        {
+          "x": 440,
+          "y": 888
+        },
+        {
+          "x": 440,
+          "y": 944
+        },
+        {
+          "x": 464,
+          "y": 944
+        },
+        {
+          "x": 464,
+          "y": 1064
+        },
+        {
+          "x": 456,
+          "y": 1064
+        },
+        {
+          "x": 456,
+          "y": 1120
+        },
+        {
+          "x": 408,
+          "y": 1120
+        },
+        {
+          "x": 408,
+          "y": 1184
+        }
+      ]
+    },
+    {
+      "id": "w58",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "4Y"
+      },
+      "points": [
+        {
+          "x": 400,
+          "y": 1008
+        },
+        {
+          "x": 400,
+          "y": 1040
+        }
+      ]
+    },
+    {
+      "id": "w72",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "A8"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "4Y"
+      },
+      "points": [
+        {
+          "x": 464,
+          "y": 1072
+        },
+        {
+          "x": 464,
+          "y": 1200
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln34",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w37_0",
+      "a": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln35",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w38_0",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "CLK"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln36",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w39_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "CLK"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln37",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "clr",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln38",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w41_0",
+      "a": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "2A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln39",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w42_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "CLR"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln40",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "ce",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln41",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w44_0",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "ENP"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln42",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w45_0",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "ENT"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln43",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w19",
+      "a": {
+        "kind": "pin",
+        "component": "nco",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln44",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w47_0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "/OE"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln45",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w23",
+      "a": {
+        "kind": "pin",
+        "component": "nj",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln46",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w49_0",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "/LOAD"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln47",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w24",
+      "a": {
+        "kind": "pin",
+        "component": "nmi",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln48",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w51_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "/G1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln49",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w27",
+      "a": {
+        "kind": "pin",
+        "component": "ri",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln50",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w53_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln51",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w25",
+      "a": {
+        "kind": "pin",
+        "component": "nro",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln52",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w55_0",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "/OE"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln53",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w26",
+      "a": {
+        "kind": "pin",
+        "component": "prog",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln54",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w57_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "2A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln55",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w58_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "A/B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln56",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w59_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "A/B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln57",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w60_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "A/B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln58",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w28",
+      "a": {
+        "kind": "pin",
+        "component": "wr",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln59",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w62_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "2B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln60",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "addr",
+        "pin": "y0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln61",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w64_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "1B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln62",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "addr",
+        "pin": "y1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln63",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w66_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "2B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln64",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "addr",
+        "pin": "y2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln65",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w68_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "3B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln66",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "addr",
+        "pin": "y3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln67",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w70_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "4B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln68",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln69",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w72_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "1B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln70",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln71",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w74_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "2B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln72",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w13",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln73",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w76_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "3B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln74",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w14",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y3"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln75",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w78_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "4B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln76",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w15",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln77",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w80_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "1B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln78",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln79",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w82_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "2B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln80",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w17",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y6"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln81",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w84_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "3B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln82",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w18",
+      "a": {
+        "kind": "pin",
+        "component": "data",
+        "pin": "y7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln83",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w86_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "4B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln84",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "ln85",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "1Y"
+      },
+      "points": []
+    },
+    {
+      "id": "w88_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "1B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln86",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "ln87",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "2Y"
+      },
+      "points": []
+    },
+    {
+      "id": "w90_0",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "/CLR"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln88",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w91_0",
+      "a": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "3A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln89",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w22",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "3Y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln90",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "pin",
+        "component": "ln91",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "3Y"
+      },
+      "points": []
+    },
+    {
+      "id": "w94_0",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/WE"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln92",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w95_0",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/WE"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln93",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w20",
+      "a": {
+        "kind": "pin",
+        "component": "ln94",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "1Y"
+      },
+      "points": []
+    },
+    {
+      "id": "w97_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "3A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln95",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w21",
+      "a": {
+        "kind": "pin",
+        "component": "ln96",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "2Y"
+      },
+      "points": []
+    },
+    {
+      "id": "w99_0",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "3B"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ln97",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w31",
+      "a": {
+        "kind": "pin",
+        "component": "vctl",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 168,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "w44",
+      "a": {
+        "kind": "pin",
+        "component": "ctl",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gctl",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 0,
+          "y": 512
+        }
+      ]
+    },
+    {
+      "id": "w37",
+      "a": {
+        "kind": "pin",
+        "component": "vnd",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 168,
+          "y": 576
+        }
+      ]
+    },
+    {
+      "id": "w50",
+      "a": {
+        "kind": "pin",
+        "component": "nd",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gnd",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 0,
+          "y": 672
+        }
+      ]
+    },
+    {
+      "id": "w38",
+      "a": {
+        "kind": "pin",
+        "component": "vpc",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 1032,
+          "y": 112
+        }
+      ]
+    },
+    {
+      "id": "w51",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gpc",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 864,
+          "y": 224
+        }
+      ]
+    },
+    {
+      "id": "w39",
+      "a": {
+        "kind": "pin",
+        "component": "vpcx",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 664,
+          "y": 112
+        }
+      ]
+    },
+    {
+      "id": "w52",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gpcx",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 496,
+          "y": 256
+        }
+      ]
+    },
+    {
+      "id": "w36",
+      "a": {
+        "kind": "pin",
+        "component": "vmar",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 664,
+          "y": 336
+        }
+      ]
+    },
+    {
+      "id": "w49",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gmar",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 496,
+          "y": 448
+        }
+      ]
+    },
+    {
+      "id": "w30",
+      "a": {
+        "kind": "pin",
+        "component": "vam",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 336
+        }
+      ]
+    },
+    {
+      "id": "w43",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gam",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 448
+        }
+      ]
+    },
+    {
+      "id": "w33",
+      "a": {
+        "kind": "pin",
+        "component": "vdl",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 664,
+          "y": 528
+        }
+      ]
+    },
+    {
+      "id": "w46",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gdl",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 496,
+          "y": 640
+        }
+      ]
+    },
+    {
+      "id": "w32",
+      "a": {
+        "kind": "pin",
+        "component": "vdh",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 664,
+          "y": 736
+        }
+      ]
+    },
+    {
+      "id": "w45",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gdh",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 496,
+          "y": 848
+        }
+      ]
+    },
+    {
+      "id": "w41",
+      "a": {
+        "kind": "pin",
+        "component": "vrl",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 528
+        }
+      ]
+    },
+    {
+      "id": "w54",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "grl",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 640
+        }
+      ]
+    },
+    {
+      "id": "w40",
+      "a": {
+        "kind": "pin",
+        "component": "vrh",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 736
+        }
+      ]
+    },
+    {
+      "id": "w53",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "grh",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 848
+        }
+      ]
+    },
+    {
+      "id": "w35",
+      "a": {
+        "kind": "pin",
+        "component": "vil",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 944
+        }
+      ]
+    },
+    {
+      "id": "w48",
+      "a": {
+        "kind": "pin",
+        "component": "il",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gil",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 1040
+        }
+      ]
+    },
+    {
+      "id": "w34",
+      "a": {
+        "kind": "pin",
+        "component": "vih",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 416,
+          "y": 1104
+        }
+      ]
+    },
+    {
+      "id": "w47",
+      "a": {
+        "kind": "pin",
+        "component": "ih",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gih",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 248,
+          "y": 1200
+        }
+      ]
+    },
+    {
+      "id": "w42",
+      "a": {
+        "kind": "pin",
+        "component": "vrx",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 664,
+          "y": 944
+        }
+      ]
+    },
+    {
+      "id": "w55",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "grx",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 496,
+          "y": 1088
+        }
+      ]
+    },
+    {
+      "id": "w29",
+      "a": {
+        "kind": "pin",
+        "component": "tgnd",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "tglab",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 1336,
+          "y": 0
+        },
+        {
+          "x": 1360,
+          "y": 0
+        },
+        {
+          "x": 1360,
+          "y": 8
+        }
+      ]
+    },
+    {
+      "id": "w127_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "M"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt126",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w128_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "N"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt127",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w129_0",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "/G2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt128",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w130_0",
+      "a": {
+        "kind": "pin",
+        "component": "am",
+        "pin": "/G"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt129",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w131_0",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "/G"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt130",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w132_0",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "/G"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt131",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w133_0",
+      "a": {
+        "kind": "pin",
+        "component": "rl",
+        "pin": "/CS"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt132",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w134_0",
+      "a": {
+        "kind": "pin",
+        "component": "rh",
+        "pin": "/CS"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt133",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w56",
+      "a": {
+        "kind": "pin",
+        "component": "tvlab",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "tvcc",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 1360,
+          "y": 48
+        },
+        {
+          "x": 1360,
+          "y": 96
+        },
+        {
+          "x": 1336,
+          "y": 96
+        }
+      ]
+    },
+    {
+      "id": "w136_0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "DIR"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt136",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w137_0",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "DIR"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "lt137",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "b0s0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "B1"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j144"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0s1",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j144"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0s2",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "1D"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j368"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0v1",
+      "a": {
+        "kind": "junction",
+        "junction": "b0j144"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j368"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0s3",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a0"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j504"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b0j368"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j504"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0s4",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j664"
+      },
+      "points": [
+        {
+          "x": 520,
+          "y": 544
+        },
+        {
+          "x": 520,
+          "y": 664
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b0v3",
+      "a": {
+        "kind": "junction",
+        "junction": "b0j504"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j664"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0s5",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B1"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j976"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0v4",
+      "a": {
+        "kind": "junction",
+        "junction": "b0j664"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b0j976"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b0t",
+      "a": {
+        "kind": "junction",
+        "junction": "b0j976"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd0",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "B2"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j160"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s1",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "B"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j160"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s2",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "2D"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j384"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1v1",
+      "a": {
+        "kind": "junction",
+        "junction": "b1j160"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j384"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s3",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a1"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j480"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b1j384"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j480"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s4",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "2A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j672"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 592
+        },
+        {
+          "x": 512,
+          "y": 672
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b1v3",
+      "a": {
+        "kind": "junction",
+        "junction": "b1j480"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j672"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1s5",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B2"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j992"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1v4",
+      "a": {
+        "kind": "junction",
+        "junction": "b1j672"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b1j992"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b1t",
+      "a": {
+        "kind": "junction",
+        "junction": "b1j992"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd1",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "B3"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j176"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s1",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "C"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j176"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s2",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "3D"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j400"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2v1",
+      "a": {
+        "kind": "junction",
+        "junction": "b2j176"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j400"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s3",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a2"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j456"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b2j400"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j456"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s4",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "3A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j608"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2v3",
+      "a": {
+        "kind": "junction",
+        "junction": "b2j456"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j608"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2s5",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B3"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j1008"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2v4",
+      "a": {
+        "kind": "junction",
+        "junction": "b2j608"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b2j1008"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b2t",
+      "a": {
+        "kind": "junction",
+        "junction": "b2j1008"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd2",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s0",
+      "a": {
+        "kind": "pin",
+        "component": "pcx",
+        "pin": "B4"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j192"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s1",
+      "a": {
+        "kind": "pin",
+        "component": "pc",
+        "pin": "D"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j192"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s2",
+      "a": {
+        "kind": "pin",
+        "component": "mar",
+        "pin": "4D"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j416"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3v1",
+      "a": {
+        "kind": "junction",
+        "junction": "b3j192"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j416"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s3",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a3"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j432"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b3j416"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j432"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s4",
+      "a": {
+        "kind": "pin",
+        "component": "dl",
+        "pin": "4A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j560"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3v3",
+      "a": {
+        "kind": "junction",
+        "junction": "b3j432"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j560"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3s5",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B4"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j1024"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3v4",
+      "a": {
+        "kind": "junction",
+        "junction": "b3j560"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b3j1024"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b3t",
+      "a": {
+        "kind": "junction",
+        "junction": "b3j1024"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd3",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b4s0",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a4"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b4j872"
+      },
+      "points": [
+        {
+          "x": 788,
+          "y": 408
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b4s1",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b4j872"
+      },
+      "points": [
+        {
+          "x": 520,
+          "y": 752
+        },
+        {
+          "x": 520,
+          "y": 872
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b4s2",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B5"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b4j1040"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b4v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b4j872"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b4j1040"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b4t",
+      "a": {
+        "kind": "junction",
+        "junction": "b4j1040"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd4",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b5s0",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a5"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b5j880"
+      },
+      "points": [
+        {
+          "x": 804,
+          "y": 384
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b5s1",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "2A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b5j880"
+      },
+      "points": [
+        {
+          "x": 512,
+          "y": 800
+        },
+        {
+          "x": 512,
+          "y": 880
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b5s2",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B6"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b5j1056"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b5v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b5j880"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b5j1056"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b5t",
+      "a": {
+        "kind": "junction",
+        "junction": "b5j1056"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd5",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b6s0",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a6"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b6j816"
+      },
+      "points": [
+        {
+          "x": 820,
+          "y": 360
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b6s1",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "3A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b6j816"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b6s2",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B7"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b6j1072"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b6v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b6j816"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b6j1072"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b6t",
+      "a": {
+        "kind": "junction",
+        "junction": "b6j1072"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd6",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b7s0",
+      "a": {
+        "kind": "pin",
+        "component": "bus",
+        "pin": "a7"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b7j768"
+      },
+      "points": [
+        {
+          "x": 836,
+          "y": 336
+        }
+      ],
+      "color": "g7"
+    },
+    {
+      "id": "b7s1",
+      "a": {
+        "kind": "pin",
+        "component": "dh",
+        "pin": "4A"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b7j768"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b7s2",
+      "a": {
+        "kind": "pin",
+        "component": "rx",
+        "pin": "B8"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b7j1088"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b7v2",
+      "a": {
+        "kind": "junction",
+        "junction": "b7j768"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "b7j1088"
+      },
+      "points": [],
+      "color": "g7"
+    },
+    {
+      "id": "b7t",
+      "a": {
+        "kind": "junction",
+        "junction": "b7j1088"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "pd7",
+        "pin": "p"
+      },
+      "points": [],
+      "color": "g7"
+    }
+  ],
+  "junctions": [
+    {
+      "id": "b0j144",
+      "pos": {
+        "x": 724,
+        "y": 144
+      }
+    },
+    {
+      "id": "b0j368",
+      "pos": {
+        "x": 724,
+        "y": 368
+      }
+    },
+    {
+      "id": "b0j504",
+      "pos": {
+        "x": 724,
+        "y": 504
+      }
+    },
+    {
+      "id": "b0j664",
+      "pos": {
+        "x": 724,
+        "y": 664
+      }
+    },
+    {
+      "id": "b0j976",
+      "pos": {
+        "x": 724,
+        "y": 976
+      }
+    },
+    {
+      "id": "b1j160",
+      "pos": {
+        "x": 740,
+        "y": 160
+      }
+    },
+    {
+      "id": "b1j384",
+      "pos": {
+        "x": 740,
+        "y": 384
+      }
+    },
+    {
+      "id": "b1j480",
+      "pos": {
+        "x": 740,
+        "y": 480
+      }
+    },
+    {
+      "id": "b1j672",
+      "pos": {
+        "x": 740,
+        "y": 672
+      }
+    },
+    {
+      "id": "b1j992",
+      "pos": {
+        "x": 740,
+        "y": 992
+      }
+    },
+    {
+      "id": "b2j176",
+      "pos": {
+        "x": 756,
+        "y": 176
+      }
+    },
+    {
+      "id": "b2j400",
+      "pos": {
+        "x": 756,
+        "y": 400
+      }
+    },
+    {
+      "id": "b2j456",
+      "pos": {
+        "x": 756,
+        "y": 456
+      }
+    },
+    {
+      "id": "b2j608",
+      "pos": {
+        "x": 756,
+        "y": 608
+      }
+    },
+    {
+      "id": "b2j1008",
+      "pos": {
+        "x": 756,
+        "y": 1008
+      }
+    },
+    {
+      "id": "b3j192",
+      "pos": {
+        "x": 772,
+        "y": 192
+      }
+    },
+    {
+      "id": "b3j416",
+      "pos": {
+        "x": 772,
+        "y": 416
+      }
+    },
+    {
+      "id": "b3j432",
+      "pos": {
+        "x": 772,
+        "y": 432
+      }
+    },
+    {
+      "id": "b3j560",
+      "pos": {
+        "x": 772,
+        "y": 560
+      }
+    },
+    {
+      "id": "b3j1024",
+      "pos": {
+        "x": 772,
+        "y": 1024
+      }
+    },
+    {
+      "id": "b4j872",
+      "pos": {
+        "x": 788,
+        "y": 872
+      }
+    },
+    {
+      "id": "b4j1040",
+      "pos": {
+        "x": 788,
+        "y": 1040
+      }
+    },
+    {
+      "id": "b5j880",
+      "pos": {
+        "x": 804,
+        "y": 880
+      }
+    },
+    {
+      "id": "b5j1056",
+      "pos": {
+        "x": 804,
+        "y": 1056
+      }
+    },
+    {
+      "id": "b6j816",
+      "pos": {
+        "x": 820,
+        "y": 816
+      }
+    },
+    {
+      "id": "b6j1072",
+      "pos": {
+        "x": 820,
+        "y": 1072
+      }
+    },
+    {
+      "id": "b7j768",
+      "pos": {
+        "x": 836,
+        "y": 768
+      }
+    },
+    {
+      "id": "b7j1088",
+      "pos": {
+        "x": 836,
+        "y": 1088
+      }
+    },
+    {
+      "id": "j2",
+      "pos": {
+        "x": 200,
+        "y": 528
+      }
+    },
+    {
+      "id": "j4",
+      "pos": {
+        "x": 288,
+        "y": 496
+      }
+    },
+    {
+      "id": "j1",
+      "pos": {
+        "x": 400,
+        "y": 560
+      }
+    },
+    {
+      "id": "j3",
+      "pos": {
+        "x": 400,
+        "y": 576
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

@@ -11,6 +11,7 @@ export const STATEFUL_KINDS: ReadonlySet<string> = new Set([
   'srlatch',
   'counter',
   'shiftreg',
+  'ram',
 ]);
 
 // Clock edge from single-bit prev/cur: rising only when known 0 -> known 1.
@@ -199,46 +200,101 @@ interface RegState {
   q: bv.BusValue;
 }
 
+interface RegShape {
+  width: number;
+  enableLow: boolean;
+  dualEnable: boolean;
+  asyncClear: boolean;
+  outputEnable: boolean;
+}
+
+function regShape(params: Params): RegShape {
+  return {
+    width: widthParam(params),
+    enableLow: boolParam(params, 'enableLow'),
+    dualEnable: boolParam(params, 'dualEnable'),
+    asyncClear: clearParam(params, 'none') === 'async',
+    outputEnable: boolParam(params, 'outputEnable'),
+  };
+}
+
+/** Input slots of the optional pins, which follow `d`, `clk`, `en` in this order. */
+function regSlots(sh: RegShape): { en2: number; clr: number; oe: number } {
+  let next = 3;
+  const en2 = sh.dualEnable ? next++ : -1;
+  const clr = sh.asyncClear ? next++ : -1;
+  const oe = sh.outputEnable ? next++ : -1;
+  return { en2, clr, oe };
+}
+
+const and2 = (a: Level, b: Level): Level =>
+  a === 0 || b === 0 ? 0 : a === 1 && b === 1 ? 1 : null;
+
 /**
  * Enabled register: clocked load of d when en was asserted at the edge.
- * `enableLow` (the '377's /E) asserts the enable at 0.
+ * `enableLow` (the '377's /E) asserts the enable at 0; `dualEnable` adds `en2`
+ * and loading needs both. `clear: 'async'` adds an active-high `clr` that beats
+ * the clock, and an edge held off by it just before is ignored. `outputEnable`
+ * adds `oe`: q floats to Z at 0 and goes X at X, the stored word untouched.
  * SPEC: an X/Z enable at the edge, or an unknown edge, keeps only the bits
  * where d and the held q agree; a known-inactive enable holds q whatever the clock.
  */
 export const register: PrimitiveSpec = {
   kind: 'register',
   pins: (params) => {
-    const width = widthParam(params);
-    return [
-      { name: 'd', dir: 'in', width, role: 'data', order: 0 },
+    const sh = regShape(params);
+    const low = lowFlag(sh.enableLow);
+    const pins: PrimitivePin[] = [
+      { name: 'd', dir: 'in', width: sh.width, role: 'data', order: 0 },
       { name: 'clk', dir: 'in', width: 1, role: 'clock', order: 1 },
-      {
-        name: 'en',
-        dir: 'in',
-        width: 1,
-        role: 'enable',
-        order: 2,
-        ...lowFlag(boolParam(params, 'enableLow')),
-      },
-      { name: 'q', dir: 'out', width, role: 'data', order: 0 },
+      { name: 'en', dir: 'in', width: 1, role: 'enable', order: 2, ...low },
     ];
+    if (sh.dualEnable)
+      pins.push({ name: 'en2', dir: 'in', width: 1, role: 'enable', order: 3, ...low });
+    if (sh.asyncClear)
+      pins.push({ name: 'clr', dir: 'in', width: 1, role: 'asyncClear', order: 4 });
+    if (sh.outputEnable) pins.push({ name: 'oe', dir: 'in', width: 1, role: 'enable', order: 5 });
+    pins.push({
+      name: 'q',
+      dir: 'out',
+      width: sh.width,
+      role: 'data',
+      order: 0,
+      ...(sh.outputEnable ? { threeState: true } : {}),
+    });
+    return pins;
   },
   init: (params) => ({ q: bv.allX(widthParam(params)) }) satisfies RegState,
   evaluate(ctx: EvalContext): EvalResult {
-    const width = widthParam(ctx.params);
+    const sh = regShape(ctx.params);
+    const width = sh.width;
+    const slots = regSlots(sh);
     const state = ctx.state as RegState;
-    let q = state.q;
-    const edge = clockEdge(ctx.prevInputs[1] ?? bv.allX(1), ctx.inputs[1]!);
-    if (edge !== 'none') {
-      // Sample enable and data as of just before this delta (pre-edge capture).
-      const en = assertedLevel(ctx.prevInputs[2], boolParam(ctx.params, 'enableLow'));
+
+    const clocked = (): bv.BusValue => {
+      const edge = clockEdge(ctx.prevInputs[1] ?? bv.allX(1), ctx.inputs[1]!);
+      if (edge === 'none') return state.q;
+      // Sample enables and data as of just before this delta (pre-edge capture).
+      const enabled = (slot: number): Level => assertedLevel(ctx.prevInputs[slot], sh.enableLow);
+      const en = sh.dualEnable ? and2(enabled(2), enabled(slots.en2)) : enabled(2);
       const d = bv.buf(ctx.prevInputs[0] ?? bv.allX(width), width);
-      if (edge === 'rising' && en === 1) q = d;
-      else if (en !== 0) q = bv.agree([q, d], width);
+      const loaded =
+        edge === 'rising' && en === 1 ? d : en !== 0 ? bv.agree([state.q, d], width) : state.q;
+      const held = sh.asyncClear ? assertedLevel(ctx.prevInputs[slots.clr], false) : 0;
+      return resolveOver([held], width, ([h]) => (h ? state.q : loaded));
+    };
+
+    const clear = sh.asyncClear ? assertedLevel(ctx.inputs[slots.clr], false) : 0;
+    const q = resolveOver([clear], width, ([c]) => (c ? bv.known(0, width) : clocked()));
+    let out = q;
+    if (sh.outputEnable) {
+      const oe = assertedLevel(ctx.inputs[slots.oe], false);
+      out = oe === 1 ? q : oe === 0 ? bv.allZ(width) : bv.allX(width);
     }
-    return { outputs: [q], state: { q } satisfies RegState };
+    return { outputs: [out], state: { q } satisfies RegState };
   },
-  defaultPart: () => listedPart('74LS377'),
+  // A register that floats its outputs is the '173: the '377 has no enable row.
+  defaultPart: (params) => listedPart(boolParam(params, 'outputEnable') ? '74LS173' : '74LS377'),
 };
 
 type Bit = 0 | 1 | null;

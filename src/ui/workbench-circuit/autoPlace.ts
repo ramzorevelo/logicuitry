@@ -121,7 +121,9 @@ function netsOf(wires: readonly Wire[], byId: ReadonlyMap<string, RoutableCompon
     const drivers = ends.filter((e) => byId.get(e.component)?.pins.get(e.pin)?.dir === 'out');
     if (drivers.length !== 1) continue;
     const driver = drivers[0]!;
-    nets.push({ driver, sinks: ends.filter((e) => e !== driver) });
+    // A bidirectional pin may drive this net too, so it orders nothing either way.
+    const isInout = (e: PinEnd) => byId.get(e.component)?.pins.get(e.pin)?.dir === 'inout';
+    nets.push({ driver, sinks: ends.filter((e) => e !== driver && !isInout(e)) });
   }
   return nets;
 }

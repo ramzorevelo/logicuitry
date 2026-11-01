@@ -10,8 +10,7 @@ const query = (groups: readonly Group[], rects: [string, Rect][]) => ({
   groups,
   rects: new Map(rects),
   tol: 2,
-  nameHeight: 10,
-  measureName: (name: string) => name.length * 6,
+  nameBox: (g: Group, r: Rect): Rect => ({ x: r.x, y: r.y - 10, w: g.name.length * 6, h: 10 }),
 });
 
 describe('groupHandleAt', () => {

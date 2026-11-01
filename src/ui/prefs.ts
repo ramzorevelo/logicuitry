@@ -16,6 +16,9 @@ import {
 export interface Prefs {
   /** Keep a wide pin's slash + bit-count badge even once the pin is wired. */
   alwaysShowPinBusWidth: boolean;
+  /** View > Wire colours: draw each coloured wire's sheath. Off shows the
+   *  signal colours alone, for a lesson where only the values matter. */
+  showWireColors: boolean;
   waveformArrows: boolean;
   glitchThresholdNs: number;
   /** Off spells each name out beside its icon, which can wrap a narrow rail. */
@@ -63,6 +66,7 @@ export interface Prefs {
 
 export const DEFAULT_PREFS: Prefs = {
   alwaysShowPinBusWidth: false,
+  showWireColors: true,
   waveformArrows: false,
   glitchThresholdNs: 25,
   hideToolbarNames: true,
@@ -111,6 +115,7 @@ export function mergePrefs(raw: unknown): Prefs {
   const d = DEFAULT_PREFS;
   return {
     alwaysShowPinBusWidth: bool(r['alwaysShowPinBusWidth'], d.alwaysShowPinBusWidth),
+    showWireColors: bool(r['showWireColors'], d.showWireColors),
     waveformArrows: bool(r['waveformArrows'], d.waveformArrows),
     glitchThresholdNs: num(r['glitchThresholdNs'], d.glitchThresholdNs, 1, 10000),
     hideToolbarNames: bool(r['hideToolbarNames'], d.hideToolbarNames),

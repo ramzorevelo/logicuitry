@@ -3,6 +3,7 @@
 // never beats a farther compatible one.
 
 import type { ChipLibrary, Component, PinDir, PinRole, Wire } from '../../core/model/types';
+import { mayShareNet } from '../../core/model/pinSlots';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
 import { LOOSE_HIT_RADIUS } from '../../render/hitTest';
 import type { Vec2 } from '../../render/scene';
@@ -15,6 +16,8 @@ export interface PinTarget {
   role: PinRole;
   order: number;
   dir: PinDir;
+  /** An output that can float; with `dir: 'inout'` it may share a net with another. */
+  threeState?: boolean;
   worldPos: Vec2;
   free: boolean; // already wired = not a valid new-wire endpoint
 }
@@ -79,6 +82,7 @@ export function collectPinTargets(
         role: spec.role,
         order: spec.order,
         dir: spec.dir,
+        ...(spec.threeState ? { threeState: true } : {}),
         worldPos,
         free: !occupied.has(occupancyKey(comp.id, spec.name)),
       });
@@ -160,18 +164,18 @@ export function labelExempt(
  *  so it pairs with anything, and anything pairs with it. */
 const passiveEither = (a: PinDir, b: PinDir): boolean => a === 'passive' || b === 'passive';
 
-// Same width; any direction pairing except output to output. Two inputs on one
+// Same width; no two drivers unless one can float (mayShareNet). Two inputs on one
 // net is how one signal feeds two of them, so wiring input to input and then
 // running a single wire from the source is legal: refusing it here only forced
-// the same net to be drawn the long way. Output to output stays refused, but by
-// `multiDriverConflict` in circuitStore, which reports the actual conflict.
+// the same net to be drawn the long way. A second plain output reaching a net
+// through other pins is caught by `multiDriverConflict` in circuitStore.
 // Role is not filtered: any pin wires to any other by hand; role only
 // constrains smart-connect. `allowOccupied` (e.g. labelExempt) lets an
 // otherwise-occupied `in` pin still qualify.
 export function nearestCompatiblePin(
   targets: readonly PinTarget[],
   cursor: Vec2,
-  wanted: { width: number; dir: PinDir },
+  wanted: { width: number; dir: PinDir; threeState?: boolean },
   /** Hit-target multiplier: presentation scaling and finger size, composed by
    *  the caller. 1 is a mouse at 100%. */
   scale: number,
@@ -182,10 +186,7 @@ export function nearestCompatiblePin(
   let bestDist = Infinity;
   for (const t of targets) {
     if (!t.free && !allowOccupied?.(t)) continue;
-    if (
-      !passiveEither(t.dir, wanted.dir) &&
-      (t.width !== wanted.width || (t.dir === wanted.dir && t.dir === 'out'))
-    )
+    if (!passiveEither(t.dir, wanted.dir) && (t.width !== wanted.width || !mayShareNet(t, wanted)))
       continue;
     const d = Math.hypot(t.worldPos.x - cursor.x, t.worldPos.y - cursor.y);
     if (d < radius && d < bestDist) {

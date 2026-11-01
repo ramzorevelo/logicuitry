@@ -5,6 +5,80 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.6.0] - 2026-11-01
+
+### Added
+
+- Shared buses: a wire may carry one ordinary output beside any number of
+  three-state or bidirectional pins. Two enabled drivers that disagree read
+  X; a pin with nothing driving it floats.
+- Circuit palette: a Bus transceiver, Pull-up and Pull-down under Wiring, and
+  a RAM under Sequential. The Register gains an output enable, an
+  asynchronous clear and a second load enable.
+- 74LS173, 74LS245 and 74LS189 packages, the last two under new Bus and
+  Memory headings in the 74 series, each with datasheet timing.
+- A Memory tab beside Waveforms lists every RAM on the board, chips and
+  groups included. Off, it edits the contents loaded at power-on; powered,
+  it follows reads and writes live. After a run, Keep last run as preload
+  keeps what the program wrote.
+- RAM contents are saved with the board, and each placed 74LS189 holds its
+  own.
+- Static timing uses enable and disable times on edges to and from Z, and a
+  bus transceiver whose DIR is not fixed breaks the path with a note saying
+  why.
+- Smart-connect wires a bus transceiver's sides by the way they face: the
+  side facing the sources reads, the side facing the sinks drives.
+- Examples in a new Bus computer group, on 74LS DIPs with a pulled-down
+  8-bit bus: bus and registers (with two drivers fighting), ALU and flags,
+  program counter, MAR and a RAM holding a short program, and the whole
+  eight-bit bus computer in one board, a circuit group per module.
+- Examples, in two new groups: multiplexers and decoders from gates and on the
+  74LS151, 138 and 139, the majority function three ways, and seven-segment
+  displays (segment a two ways, 74LS47 and 74LS48 drivers).
+- Arithmetic examples: half adder, full adder on a 74LS153, four-bit adder on
+  a 74LS283, eight-bit adder, adder-subtracter with overflow, four-operation
+  ALU with N, Z, C and V flags, and full-adder propagation delay.
+- Circuit groups have a colour: a tinted band with a coloured border and name,
+  optionally a solid title tab. Double-click a group's name or border to
+  rename or recolour it.
+- Wires take an optional colour, drawn as insulation around the signal colour,
+  one wire, a whole selection or a whole net at a time. View > Wire colours
+  hides them.
+  The bus computer examples colour their bus.
+
+### Changed
+
+- On a touchscreen, moving a part, wire or group takes a hold first: press it
+  until it lifts, then drag. A plain drag always pans, even from a selected
+  part, so a selected group no longer gets dragged when panning.
+- Boards save as format 9 and chips as format 7. Older files load as before;
+  an older release refuses the newer files instead of misreading them.
+- Large boards redraw several times faster: wire routes and wire widths are
+  worked out once per edit instead of on every frame, zooming no longer
+  stalls while parts are redrawn at the new size, and dragging a part reroutes
+  its wires about four times faster.
+- The eight-bit bus computer's group frames no longer overlap.
+- Analyze and bubble pushing refuse a board with a RAM or a bus transceiver,
+  and say so.
+- Zoom out goes further, far enough to fit the bus computer on a phone.
+
+### Fixed
+
+- On a narrow phone, the selection bar no longer covers the Done button of an
+  open colour or parameter box.
+- On a phone, Compute's operand rows fit the screen, and the Waveforms dock
+  header is one row that scrolls sideways, leaving more board in view. Opening
+  or closing the dock keeps the circuit centred.
+- On a rotated phone, the quick buttons keep their size on a short board, and
+  the closed reference drawer tab sits above the rail instead of along the
+  bottom edge.
+- On a phone, closing the drawer also closes Analyze instead of leaving its tab
+  over the board.
+- On a phone, the selection bar fits more actions before it scrolls, and the
+  report form's "Where is it?" stays on one line.
+- Analyze resolves a bus shared by three-state outputs bit by bit, so the
+  tristate multiplexer and boards with several bus taps give the right table.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added

@@ -5,6 +5,7 @@
 import type { BusValue } from '../core/value/busValue';
 import { widthMask } from '../core/value/busValue';
 import type { LodLevel } from './lod';
+import { PALETTE_SLOTS } from '../core/model/types';
 
 /** 'M' = a width>1 net whose lanes disagree (see busSignalState). */
 export type SignalState = '0' | '1' | 'X' | 'Z' | 'M';
@@ -114,6 +115,8 @@ export interface Theme {
   glyphText: number;
   gridSchematic: number;
   presentation: boolean;
+  /** Opacity of a coloured group's fill: a dark ground needs more to read. */
+  groupFillAlpha: number;
 }
 
 export interface ThemeInfo {
@@ -232,6 +235,7 @@ export function readTheme(root: HTMLElement = document.documentElement): Theme {
       fillUnderHigh: token('--wave-fill-under') === '1',
     },
     lod: 'full',
+    groupFillAlpha: Number.parseFloat(token('--group-fill-alpha')) || 0,
     canvasTextMin: px('--canvas-text-min'),
     glyphText: px('--canvas-text-min') * (Number.parseFloat(token('--glyph-text-scale')) || 1),
     gridSchematic: px('--grid-schematic'),
@@ -269,6 +273,13 @@ export type ChipTint = (typeof CHIP_TINTS)[number];
 
 export function isChipTint(name: string): name is ChipTint {
   return (CHIP_TINTS as readonly string[]).includes(name);
+}
+
+/** A palette slot's colour in this theme, or undefined for a value no slot
+ *  has, so a hand-edited file draws plain rather than failing a frame. */
+export function paletteColor(theme: Theme, slot: string | undefined): string | undefined {
+  const i = (PALETTE_SLOTS as readonly (string | undefined)[]).indexOf(slot);
+  return i < 0 ? undefined : theme.colors.kmapGroups[i];
 }
 
 /** Resolves a stored tint name to this theme's colour. Tolerates the older

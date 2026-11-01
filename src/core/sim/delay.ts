@@ -2,17 +2,19 @@
 // unit delay (1 ps) so causality is preserved and single-stepping ripples
 // gate-by-gate; datasheet mode maps primitives to real 74LS figures.
 
-import type { BusValue } from '../value/busValue';
+import { widthMask, type BusValue } from '../value/busValue';
 import type { CompiledPrimitive } from '../model/compile';
 import { arcPropagationNs, outputPropagationNs } from '../parts/arcs';
 import {
   column as columnOf,
   getPart,
   type DatasheetColumn,
+  type EnableRow,
   type OutputEdge,
   type TypMax,
 } from '../parts/partsDb';
 import { getPrimitive } from './primitives/registry';
+import { inputSlotPins, outputSlotPins } from '../model/pinSlots';
 
 export interface DelayModel {
   /** Delay in integer ps for prim's output changing from oldValue to newValue;
@@ -45,27 +47,47 @@ export function isStructuralHop(prim: CompiledPrimitive): boolean {
 }
 
 /**
- * A 3-state output buffer passes data in one delta like any structural hop,
- * but going to or from Z takes its part's enable or disable time: the '374's
- * /OC. Undefined when the change is not an enable edge or no row is bound.
+ * The enable rows an edge may follow: a moved input with a row of its own takes
+ * that one, any other the part's `enable`. Several candidates time as the slowest.
+ */
+function enableRows(part: unknown, moved?: readonly string[]): EnableRow[] {
+  const entry = typeof part === 'string' ? getPart(part) : undefined;
+  if (!entry) return [];
+  const own = entry.enable_from ?? {};
+  const rows = (moved ?? []).flatMap((pin) => (own[pin] ? [own[pin]] : []));
+  const needsShared = !moved?.length || moved.some((pin) => !own[pin]);
+  if (needsShared && entry.enable) rows.push(entry.enable);
+  return rows;
+}
+
+/**
+ * An output going to or from Z takes the enable or disable time of the given
+ * rows, the slowest when there are several. Undefined when the change is not
+ * an enable edge or no row applies.
  */
 function enableEdgeNs(
-  prim: CompiledPrimitive,
+  rows: readonly EnableRow[],
   oldValue: BusValue,
   newValue: BusValue,
   col: DatasheetColumn,
+  width = 1,
 ): number | undefined {
-  const part = prim.params['enableTiming'];
-  const row = typeof part === 'string' ? getPart(part)?.enable : undefined;
-  if (!row || !(oldValue.z | newValue.z)) return undefined;
-  const level = (value: BusValue) => (value.x ? undefined : value.v ? 'h' : 'l');
+  if (rows.length === 0 || !(oldValue.z | newValue.z)) return undefined;
+  const mask = widthMask(width);
+  // A bus with mixed levels takes the slower figure, as an unknown one does.
+  const level = (value: BusValue) => {
+    if (value.x) return undefined;
+    const ones = (value.v & mask) >>> 0;
+    return ones === mask ? 'h' : ones === 0 ? 'l' : undefined;
+  };
   const figure = (high: TypMax, low: TypMax, value: BusValue) => {
     const l = level(value);
     const [h, lo] = [columnOf(high, col), columnOf(low, col)];
     return l === 'h' ? h : l === 'l' ? lo : Math.max(h, lo);
   };
-  if (newValue.z && !oldValue.z) return figure(row.tphz, row.tplz, oldValue);
-  if (oldValue.z && !newValue.z) return figure(row.tpzh, row.tpzl, newValue);
+  const slowest = (pick: (row: EnableRow) => number) => Math.max(...rows.map(pick));
+  if (newValue.z && !oldValue.z) return slowest((row) => figure(row.tphz, row.tplz, oldValue));
+  if (oldValue.z && !newValue.z) return slowest((row) => figure(row.tpzh, row.tpzl, newValue));
   return undefined;
 }
 
@@ -77,8 +99,8 @@ export interface PinNames {
 export function pinNamesOf(prim: CompiledPrimitive): PinNames {
   const pins = getPrimitive(prim.kind).pins(prim.params);
   return {
-    ins: pins.filter((x) => x.dir === 'in').map((x) => x.name),
-    outs: pins.filter((x) => x.dir === 'out').map((x) => x.name),
+    ins: inputSlotPins(pins).map((x) => x.name),
+    outs: outputSlotPins(pins).map((x) => x.name),
   };
 }
 
@@ -95,14 +117,20 @@ export function datasheetDelay(column: DatasheetColumn): DelayModel {
   return {
     delayPs(prim, out, oldValue, newValue, changedInputs): number {
       if (isStructuralHop(prim)) {
-        const enableNs = enableEdgeNs(prim, oldValue, newValue, column);
+        const rows = enableRows(prim.params['enableTiming']);
+        const enableNs = enableEdgeNs(rows, oldValue, newValue, column);
         return enableNs === undefined ? IDEAL_DELAY_PS : Math.round(enableNs * NS_TO_PS);
       }
       if (!prim.part) return FALLBACK_NS * NS_TO_PS;
       const part = prim.part;
       const { ins, outs } = pinsOf(prim);
-      const outPin = outs[out]!;
       const moved = changedInputs?.flatMap((i) => (ins[i] === undefined ? [] : [ins[i]]));
+      if (oldValue.z | newValue.z) {
+        const width = outputSlotPins(getPrimitive(prim.kind).pins(prim.params))[out]?.width;
+        const enableNs = enableEdgeNs(enableRows(part, moved), oldValue, newValue, column, width);
+        if (enableNs !== undefined) return Math.round(enableNs * NS_TO_PS);
+      }
+      const outPin = outs[out]!;
       // The row this edge follows is the arc from the inputs that moved; an
       // edge no moved input times (a state write, a wake) takes the slowest.
       const figure = (edge: OutputEdge): number =>

@@ -5,10 +5,12 @@
 import type { Board, ChipLibrary } from '../model/types';
 import { compile, componentPaths } from '../model/compile';
 import {
+  BidirectionalPinError,
   buildTruthTable,
   diffRows,
   MAX_TABLE_INPUTS,
   parseBitPath,
+  refuseBidirectional,
   resolveInputNet,
   resolveOutputNet,
   StoredStateError,
@@ -16,7 +18,7 @@ import {
 } from '../boolean/truthTable';
 import { BooleanEvalError } from '../boolean/evaluate';
 import { SEGMENT_NAMES } from '../sim/primitives/display';
-import { lowerCircuit } from './lower';
+import { lowerCircuit, lowerLibrary } from './lower';
 import { dedupTerminals, reachableInputBits, type TerminalRef } from './reach';
 
 // SPEC: bubble-push-mode policy for which components count as truth-table
@@ -47,7 +49,7 @@ export function truthTableOf(board: Board, lib: ChipLibrary): TruthTable {
   // previously-distinct terminals on the same net (e.g. two LEDs merging
   // through a junction) -- deduping those away would hide exactly the shape
   // change this check exists to catch.
-  const loweredLib: ChipLibrary = new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
+  const loweredLib: ChipLibrary = lowerLibrary(lib);
   const compiled = compile(lowerCircuit(board), loweredLib);
   const inputCols = terminalRefs(board, INPUT_TERMINAL_KINDS).flatMap((r) =>
     bitCols(compiled, r, resolveInputNet),
@@ -65,7 +67,7 @@ interface CompiledSide {
 }
 
 function compileSide(board: Board, lib: ChipLibrary): CompiledSide {
-  const loweredLib: ChipLibrary = new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
+  const loweredLib: ChipLibrary = lowerLibrary(lib);
   const compiled = compile(lowerCircuit(board), loweredLib);
   return {
     compiled,
@@ -188,7 +190,7 @@ function bitCols(
  *  (lane-aware). `truthTableOf` above keeps its all-inputs 1-bit semantics --
  *  bubble-mode verification depends on them. */
 export function analysisTablesOf(board: Board, lib: ChipLibrary): OutputAnalysis[] {
-  const loweredLib: ChipLibrary = new Map([...lib].map(([id, def]) => [id, lowerCircuit(def)]));
+  const loweredLib: ChipLibrary = lowerLibrary(lib);
   const compiled = compile(lowerCircuit(board), loweredLib);
   const inputs = dedupTerminals(
     compiled,
@@ -222,6 +224,7 @@ export function analysisTablesOf(board: Board, lib: ChipLibrary): OutputAnalysis
         error: `Analyze handles up to ${MAX_ANALYSIS_OUTPUTS} outputs; ${name} is past that`,
       };
     try {
+      refuseBidirectional(compiled);
       const reachable = reachableInputBits(compiled, allInputCols, outCol);
       const outNet = resolveOutputNet(compiled, parseBitPath(outCol).base);
       // An output nothing drives is no function at all, so no stray switch joins it.
@@ -258,7 +261,9 @@ function columnName(col: string, ref: TerminalRef): string {
 /** The drawer shows these as written, so they name the output and never a path. */
 function plainError(e: unknown, name: string): string {
   if (e instanceof StoredStateError)
-    return `${name} depends on a flip-flop or latch, so it has no truth table`;
+    return `${name} depends on ${e.kind === 'ram' ? 'a RAM' : 'a flip-flop or latch'}, so it has no truth table`;
+  if (e instanceof BidirectionalPinError)
+    return `The board has a bus transceiver or other bidirectional pin, so ${name} has no truth table`;
   if (e instanceof BooleanEvalError)
     return `The board has a feedback loop, so ${name} has no truth table`;
   return e instanceof Error ? e.message : String(e);

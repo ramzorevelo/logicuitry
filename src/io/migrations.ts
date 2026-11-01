@@ -4,8 +4,8 @@
 export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
-  'lcir.chip': 5,
-  'lcir.board': 7,
+  'lcir.chip': 7,
+  'lcir.board': 9,
   'lcir.lesson': 1,
 };
 
@@ -103,6 +103,15 @@ function splitSevenSegCommon(doc: Record<string, unknown>): Record<string, unkno
 
 registerMigration('lcir.board', 6, splitSevenSegCommon);
 registerMigration('lcir.chip', 4, splitSevenSegCommon);
+
+// Board v7 -> v8, chip v5 -> v6: instance `contents` and `inout` pins, absent
+// before; bumped so an older app refuses a file it would save back without them.
+registerMigration('lcir.board', 7, (doc) => doc);
+registerMigration('lcir.chip', 5, (doc) => doc);
+
+// Board v8 -> v9, chip v6 -> v7: optional group and wire colours, absent before.
+registerMigration('lcir.board', 8, (doc) => doc);
+registerMigration('lcir.chip', 6, (doc) => doc);
 
 // Files written under an earlier name carry an older format prefix: `logiclab.`
 // from the original name, `lcir.` from the Logic Design Workbench one. Rewriting

@@ -19,7 +19,8 @@ export interface PackagePin {
    *  chip-level pins (power, output enable, no-connect). */
   gate?: number | readonly number[] | 'all';
   /** The core primitive pin this wires to, or a chip-level role: 'vcc',
-   *  'gnd', 'oe' (active-low output enable) or 'nc'. */
+   *  'gnd', 'nc' or 'oe', an active-low enable. Every 'oe' pin joins one
+   *  chip enable term with power ('173 M and N, '189 /CS). */
   fn: string;
 }
 
@@ -42,6 +43,9 @@ export interface PackageEntry {
 export interface PackageCore {
   kind: ComponentKind;
   params?: Record<string, ParamValue>;
+  /** The core pin, active high, that takes the chip enable term. Set on a
+   *  core that floats its own outputs: a power buffer would turn its Z into X. */
+  enablePin?: string;
 }
 
 interface PackagesFile {
@@ -141,6 +145,23 @@ const PART_CORES: Record<string, PackageCore> = {
       pinView: 'q=expanded',
     },
   },
+  '74LS173': {
+    kind: 'register',
+    params: { enableLow: true, dualEnable: true, clear: 'async', outputEnable: true },
+    enablePin: 'oe',
+  },
+  '74LS245': { kind: 'transceiver', enablePin: 'oe' },
+  '74LS189': {
+    kind: 'ram',
+    params: {
+      width: 4,
+      addressBits: 4,
+      weLow: true,
+      invertedOut: true,
+      pinView: 'a=expanded;d=expanded;q=expanded',
+    },
+    enablePin: 'cs',
+  },
   '74LS165': {
     kind: 'shiftreg',
     params: {
@@ -200,6 +221,28 @@ const STRUCTURAL = { delay: 'none' } as const;
 
 const pinEnd = (component: string, pin: string): Wire['a'] => ({ kind: 'pin', component, pin });
 
+const GATE_INPUTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+/**
+ * The core pin that takes the chip enable term, for a core that floats its own
+ * outputs. Such a core cannot sit behind power buffers, which turn a Z into X.
+ */
+function selfEnablePin(
+  entry: PackageEntry,
+  core: PackageCore,
+  corePins: readonly PrimitivePin[],
+): string | undefined {
+  const floats = corePins.some((p) => p.threeState || p.dir === 'inout');
+  if (!core.enablePin) {
+    if (floats) throw new Error(`${entry.part}: ${core.kind} floats its outputs, name its enable`);
+    return undefined;
+  }
+  if (!floats) throw new Error(`${entry.part}: ${core.kind} has no output that floats`);
+  if (!corePins.some((p) => p.name === core.enablePin && p.dir === 'in'))
+    throw new Error(`${entry.part}: ${core.kind} has no input '${core.enablePin}'`);
+  return core.enablePin;
+}
+
 /**
  * Build one part's ChipDef.
  *
@@ -207,7 +250,8 @@ const pinEnd = (component: string, pin: string): Wire['a'] => ({ kind: 'pin', co
  * `vcc AND NOT gnd`, so an unpowered chip floats its outputs to Z the way the
  * real part does. That needs no new compile rule and no new core semantics --
  * it costs three hidden components per chip, and a student who opens the chip
- * sees exactly why the rails have to be wired.
+ * sees exactly why the rails have to be wired. A core that floats its own
+ * outputs takes that enable on one of its pins instead and wires straight out.
  */
 export function buildPackageChipDef(
   entry: PackageEntry,
@@ -243,19 +287,22 @@ export function buildPackageChipDef(
   const vccPin = sorted.find((p) => p.fn === 'vcc');
   const gndPin = sorted.find((p) => p.fn === 'gnd');
   if (!vccPin || !gndPin) throw new Error(`${entry.part} has no VCC/GND pin`);
-  const oePin = sorted.find((p) => p.fn === OUTPUT_ENABLE_FN);
+  const oePins = sorted.filter((p) => p.fn === OUTPUT_ENABLE_FN);
+  const enablePin = selfEnablePin(entry, core, [...corePins.values()]);
+  if (enablePin && sorted.some((p) => !CHIP_LEVEL_FNS.has(p.fn) && p.fn === enablePin))
+    throw new Error(`${entry.part}: core pin '${enablePin}' takes the enable term, not a pin`);
 
   // Ports down both sides in pin order, mirroring the physical package so the
   // opened chip reads like its own pinout diagram.
   for (const [i, p] of sorted.entries()) {
     const fn = corePin(p);
-    const isOut = fn?.dir === 'out';
-    if (isOut && sectionsOf(p, entry.gates).length !== 1)
+    const dir = fn?.dir === 'out' || fn?.dir === 'inout' ? fn.dir : 'in';
+    if (dir !== 'in' && sectionsOf(p, entry.gates).length !== 1)
       throw new Error(`${entry.part} pin ${p.pin}: an output belongs to exactly one section`);
     const left = i < half;
     components.push({
       id: portId(p.pin),
-      kind: isOut ? 'outport' : 'inport',
+      kind: dir === 'in' ? 'inport' : 'outport',
       pos: { x: left ? 0 : 5 * COL, y: (left ? i : sorted.length - 1 - i) * ROW },
       label: p.name,
       params: { width: 1 },
@@ -263,7 +310,7 @@ export function buildPackageChipDef(
     pins.push({
       id: `pin-${p.pin}`,
       name: p.name,
-      dir: isOut ? 'out' : 'in',
+      dir,
       width: 1,
       role: fn?.role ?? (p.fn === OUTPUT_ENABLE_FN ? 'enable' : 'data'),
       order: i,
@@ -295,15 +342,16 @@ export function buildPackageChipDef(
   nextWire(pinEnd('pwr_inv', 'y'), pinEnd('pwr_ok', 'b'));
   nextWire(pinEnd(portId(vccPin.pin), 'y'), pinEnd('pwr_ok', 'a'));
 
-  // An active-low output enable gates every output buffer at once, so it is
-  // one term per chip beside the power gate, never a gate per output.
-  let bufferEnable = 'pwr_ok';
-  if (oePin) {
+  // Active-low output enables gate every output at once, so they make one
+  // term per chip beside the power gate, never a gate per output. Several
+  // enables ('173 M and N) meet in one NOR, which is NOT for a single one.
+  let chipEnable = 'pwr_ok';
+  if (oePins.length > 0) {
     components.push({
       id: 'oe_inv',
-      kind: 'not',
+      kind: oePins.length === 1 ? 'not' : 'nor',
       pos: { x: COL, y: -4 * ROW },
-      params: STRUCTURAL,
+      params: oePins.length === 1 ? STRUCTURAL : { ...STRUCTURAL, inputs: oePins.length },
     });
     components.push({
       id: 'oe_ok',
@@ -311,10 +359,12 @@ export function buildPackageChipDef(
       pos: { x: 2 * COL, y: -4 * ROW },
       params: STRUCTURAL,
     });
-    nextWire(pinEnd(portId(oePin.pin), 'y'), pinEnd('oe_inv', 'a'));
+    oePins.forEach((p, i) =>
+      nextWire(pinEnd(portId(p.pin), 'y'), pinEnd('oe_inv', GATE_INPUTS[i]!)),
+    );
     nextWire(pinEnd('pwr_ok', 'y'), pinEnd('oe_ok', 'a'));
     nextWire(pinEnd('oe_inv', 'y'), pinEnd('oe_ok', 'b'));
-    bufferEnable = 'oe_ok';
+    chipEnable = 'oe_ok';
   }
 
   for (let gate = 1; gate <= entry.gates; gate++) {
@@ -326,9 +376,15 @@ export function buildPackageChipDef(
       pos: { x: 2 * COL, y: (gate - 1) * 4 * ROW },
       ...(Object.keys(gateParams).length > 0 ? { params: gateParams } : {}),
     });
+    if (enablePin) nextWire(pinEnd(chipEnable, 'y'), pinEnd(gateId(gate), enablePin));
     for (const p of gatePins) {
-      if (corePin(p)?.dir !== 'out') {
+      const dir = corePin(p)?.dir;
+      if (dir !== 'out' && dir !== 'inout') {
         nextWire(pinEnd(portId(p.pin), 'y'), pinEnd(gateId(gate), p.fn));
+        continue;
+      }
+      if (enablePin) {
+        nextWire(pinEnd(gateId(gate), p.fn), pinEnd(portId(p.pin), 'a'));
         continue;
       }
       components.push({
@@ -336,19 +392,19 @@ export function buildPackageChipDef(
         kind: 'tristate',
         pos: { x: 3 * COL, y: (gate - 1) * 4 * ROW },
         params:
-          oePin && getPart(entry.part)?.enable
+          oePins.length > 0 && getPart(entry.part)?.enable
             ? { ...STRUCTURAL, enableTiming: entry.part }
             : STRUCTURAL,
       });
       nextWire(pinEnd(gateId(gate), p.fn), pinEnd(bufId(p.pin), 'a'));
-      nextWire(pinEnd(bufferEnable, 'y'), pinEnd(bufId(p.pin), 'en'));
+      nextWire(pinEnd(chipEnable, 'y'), pinEnd(bufId(p.pin), 'en'));
       nextWire(pinEnd(bufId(p.pin), 'y'), pinEnd(portId(p.pin), 'a'));
     }
   }
 
   return {
     format: 'lcir.chip',
-    formatVersion: 5,
+    formatVersion: 7,
     id: entry.part,
     name: entry.part,
     version: 1,

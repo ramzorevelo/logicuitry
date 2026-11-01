@@ -25,6 +25,24 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y;
 }
 
+export function inflateRect(r: Rect, pad: number): Rect {
+  return { x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad };
+}
+
+export function polylineBounds(pts: readonly Vec2[]): Rect {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 /** Normalizes two corner points into a Rect with non-negative w/h. */
 export function rectFromPoints(p0: Vec2, p1: Vec2): Rect {
   const x = Math.min(p0.x, p1.x);
@@ -47,6 +65,17 @@ export function worldToScreen(vp: Viewport, p: Vec2): Vec2 {
 
 export function screenToWorld(vp: Viewport, p: Vec2): Vec2 {
   return { x: p.x / vp.zoom + vp.panX, y: p.y / vp.zoom + vp.panY };
+}
+
+/** The viewport that keeps the same world point at the screen centre when the screen's bottom
+ *  edge moves up by `lostPx` CSS px (down when negative). */
+export function keepCentreOnHeightLoss(vp: Viewport, lostPx: number): Viewport {
+  return { ...vp, panY: vp.panY + lostPx / (2 * vp.zoom) };
+}
+
+/** The world rect a `cssW` x `cssH` screen shows. */
+export function visibleWorldRect(vp: Viewport, cssW: number, cssH: number): Rect {
+  return { x: vp.panX, y: vp.panY, w: cssW / vp.zoom, h: cssH / vp.zoom };
 }
 
 export type DrawFn = (ctx: CanvasRenderingContext2D, theme: Theme) => void;

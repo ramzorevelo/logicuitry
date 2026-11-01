@@ -2,7 +2,15 @@
 // color, junctions, selection, and wiring/ghost overlays. Pure draw over a
 // viewport transform; all state comes in through RenderParams.
 
-import type { ChipLibrary, Circuit, Component, Wire, WireEnd } from '../../core/model/types';
+import type {
+  ChipDef,
+  ChipLibrary,
+  Circuit,
+  Component,
+  Group,
+  Wire,
+  WireEnd,
+} from '../../core/model/types';
 import {
   drawStubBusBadge,
   captionPad,
@@ -18,9 +26,8 @@ import {
   getOutputBubble,
   normalizeGateComponent,
 } from '../../core/gates/bubbleModel';
-import { netPins, type PinRef } from '../../core/gates/netGraph';
 import { drawBox, drawConstant } from '../../render/glyphs/chip';
-import { drawRail } from '../../render/glyphs/power';
+import { drawPull, drawRail } from '../../render/glyphs/power';
 import {
   COMMON_PINS,
   matrixDotLit,
@@ -45,25 +52,39 @@ import {
   busLabelGeometry,
   pinKeysOfWires,
   shouldShowPinBusBadge,
-  wireBusWidth,
   type BusBadgeContext,
 } from './busBadge';
 import { occupancyKey, wiredPinKeys } from './pinTargets';
 import { pinFacing } from './smartConnect';
 import { getPrefs } from '../prefs';
-import type { Rect, Vec2, Viewport } from '../../render/scene';
-import { chipTintColor, signalStyle, type SignalState, type Theme } from '../../render/theme';
 import {
-  computeWireRoutes,
-  pinExitSide,
-  pointAlongPolyline,
-  routeAvoiding,
-  routeOrthogonal,
-} from './wireGeom';
+  inflateRect,
+  polylineBounds,
+  rectsIntersect,
+  visibleWorldRect,
+  type Rect,
+  type Vec2,
+  type Viewport,
+} from '../../render/scene';
+import {
+  chipTintColor,
+  paletteColor,
+  signalStyle,
+  type SignalState,
+  type Theme,
+} from '../../render/theme';
+import { pinExitSide, pointAlongPolyline, routeAvoiding, routeOrthogonal } from './wireGeom';
 import type { Expr } from '../../core/boolean/expr';
 import { exprFont, exprTextHeight, layoutExprText, paintExprText } from '../../render/exprText';
 import { GHOST_ALPHA } from '../../render/ghostPreview';
-import { drawCachedGlyph } from '../../render/glyphCache';
+import {
+  SCRATCH_PAD,
+  drawCachedGlyph,
+  drawWithGlyphBudget,
+  fitGlyphCacheTo,
+} from '../../render/glyphCache';
+import { circuitRoutes, componentGeometry, endResolver, previewRoutes } from './routeCache';
+import { wireDisplayInfo } from './wireDisplay';
 import { lodFor } from '../../render/lod';
 import { paintEmphasis } from '../../render/glyphs/relief';
 import { glyphVariant } from '../../render/glyphs/variants';
@@ -78,6 +99,7 @@ const BOX_SET = new Set([
   'srlatch',
   'counter',
   'shiftreg',
+  'ram',
   'mux',
   'demux',
   'decoder',
@@ -85,6 +107,7 @@ const BOX_SET = new Set([
   'adder',
   'comparator',
   'parity',
+  'transceiver',
 ]);
 const SEGMENTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'dp'];
 
@@ -101,10 +124,25 @@ export interface GlyphContext {
   ) => { v: number; x: number; z: number } | undefined;
 }
 
+const defSerials = new WeakMap<ChipDef, number>();
+let nextDefSerial = 0;
+
+/** A def edit replaces the def object rather than mutating it, so object
+ *  identity stands in for a revision a chip instance's tile can key on. */
+function defSerial(def: ChipDef | undefined): string {
+  if (!def) return '-';
+  let n = defSerials.get(def);
+  if (n === undefined) {
+    n = nextDefSerial++;
+    defSerials.set(def, n);
+  }
+  return String(n);
+}
+
 /** Cache identity for one component's glyph: everything the drawing depends on
- *  except its position. Chip instances are excluded by the caller, since a def
- *  edit changes their drawing without changing anything visible here. */
-function glyphKey(comp: Component, theme: Theme, p: GlyphContext): string {
+ *  except its position. */
+export function glyphKey(comp: Component, theme: Theme, p: GlyphContext): string {
+  const def = comp.defId ? p.chipLib.get(comp.defId) : undefined;
   const parts = [
     theme.name,
     theme.presentation ? 'P' : '-',
@@ -115,8 +153,10 @@ function glyphKey(comp: Component, theme: Theme, p: GlyphContext): string {
     comp.mirror ? 'M' : '-',
     JSON.stringify(comp.params ?? {}),
     comp.nameOffset ? `${comp.nameOffset.x},${comp.nameOffset.y}` : '-',
+    comp.defId ?? '-',
+    defSerial(def),
   ];
-  for (const pin of resolveComponentPins(comp, undefined)) {
+  for (const pin of resolveComponentPins(comp, def)) {
     const raw = p.pinRawValue?.(comp.id, pin.name);
     parts.push(`${pin.name}${p.pinSignal(comp.id, pin.name) ?? '?'}`);
     if (raw) parts.push(`${raw.v}/${raw.x}/${raw.z}`);
@@ -127,8 +167,14 @@ function glyphKey(comp: Component, theme: Theme, p: GlyphContext): string {
 export interface RenderParams extends GlyphContext {
   /** The active tab's circuit body: the board, or an open ChipDef being edited. */
   board: Circuit;
+  /** The committed circuit when `board` is a preview built from it: only the
+   *  wires the preview touches reroute. */
+  routeBase?: Circuit | undefined;
   viewport: Viewport;
   selection: ReadonlySet<string>;
+  /** A touch hold has picked the selection up: drawn heavier so the lift shows
+   *  on a phone whose touch vibration is off. */
+  lifted?: boolean;
   changed: ReadonlySet<string>;
   /** Chip instances with a re-bind badge (a def edit stranded one of their wires). */
   stale?: ReadonlySet<string>;
@@ -204,7 +250,30 @@ interface Geo {
   pins: Map<string, Vec2>;
 }
 
-export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams): void {
+/** Returns true when some glyphs drew from a stand-in tile, so the caller
+ *  draws another frame. */
+export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams): boolean {
+  fitGlyphCacheTo(p.board.components.length);
+  return drawWithGlyphBudget(() => drawBoard(ctx, theme, p));
+}
+
+/** Slack around a wire's route for what draws beside it: the bus slash and
+ *  width, a tap's range label, a free-end marker. In grid units, on top of
+ *  the widest halo. */
+const WIRE_CULL_GRIDS = 8;
+
+/** Per wires array, so a pan does not rescan every wire each frame. */
+const wiredKeysCache = new WeakMap<readonly Wire[], ReadonlySet<string>>();
+function wiredPinKeysOf(wires: readonly Wire[]): ReadonlySet<string> {
+  let keys = wiredKeysCache.get(wires);
+  if (!keys) {
+    keys = wiredPinKeys(wires);
+    wiredKeysCache.set(wires, keys);
+  }
+  return keys;
+}
+
+function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams): void {
   const { viewport: vp } = p;
   const dpr = p.dpr ?? 1;
   const canvas = ctx.canvas;
@@ -228,23 +297,18 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
 
   // One decoration budget for the whole frame, carried on the theme so every
   // glyph function sees it without a parallel parameter.
+  // Geometry never reads lod, and the frame's spread copy would defeat the
+  // geometry and route caches, which key on the theme object.
+  const baseTheme = theme;
   theme = { ...theme, lod: lodFor(vp.zoom, p.board.components.length) };
 
-  const geo = new Map<string, Geo>();
-  for (const comp of p.board.components) {
-    const def = comp.defId ? p.chipLib.get(comp.defId) : undefined;
-    geo.set(comp.id, symbolBounds(comp, theme, def));
-  }
+  const geo = componentGeometry(p.board.components, p.chipLib, baseTheme);
 
   // Group borders go down first, so every wire and body draws over them: the
   // border says "these belong together", it is not part of the circuit.
   drawGroups(ctx, theme, p.board, geo);
 
-  const resolveEnd = (end: WireEnd): Vec2 | undefined => {
-    if (end.kind === 'pin') return geo.get(end.component)?.pins.get(end.pin);
-    if (end.kind === 'junction') return p.board.junctions.find((j) => j.id === end.junction)?.pos;
-    return end.pos; // 'free' and 'tap' both carry their own click point
-  };
+  const resolveEnd = endResolver(p.board, p.chipLib, baseTheme);
 
   // P2.1/M4.5: bounding boxes of every component, including a wire's own
   // endpoint components (the M4.5 own-pin exclusion was removed -- a pin sits
@@ -256,22 +320,38 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
   // CircuitWorkbench.tsx must compute from the exact same inputs, or a click
   // lands on a path that isn't the one drawn (M4.2 follow-up route-
   // consistency bug).
-  const boundsById = new Map([...geo.entries()].map(([id, g]) => [id, g.bounds]));
-  const routes = computeWireRoutes(p.board.wires, resolveEnd, boundsById, p.grid);
+  const routes = p.routeBase
+    ? previewRoutes(p.board, p.routeBase, p.chipLib, baseTheme, p.grid)
+    : circuitRoutes(p.board, p.chipLib, baseTheme, p.grid);
+  const showWireColors = getPrefs().showWireColors;
+  const display = wireDisplayInfo(p.board, p.chipLib);
+  // Only what is drawn is culled; hit-tests and routing still see every item.
+  const view = visibleWorldRect(vp, cssW, cssH);
+  const inView = (r: Rect, pad: number) => rectsIntersect(inflateRect(r, pad), view);
+  const wirePad = WIRE_CULL_GRIDS * theme.gridSchematic + theme.strokes.wire * 8;
 
   for (const wire of p.board.wires) {
     const a = resolveEnd(wire.a);
     const b = resolveEnd(wire.b);
     if (!a || !b) continue;
     const pts = routes.get(wire.id)!;
-    const info =
-      endpointInfo(p, geo, wire.a) ?? endpointInfo(p, geo, wire.b) ?? netEndpointInfo(p, wire);
+    if (!inView(polylineBounds(pts), wirePad)) continue;
+    const shown = display.get(wire.id);
+    const state = shown?.readPin && p.pinSignal(shown.readPin.component, shown.readPin.pin);
+    // Width comes from the shared resolver, so the badge's own hit-test agrees
+    // with what is drawn about which wires have a label.
+    const busWidth = shown?.width ?? 1;
+    const sheath = showWireColors ? paletteColor(theme, wire.color) : undefined;
+    // Every halo and highlight clears the sheath, or a coloured wire would
+    // hide the very cue that points at it.
+    const outer = sheath ? sheathWidth(theme, busWidth) : coreWidth(theme, busWidth);
+    const haloWidth = Math.max(theme.strokes.wire * 4, outer + theme.strokes.wire * 2);
     if (p.highlightWires?.has(wire.id)) {
       // Waveform-track hover halo, drawn under the wire's own signal color.
       ctx.save();
       ctx.globalAlpha = 0.35;
       ctx.strokeStyle = theme.colors.accent;
-      ctx.lineWidth = theme.strokes.wire * 4;
+      ctx.lineWidth = haloWidth;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
@@ -282,17 +362,14 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
       ctx.save();
       ctx.globalAlpha = 0.5;
       ctx.strokeStyle = theme.colors.warn;
-      ctx.lineWidth = theme.strokes.wire * 4;
+      ctx.lineWidth = haloWidth;
       ctx.lineJoin = 'round';
       ctx.beginPath();
       pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
       ctx.stroke();
       ctx.restore();
     }
-    // Width comes from the shared resolver, not from `info`, so the badge's
-    // own hit-test agrees with what is drawn about which wires have a label.
-    const busWidth = wireBusWidth(p.board, p.chipLib, wire);
-    drawWire(ctx, theme, pts, info?.state, busWidth, false, attachedEnds(wire));
+    drawWire(ctx, theme, pts, state, busWidth, false, attachedEnds(wire), sheath);
     if (busWidth > 1 && pts.length >= 2) {
       // Bus-width slash + bit-count badge, oriented along the wire's local direction at its
       // arc-length midpoint so a bent bus wire still reads correctly.
@@ -339,10 +416,10 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     if (p.selection.has(wire.id) || p.cutFlags?.has(wire.id) || blocked > 0) {
       ctx.strokeStyle =
         p.cutFlags?.has(wire.id) || blocked > 0 ? theme.colors.warn : theme.colors.accent;
-      ctx.lineWidth = theme.strokes.wire + 4;
+      ctx.lineWidth = Math.max(theme.strokes.wire + 4, outer + 4);
       // A refused gesture pulses rather than sitting at the steady highlight
       // weight, so it reads as feedback and not as a new selection.
-      ctx.globalAlpha = blocked > 0 ? 0.35 + 0.5 * blocked : 0.35;
+      ctx.globalAlpha = blocked > 0 ? 0.35 + 0.5 * blocked : p.lifted ? 0.7 : 0.35;
       ctx.beginPath();
       ctx.moveTo(pts[0]!.x, pts[0]!.y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
@@ -374,22 +451,25 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     }
   }
 
-  for (const j of p.board.junctions) drawJunction(ctx, theme, j.pos);
+  for (const j of p.board.junctions)
+    if (inView({ ...j.pos, w: 0, h: 0 }, theme.gridSchematic)) drawJunction(ctx, theme, j.pos);
 
   // A wired pin's width is already stated by the wire's own bus glyph; drawing
   // it twice is noise on a board full of buses.
   const badgeRule: BusBadgeContext = {
-    wired: wiredPinKeys(p.board.wires),
+    wired: wiredPinKeysOf(p.board.wires),
     mismatched: pinKeysOfWires(p.board.wires, p.mismatchWires),
     alwaysShow: getPrefs().alwaysShowPinBusWidth,
   };
 
   for (const comp of p.board.components) {
-    paintComponent(ctx, theme, comp, p, geo.get(comp.id)?.bounds, dpr * vp.zoom);
     const g = geo.get(comp.id);
+    if (g && !inView(g.bounds, glyphPad(comp, theme))) continue;
+    paintComponent(ctx, theme, comp, p, g?.bounds, dpr * vp.zoom);
     if (!g) continue;
     drawPinBusBadges(ctx, theme, comp, g, p.chipLib, badgeRule);
-    if (p.selection.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.accent);
+    if (p.selection.has(comp.id))
+      outline(ctx, theme, g.bounds, theme.colors.accent, 1, p.lifted ?? false);
     else if (p.changed.has(comp.label || comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     else if (p.stale?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     if (p.paramHighlight?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.ok, 1.8);
@@ -461,19 +541,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
 
   if (p.bubbleOverlay) {
     const ob = p.bubbleOverlay.board;
-    const oGeo = new Map<string, Geo>();
-    for (const comp of ob.components) {
-      const def = comp.defId ? p.chipLib.get(comp.defId) : undefined;
-      oGeo.set(comp.id, symbolBounds(comp, theme, def));
-    }
-    const oResolve = (end: WireEnd): Vec2 | undefined => {
-      if (end.kind === 'pin') return oGeo.get(end.component)?.pins.get(end.pin);
-      if (end.kind === 'junction') return ob.junctions.find((j) => j.id === end.junction)?.pos;
-      if (end.kind === 'free' || end.kind === 'tap') return end.pos;
-      return undefined;
-    };
-    const oBounds = new Map([...oGeo.entries()].map(([id, g]) => [id, g.bounds]));
-    const oRoutes = computeWireRoutes(ob.wires, oResolve, oBounds, p.grid);
+    const oRoutes = circuitRoutes(ob, p.chipLib, baseTheme, p.grid);
     const tint = p.bubbleOverlay.legal ? theme.colors.ok : theme.colors.warn;
     ctx.globalAlpha = GHOST_ALPHA;
     ctx.strokeStyle = tint;
@@ -542,7 +610,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: Rend
     // every preview wire drawn so far this pass, so the fan of suggested
     // wires doesn't visually stack on itself or the real board.
     const previewObstacles: Vec2[][] = [...routes.values()];
-    const bodyObstacles = [...boundsById.values()];
+    const bodyObstacles = [...geo.values()].map((g) => g.bounds);
     for (const pair of p.smartConnectPreview) {
       const pts = routeAvoiding(pair.from, pair.to, bodyObstacles, previewObstacles, p.grid);
       drawWire(ctx, theme, pts, undefined, 1, true);
@@ -667,7 +735,6 @@ function drawPinBusBadges(
   const def = comp.defId ? chipLib.get(comp.defId) : undefined;
   const pins = resolveComponentPins(comp, def);
   if (!pins.some((pin) => pin.width > 1)) return;
-  const center = { x: g.bounds.x + g.bounds.w / 2, y: g.bounds.y + g.bounds.h / 2 };
   const stub = theme.gridSchematic;
   for (const pin of pins) {
     const tip = g.pins.get(pin.name);
@@ -675,7 +742,7 @@ function drawPinBusBadges(
     if (!shouldShowPinBusBadge(pin.width, occupancyKey(comp.id, pin.name), rule)) continue;
     // The stub runs inward from the tip; its far end is only needed for the
     // badge's own axis, so one grid unit along the facing is enough.
-    const facing = pinFacing(tip, center);
+    const facing = pinFacing(tip, g.bounds);
     const from = { x: tip.x - facing.x * stub, y: tip.y - facing.y * stub };
     drawStubBusBadge(ctx, theme, UPRIGHT, from, tip, pin.width);
   }
@@ -721,6 +788,9 @@ export function groupRect(bounds: readonly Rect[], g: number): Rect | undefined 
   };
 }
 
+/** Height of a group's name above its border, in grid units. */
+const GROUP_NAME_ROOM = 2;
+
 /** Rects for every group, a nested one enclosing its descendants as well as
  *  its own members -- otherwise a child could poke out of its parent, which
  *  reads as it not being inside at all. */
@@ -753,7 +823,9 @@ export function groupRects(
     const parts = [...(ownBounds.get(id) ?? [])];
     for (const child of childrenOf.get(id) ?? []) {
       const r = solve(child);
-      if (r) parts.push(r);
+      // The child's name sits above its border; without the room the
+      // parent's border would run through it.
+      if (r) parts.push({ ...r, y: r.y - GROUP_NAME_ROOM * g, h: r.h + GROUP_NAME_ROOM * g });
     }
     solving.delete(id);
     const rect = groupRect(parts, g);
@@ -762,6 +834,37 @@ export function groupRects(
   };
   for (const group of board.groups) solve(group.id);
   return out;
+}
+
+/** Text inset inside a group's title tab, in world px. */
+const GROUP_TAB_PAD = 4;
+/** The name's baseline sits this far above the border. */
+const GROUP_NAME_LIFT = 2;
+
+/** Where a group's name sits above its border: the bare name, or the tab
+ *  drawn behind it. The scene and the name's hit-test both read this, so the
+ *  whole visible tab is grabbable. */
+export function groupNameBox(group: Group, rect: Rect, textWidth: number, theme: Theme): Rect {
+  const tab = !!group.tab && paletteColor(theme, group.color) !== undefined;
+  const pad = tab ? GROUP_TAB_PAD : 0;
+  const h = theme.glyphText + (tab ? GROUP_NAME_LIFT + 1 : 0);
+  return { x: rect.x, y: rect.y - h, w: textWidth + 2 * pad, h };
+}
+
+/** Parents before children, so a nested fill stacks on its parent's rather
+ *  than being painted over by it. Board order breaks ties. */
+function groupsByDepth(groups: readonly Group[]): Group[] {
+  const parentOf = new Map(groups.map((g) => [g.id, g.parent]));
+  const depth = (id: string): number => {
+    let d = 0;
+    // Bounded by the group count: a hand-edited parent cycle must not hang.
+    for (let p = parentOf.get(id); p !== undefined && d < groups.length; p = parentOf.get(p)) d++;
+    return d;
+  };
+  return groups
+    .map((g, i) => ({ g, i, d: depth(g.id) }))
+    .sort((a, b) => a.d - b.d || a.i - b.i)
+    .map(({ g }) => g);
 }
 
 function drawGroups(
@@ -773,22 +876,48 @@ function drawGroups(
   if (!board.groups?.length) return;
   const g = theme.gridSchematic;
   const rects = groupRects(board, (id) => geo.get(id)?.bounds, g);
-  for (const group of board.groups) {
+  ctx.save();
+  ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  for (const group of groupsByDepth(board.groups)) {
     const rect = rects.get(group.id);
     if (!rect) continue;
-    ctx.save();
-    ctx.strokeStyle = theme.colors.line;
-    ctx.lineWidth = 1;
+    const color = paletteColor(theme, group.color);
+    if (color) {
+      ctx.globalAlpha = theme.groupFillAlpha;
+      ctx.fillStyle = color;
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = color ?? theme.colors.line;
+    ctx.lineWidth = color ? theme.strokes.min : 1;
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
     ctx.setLineDash([]);
-    ctx.fillStyle = theme.colors.muted;
-    ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(oneLine(group.name), rect.x, rect.y - 2);
-    ctx.restore();
+    const name = oneLine(group.name);
+    const box = groupNameBox(group, rect, ctx.measureText(name).width, theme);
+    if (group.tab && color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      // The palette is tuned against the surface, so surface on a slot reads
+      // as well as the slot on the surface.
+      ctx.fillStyle = theme.colors.surface;
+      ctx.fillText(name, box.x + GROUP_TAB_PAD, rect.y - GROUP_NAME_LIFT);
+    } else {
+      ctx.fillStyle = color ?? theme.colors.muted;
+      ctx.fillText(name, rect.x, rect.y - GROUP_NAME_LIFT);
+    }
   }
+  ctx.restore();
+}
+
+/** How far a glyph may paint outside its bounds, in world units. A caption
+ *  draws outside them, and anything past the tile's slack is rasterised away
+ *  rather than merely uncached -- which cut "AB + A'C + BC" short on the
+ *  consensus board. */
+function glyphPad(comp: Component, theme: Theme): number {
+  return captionPad(comp.label ?? '', theme.glyphText, theme.gridSchematic) || SCRATCH_PAD;
 }
 
 function paintComponent(
@@ -799,22 +928,17 @@ function paintComponent(
   bounds: Rect | undefined,
   scale: number,
 ): void {
-  // A chip's drawing follows its def, which can change under a stable key.
-  if (!bounds || comp.kind === 'chip') {
+  if (!bounds) {
     drawComponent(ctx, theme, comp, p);
     return;
   }
-  // A caption draws OUTSIDE the component's bounds, and anything past the
-  // tile's slack is rasterised away rather than merely uncached -- which cut
-  // "AB + A'C + BC" short on the consensus board.
-  const pad = captionPad(comp.label ?? '', theme.glyphText, theme.gridSchematic);
   drawCachedGlyph(
     ctx,
     glyphKey(comp, theme, p),
     scale,
     bounds,
     (c) => drawComponent(c, theme, comp, p),
-    pad || undefined,
+    glyphPad(comp, theme),
   );
 }
 
@@ -927,6 +1051,8 @@ export function drawComponent(
     drawNetLabel(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (comp.kind === 'vcc' || comp.kind === 'gnd') {
     drawRail(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
+  } else if (comp.kind === 'pullup' || comp.kind === 'pulldown') {
+    drawPull(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (comp.kind === 'constant') {
     drawConstant(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin));
   } else if (BOX_SET.has(comp.kind)) {
@@ -953,43 +1079,6 @@ export function drawComponent(
   }
 }
 
-/** Width deliberately absent: it comes from wireBusWidth, so nothing here can
- *  report a second, disagreeing answer. */
-interface EndInfo {
-  state?: SignalState;
-}
-
-function pinEndInfo(p: RenderParams, ref: PinRef): EndInfo | undefined {
-  const comp = p.board.components.find((c) => c.id === ref.component);
-  if (!comp) return undefined;
-  const def = comp.defId ? p.chipLib.get(comp.defId) : undefined;
-  if (!resolveComponentPins(comp, def).some((s) => s.name === ref.pin)) return undefined;
-  const state = p.pinSignal(ref.component, ref.pin);
-  return state ? { state } : {};
-}
-
-function endpointInfo(p: RenderParams, geo: Map<string, Geo>, end: WireEnd): EndInfo | undefined {
-  if (end.kind !== 'pin') return undefined;
-  return pinEndInfo(p, { component: end.component, pin: end.pin });
-}
-
-/** A wire with no direct pin end (e.g. junction-to-free-end, split off the
- *  middle of a bus and dropped in empty space) still carries the tapped
- *  net's real width/state -- walk the net from each end to the nearest
- *  reachable pin instead of defaulting to a thin 1-bit wire with no bus
- *  badge. Direct pin ends are always tried first (`endpointInfo`); this is
- *  strictly a fallback, so it only pays the graph-walk cost when needed. */
-function netEndpointInfo(p: RenderParams, wire: { a: WireEnd; b: WireEnd }): EndInfo | undefined {
-  for (const end of [wire.a, wire.b]) {
-    if (end.kind === 'pin') continue;
-    for (const ref of netPins(p.board, end)) {
-      const info = pinEndInfo(p, ref);
-      if (info) return info;
-    }
-  }
-  return undefined;
-}
-
 /**
  * Which of a wire's own ends land on something a glyph already draws (a pin
  * stub, a junction dot, a tap mark) rather than hanging free. Those ends need
@@ -1013,9 +1102,9 @@ function drawWire(
   // WITHIN a wire is a rounded lineJoin, which is why only the pin end shows
   // it, and only when the wire arrives perpendicular.
   attached: readonly [boolean, boolean] = [false, false],
+  sheath?: string,
 ): void {
   const style = state ? signalStyle(theme, state) : undefined;
-  ctx.lineWidth = width > 1 ? theme.strokes.bus : theme.strokes.wire;
   ctx.globalAlpha = ghost ? 0.45 : 1;
   ctx.lineJoin = 'round';
   ctx.lineCap = theme.glyph.pinCap;
@@ -1026,6 +1115,20 @@ function drawWire(
       ctx.arcTo(pts[i]!.x, pts[i]!.y, pts[i + 1]!.x, pts[i + 1]!.y, r);
     ctx.lineTo(pts[pts.length - 1]!.x, pts[pts.length - 1]!.y);
   };
+  if (sheath) {
+    // Insulation, then a paper gap, so the signal core stays readable even
+    // where the sheath shares its hue.
+    ctx.beginPath();
+    path();
+    ctx.setLineDash([]);
+    ctx.lineWidth = sheathWidth(theme, width);
+    ctx.strokeStyle = sheath;
+    ctx.stroke();
+    ctx.lineWidth = coreWidth(theme, width) + theme.strokes.wire;
+    ctx.strokeStyle = theme.colors.paper;
+    ctx.stroke();
+  }
+  ctx.lineWidth = coreWidth(theme, width);
   // Emphasis rides an asserted wire only; a settled 0 must stay quiet.
   if (state === '1' && !ghost) {
     ctx.beginPath();
@@ -1045,6 +1148,15 @@ function drawWire(
   if (attached[0]) fillJoint(ctx, theme, pts[0]!, pts[1], ctx.lineWidth);
   if (attached[1]) fillJoint(ctx, theme, pts[pts.length - 1]!, pts[pts.length - 2], ctx.lineWidth);
   ctx.globalAlpha = 1;
+}
+
+function coreWidth(theme: Theme, busWidth: number): number {
+  return busWidth > 1 ? theme.strokes.bus : theme.strokes.wire;
+}
+
+/** A sheath shows a band one wire stroke wide each side of the paper gap. */
+function sheathWidth(theme: Theme, busWidth: number): number {
+  return coreWidth(theme, busWidth) + theme.strokes.wire * 3;
 }
 
 /**
@@ -1134,11 +1246,12 @@ function outline(
   b: Rect,
   color: string,
   padScale = 1,
+  solid = false,
 ): void {
   const pad = theme.gridSchematic * 0.5 * padScale;
   ctx.strokeStyle = color;
-  ctx.lineWidth = theme.strokes.min;
-  ctx.setLineDash([4, 3]);
+  ctx.lineWidth = solid ? theme.strokes.min * 2.5 : theme.strokes.min;
+  ctx.setLineDash(solid ? [] : [4, 3]);
   ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
   ctx.setLineDash([]);
 }

@@ -1,0 +1,337 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "eight-bit-adder",
+  "name": "Eight-bit adder",
+  "components": [
+    {
+      "id": "ah",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 48
+      },
+      "label": "A7-A4",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "bh",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 128
+      },
+      "label": "B7-B4",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "al",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 208
+      },
+      "label": "A3-A0",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "bl",
+      "kind": "toggle",
+      "pos": {
+        "x": 64,
+        "y": 288
+      },
+      "label": "B3-B0",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "u2",
+      "kind": "adder",
+      "pos": {
+        "x": 240,
+        "y": 40
+      },
+      "label": "U2"
+    },
+    {
+      "id": "u1",
+      "kind": "adder",
+      "pos": {
+        "x": 240,
+        "y": 200
+      },
+      "label": "U1"
+    },
+    {
+      "id": "gnd",
+      "kind": "gnd",
+      "pos": {
+        "x": 200,
+        "y": 296
+      }
+    },
+    {
+      "id": "c4",
+      "kind": "probe",
+      "pos": {
+        "x": 392,
+        "y": 176
+      },
+      "label": "C4"
+    },
+    {
+      "id": "sh",
+      "kind": "busdisplay",
+      "pos": {
+        "x": 432,
+        "y": 72
+      },
+      "label": "S7-S4",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "sl",
+      "kind": "busdisplay",
+      "pos": {
+        "x": 432,
+        "y": 232
+      },
+      "label": "S3-S0",
+      "params": {
+        "width": 4
+      }
+    },
+    {
+      "id": "c8",
+      "kind": "led",
+      "pos": {
+        "x": 512,
+        "y": 72
+      },
+      "label": "C8"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "ah",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "bh",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 208,
+          "y": 96
+        },
+        {
+          "x": 208,
+          "y": 160
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "al",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "b"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "bl",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 184,
+          "y": 256
+        },
+        {
+          "x": 184,
+          "y": 320
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "cin"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gnd",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 216,
+          "y": 272
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "sum"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sh",
+        "pin": "value"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "sum"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "sl",
+        "pin": "value"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "cout"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "c8",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "h1",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "cout"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "hc"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 256
+        }
+      ]
+    },
+    {
+      "id": "h2",
+      "a": {
+        "kind": "junction",
+        "junction": "hc"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "cin"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 136
+        },
+        {
+          "x": 224,
+          "y": 136
+        },
+        {
+          "x": 224,
+          "y": 112
+        }
+      ]
+    },
+    {
+      "id": "h3",
+      "a": {
+        "kind": "junction",
+        "junction": "hc"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "c4",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [
+    {
+      "id": "hc",
+      "pos": {
+        "x": 368,
+        "y": 184
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "datasheet",
+    "datasheet": "max"
+  }
+}

@@ -84,7 +84,7 @@ describe('PALETTE', () => {
     expect([...PALETTE_CHIP_IDS]).toEqual(['half-adder', 'full-adder']);
   });
 
-  it('lists the six Sequential blocks in course order', () => {
+  it('lists the seven Sequential blocks in course order, RAM last', () => {
     expect(PALETTE.filter((i) => i.group === 'Sequential').map((i) => i.label)).toEqual([
       'SR latch',
       'D latch',
@@ -92,6 +92,7 @@ describe('PALETTE', () => {
       'Register',
       'Counter',
       'Shift reg',
+      'RAM',
     ]);
   });
 
@@ -112,7 +113,7 @@ describe('74 series sub-headings', () => {
     }
   });
 
-  it('lists the 27 parts under seven sub-headings in part-number order', () => {
+  it('lists the 30 parts under nine sub-headings in part-number order', () => {
     const rows = partRows(parts);
     expect(rows.map((r) => r.sub)).toEqual([...PART_SUBGROUPS]);
     expect(Object.fromEntries(rows.map((r) => [r.sub, r.defs.map((d) => d.id.slice(4))]))).toEqual({
@@ -121,8 +122,10 @@ describe('74 series sub-headings', () => {
       Multiplexers: ['151', '153', '157'],
       Display: ['47', '48'],
       Arithmetic: ['85', '280', '283'],
-      'Flip-flops and registers': ['74', '175', '273', '374', '377'],
+      'Flip-flops and registers': ['74', '173', '175', '273', '374', '377'],
       'Counters and shift registers': ['161', '163', '164', '165'],
+      Bus: ['245'],
+      Memory: ['189'],
     });
   });
 
@@ -158,6 +161,14 @@ describe('matchesFind', () => {
     expect(partHits('MUX')).toEqual(['74LS151', '74LS153', '74LS157']);
     expect(blockHits('counter')).toEqual(['Counter']);
     expect(partHits('counter')).toEqual(['74LS161', '74LS163']);
+  });
+
+  it('finds the bus and memory parts by number and by caption', () => {
+    expect(partHits('245')).toEqual(['74LS245']);
+    expect(partHits('transceiver')).toEqual(['74LS245']);
+    expect(partHits('189')).toEqual(['74LS189']);
+    expect(partHits('ram')).toEqual(['74LS189']);
+    expect(partHits('173')).toEqual(['74LS173']);
   });
 
   it("finds a part in the course's '138 notation", () => {

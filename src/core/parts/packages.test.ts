@@ -35,9 +35,11 @@ function timedArcs(core: PackageCore): [string, string][] {
   if (!shape) return outs.flatMap((o) => ins.map((i): [string, string] => [i, o]));
   const arcs: [string, string][] = [];
   const stored = outs.filter((o) => o !== 'tc');
+  // An output enable times through the enable rows, and a RAM write reaches no output.
+  const asyncArc = (pin: string) => pin !== 'inh' && pin !== 'oe' && core.kind !== 'ram';
   for (const [pin, timing] of shape.pins) {
     if (timing === 'clock') arcs.push(...outs.map((o): [string, string] => [pin, o]));
-    if (timing === 'arrival' && pin !== 'inh')
+    if (timing === 'arrival' && asyncArc(pin))
       arcs.push(...stored.map((o): [string, string] => [pin, o]));
   }
   arcs.push(...shape.through.map((t): [string, string] => [t.from, t.to]));
@@ -104,7 +106,7 @@ describe('generated ChipDefs', () => {
       for (const pin of def.pins) {
         const port = def.components.find((c) => c.id === pin.boundComponent);
         expect(port, `${e.part} ${pin.name}`).toBeDefined();
-        expect(port!.kind).toBe(pin.dir === 'out' ? 'outport' : 'inport');
+        expect(port!.kind).toBe(pin.dir === 'in' ? 'inport' : 'outport');
       }
     }
   });

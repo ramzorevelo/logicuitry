@@ -17,7 +17,13 @@ import {
   typPublished,
   type DatasheetColumn,
 } from '../parts/partsDb';
-import { endpointPin, timingShape, type PinTiming, type TimingShape } from './shape';
+import {
+  endpointPin,
+  timingShape,
+  type PinTiming,
+  type ThroughArc,
+  type TimingShape,
+} from './shape';
 
 export class TimingError extends Error {
   constructor(
@@ -87,6 +93,8 @@ export interface TimingReport {
   endpoints: PathTiming[];
   worst: PathTiming | null;
   sequential: SequentialTiming | null;
+  /** Transceivers whose `dir` is not tied to a fixed level: paths end and restart there. */
+  directionBreaks: string[];
 }
 
 const SOURCE_KINDS = new Set(['toggle', 'button', 'inport', 'constant', 'clock']);
@@ -163,7 +171,28 @@ function hopDelay(
 // 'through' is a structural tristate (data passes at zero delay, no hop);
 // 'ignored' is the rest of a chip's power gate, which times nothing; 'reg' is
 // anything with a timing shape, a latch included: its outputs start paths.
-type Role = 'source' | 'sink' | 'reg' | 'comb' | 'through' | 'ignored';
+// 'break' is a transceiver whose direction can change: both sides end and start paths.
+type Role = 'source' | 'sink' | 'reg' | 'comb' | 'through' | 'ignored' | 'break';
+
+const FIXED_LEVEL_KINDS = new Set(['vcc', 'gnd', 'constant']);
+
+/**
+ * A transceiver reads the net it drives, so all-pairs arcs would loop it on
+ * itself. Its one arc follows `dir` when only a rail or a constant drives it;
+ * null when the direction can change at run time.
+ */
+function transceiverArc(c: CompiledCircuit, pi: number, names: PinNames): ThroughArc | null {
+  const net = c.primitives[pi]!.inputs[names.ins.indexOf('dir')];
+  const drivers = net === undefined ? [] : (c.drivers[net] ?? []);
+  const levels = drivers.map(({ prim }) => {
+    const p = c.primitives[prim]!;
+    if (!FIXED_LEVEL_KINDS.has(p.kind)) return undefined;
+    return p.kind === 'vcc' ? 1 : p.kind === 'gnd' ? 0 : intParam(p.params, 'value', 0) & 1;
+  });
+  const level = levels[0];
+  if (level === undefined || levels.some((l) => l !== level)) return null;
+  return level ? { from: 'a', to: 'b' } : { from: 'b', to: 'a' };
+}
 
 function roleOf(p: CompiledPrimitive): Role {
   if (isStructuralHop(p)) return p.kind === 'tristate' ? 'through' : 'ignored';
@@ -194,22 +223,32 @@ interface Analysis {
   roles: Role[];
   pinNames: PinNames[];
   shapes: (TimingShape | null)[];
+  /** The only arcs a prim times; null means every input to every output. */
+  arcs: (readonly ThroughArc[] | null)[];
   order: number[]; // comb prim indices, topological
 }
 
 function buildAnalysis(c: CompiledCircuit): Analysis {
-  const roles = c.primitives.map(roleOf);
   const pinNames = c.primitives.map(pinNamesOf);
+  const fixedArcs = c.primitives.map((p, i) =>
+    p.kind === 'transceiver' ? transceiverArc(c, i, pinNames[i]!) : null,
+  );
+  const roles = c.primitives.map(
+    (p, i): Role => (p.kind !== 'transceiver' ? roleOf(p) : fixedArcs[i] ? 'comb' : 'break'),
+  );
   const shapes = c.primitives.map((p, i) =>
     roles[i] === 'reg' ? timingShape(p.kind, p.params) : null,
+  );
+  const arcs = c.primitives.map((_, i) =>
+    roles[i] === 'reg' ? shapes[i]!.through : fixedArcs[i] ? [fixedArcs[i]] : null,
   );
 
   // A stateful prim joins the graph only through its through arcs, so its
   // stored outputs and its other inputs break the path: Q feeding its own /CLR or EN is no cycle.
   const throughPins = (i: number, end: 'from' | 'to') =>
-    new Set(shapes[i]?.through.map((t) => t[end]) ?? []);
-  const fromPins = c.primitives.map((_, i) => (roles[i] === 'reg' ? throughPins(i, 'from') : null));
-  const toPins = c.primitives.map((_, i) => (roles[i] === 'reg' ? throughPins(i, 'to') : null));
+    arcs[i] ? new Set(arcs[i].map((t) => t[end])) : null;
+  const fromPins = c.primitives.map((_, i) => throughPins(i, 'from'));
+  const toPins = c.primitives.map((_, i) => throughPins(i, 'to'));
   const inGraph = (i: number) =>
     roles[i] === 'comb' || roles[i] === 'through' || (fromPins[i]?.size ?? 0) > 0;
   const comb = c.primitives.map((_, i) => i).filter(inGraph);
@@ -222,6 +261,8 @@ function buildAnalysis(c: CompiledCircuit): Analysis {
       if (fromPins[pi] && !fromPins[pi].has(pinNames[pi]!.ins[slot]!)) continue;
       for (const d of c.drivers[net] ?? []) {
         if (!combSet.has(d.prim)) continue;
+        // An inout pin reads back its own drive; that is the pin, not a cycle.
+        if (d.prim === pi && pinNames[pi]!.outs[d.out] === pinNames[pi]!.ins[slot]) continue;
         if (toPins[d.prim] && !toPins[d.prim]!.has(pinNames[d.prim]!.outs[d.out]!)) continue;
         succ.get(d.prim)!.push(pi);
         indeg.set(pi, indeg.get(pi)! + 1);
@@ -247,7 +288,7 @@ function buildAnalysis(c: CompiledCircuit): Analysis {
     const cyclePaths = findCycle(stuck, succ).map((i) => c.primitives[i]!.path);
     throw new TimingError(`combinational cycle: ${cyclePaths.join(' -> ')}`, cyclePaths);
   }
-  return { roles, pinNames, shapes, order };
+  return { roles, pinNames, shapes, arcs, order };
 }
 
 /** One cycle within the unresolved subgraph, in loop order. */
@@ -308,11 +349,12 @@ function propagate(
       if (from) mergeArrival(arr, p.outputs[0]!, from);
       continue;
     }
-    const arcs: [number, number][] =
-      a.roles[pi] === 'reg'
-        ? a.shapes[pi]!.through.map((t) => [names.ins.indexOf(t.from), names.outs.indexOf(t.to)])
-        : p.outputs.flatMap((_, o) => p.inputs.map((_, i): [number, number] => [i, o]));
+    const only = a.arcs[pi];
+    const arcs: [number, number][] = only
+      ? only.map((t) => [names.ins.indexOf(t.from), names.outs.indexOf(t.to)])
+      : p.outputs.flatMap((_, o) => p.inputs.map((_, i): [number, number] => [i, o]));
     for (const [i, o] of arcs) {
+      if (names.ins[i] === names.outs[o]) continue;
       const from = arr.get(p.inputs[i]!);
       if (!from) continue;
       const d = hopDelay(p.part, names.ins[i]!, names.outs[o]!, col);
@@ -427,7 +469,7 @@ function inputGroups(c: CompiledCircuit, a: Analysis, pi: number): InputGroup[] 
   const shape = a.shapes[pi]!;
   a.pinNames[pi]!.ins.forEach((name, slot) => {
     const timing = shape.pins.get(name)!;
-    if (timing === 'clock') return;
+    if (timing === 'clock' || timing === 'through') return;
     const pin = endpointPin(name);
     const g = groups.get(pin) ?? { pin, timing, nets: [] };
     g.nets.push(c.primitives[pi]!.inputs[slot]!);
@@ -583,23 +625,28 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
 
   // Startpoints: source prims, stateful outputs, and undriven nets read by
   // logic (top-level In labels compile to no primitive, only an aliased net).
-  const seeds = new Map<number, Seed>();
   const atZero = (source: string): Seed => ({ source, maxPs: 0, minPs: 0 });
-  const regs: number[] = [];
-  c.primitives.forEach((p, i) => {
-    const role = a.roles[i]!;
-    if (role === 'reg') regs.push(i);
-    if (role === 'source' || role === 'reg')
-      for (const net of p.outputs) seeds.set(net, atZero(p.path));
-  });
-  c.primitives.forEach((p, i) => {
-    if (a.roles[i] === 'ignored') return;
-    for (const net of p.inputs)
-      if (!seeds.has(net) && (c.drivers[net] ?? []).length === 0)
-        seeds.set(net, atZero(c.nets[net]!.paths[0]!));
-  });
+  const regs = c.primitives.flatMap((_, i) => (a.roles[i] === 'reg' ? [i] : []));
+  const breaks = c.primitives.flatMap((_, i) => (a.roles[i] === 'break' ? [i] : []));
+  const seedsFrom = (starts: ReadonlySet<Role>): Map<number, Seed> => {
+    const seeds = new Map<number, Seed>();
+    c.primitives.forEach((p, i) => {
+      if (starts.has(a.roles[i]!)) for (const net of p.outputs) seeds.set(net, atZero(p.path));
+    });
+    c.primitives.forEach((p, i) => {
+      if (a.roles[i] === 'ignored') return;
+      for (const net of p.inputs)
+        if (!seeds.has(net) && (c.drivers[net] ?? []).length === 0)
+          seeds.set(net, atZero(c.nets[net]!.paths[0]!));
+    });
+    return seeds;
+  };
 
-  const arr = propagate(c, a, col, seeds);
+  const arr = propagate(c, a, col, seedsFrom(new Set(['source', 'reg', 'break'])));
+  // A broken transceiver's own zero start would mask what arrives at its sides.
+  const arrAtBreaks = breaks.length
+    ? propagate(c, a, col, seedsFrom(new Set(['source', 'reg'])))
+    : arr;
 
   const endpoints: PathTiming[] = [];
   c.primitives.forEach((p, i) => {
@@ -618,6 +665,14 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
         const ends = endsOf(arr, g.nets);
         if (ends) endpoints.push(pathTiming(arr, ends, `${p.path}.${g.pin}`, g.pin));
       }
+    } else if (a.roles[i] === 'break') {
+      for (const side of ['a', 'b']) {
+        const net = pinNet(c, a, i, side, 'in');
+        if (net !== undefined && arrAtBreaks.has(net))
+          endpoints.push(
+            pathTiming(arrAtBreaks, { maxNet: net, minNet: net }, `${p.path}.${side}`, side),
+          );
+      }
     }
   });
 
@@ -626,5 +681,13 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
     null,
   );
 
-  return { endpoints, worst, sequential: sequentialTiming(c, a, col, regs) };
+  return {
+    endpoints,
+    worst,
+    sequential: sequentialTiming(c, a, col, regs),
+    // A built-in DIP's sections answer to the chip, so a '245 is one break, not eight.
+    directionBreaks: [
+      ...new Set(breaks.map((i) => c.primitives[i]!.packageInstance ?? c.primitives[i]!.path)),
+    ],
+  };
 }

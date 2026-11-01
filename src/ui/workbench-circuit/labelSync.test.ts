@@ -163,6 +163,21 @@ describe('labelDirectionConflict', () => {
     );
   });
 
+  it('rejects an In port on a bidirectional pin and lets an Out port read one', () => {
+    const c = circuit(
+      [
+        { id: 'in1', kind: 'inport', pos: { x: 0, y: 0 } },
+        { id: 'x1', kind: 'transceiver', pos: { x: 1, y: 0 } },
+        { id: 'out1', kind: 'outport', pos: { x: 2, y: 0 } },
+      ],
+      [wire(pin('in1', 'y'), pin('x1', 'a')), wire(pin('x1', 'b'), pin('out1', 'a'))],
+    );
+    expect(labelDirectionConflict(c, lib, [{ component: 'in1', pin: 'y' }])).toBe(
+      'an In port cannot connect to a bidirectional pin (x1.a)',
+    );
+    expect(labelDirectionConflict(c, lib, [{ component: 'out1', pin: 'a' }])).toBeNull();
+  });
+
   it('allows an In port driving a gate input (the normal case)', () => {
     const c = circuit(
       [

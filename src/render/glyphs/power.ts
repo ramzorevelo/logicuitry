@@ -1,6 +1,7 @@
 // Power rail symbols: VCC (bar over a stem, wire enters from below) and GND
-// (three tapering bars under a stem, wire enters from above). Both are drawn
-// in ink like any other body; only the stub color-codes the live signal.
+// (three tapering bars under a stem, wire enters from above), and the pull-up
+// and pull-down resistors to them. All are drawn in ink like any other body;
+// only the stub color-codes the live signal.
 
 import { signalStyle, type SignalState, type Theme } from '../theme';
 import {
@@ -112,5 +113,96 @@ export function drawRail(
       { x: l.cx, y: l.textY + theme.glyphText * 0.1 },
       { x: 0, y: 0 },
     );
+  });
+}
+
+/** Pin-side stem, long enough for the scene's bus badge beside it. */
+const PULL_PIN_STEM = 2; // * G
+const PULL_RAIL_STEM = 1; // * G
+const RESISTOR = 3; // * G
+const ZIGZAG_PEAKS = 6;
+
+interface PullLayout {
+  cx: number;
+  pinY: number;
+  /** Resistor ends, pin side first. */
+  resPin: number;
+  resRail: number;
+  railY: number;
+  bounds: { x: number; y: number; w: number; h: number };
+  pins: Map<string, { x: number; y: number }>;
+}
+
+/** A resistor to a rail mark: pull-up has VCC's bar on top and the pin below,
+ *  pull-down the pin on top and GND's bars below. Every length is a whole G so
+ *  the pin tip stays on grid. */
+function pullLayout(g: number, kind: string): PullLayout {
+  const cx = BAR * g;
+  const span = (PULL_PIN_STEM + RESISTOR + PULL_RAIL_STEM) * g;
+  const up = kind === 'pullup';
+  const pinY = up ? span : 0;
+  const railY = up ? 0 : span;
+  const dir = up ? -1 : 1;
+  const resPin = pinY + dir * PULL_PIN_STEM * g;
+  const resRail = resPin + dir * RESISTOR * g;
+  // GND's two narrower bars taper 1G below the first.
+  const h = up ? span : span + g;
+  return {
+    cx,
+    pinY,
+    resPin,
+    resRail,
+    railY,
+    bounds: { x: 0, y: 0, w: 2 * cx, h },
+    pins: new Map([['p', { x: cx, y: pinY }]]),
+  };
+}
+
+function pullGeometry(input: GeometryInput, theme: Theme): SymbolGeometry {
+  const l = pullLayout(theme.gridSchematic, input.kind);
+  return { bounds: l.bounds, pins: l.pins };
+}
+
+registerGlyphGeometry('pullup', pullGeometry);
+registerGlyphGeometry('pulldown', pullGeometry);
+
+export function drawPull(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  input: GeometryInput,
+  placement: Placement,
+  stateOf: (pin: string) => SignalState | undefined,
+): void {
+  const g = theme.gridSchematic;
+  const l = pullLayout(g, input.kind);
+  const pinEnd = { x: l.cx, y: l.pinY };
+  const resPinEnd = { x: l.cx, y: l.resPin };
+  withPlacement(ctx, l.bounds, placement, () => {
+    drawStub(ctx, theme, resPinEnd, pinEnd, stateOf('p'));
+
+    // The resistor and rail are passive, so they stay in ink whatever the net carries.
+    ctx.strokeStyle = theme.colors.ink;
+    ctx.lineWidth = theme.strokes.wire;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(l.cx, l.resPin);
+    const step = (l.resRail - l.resPin) / ZIGZAG_PEAKS;
+    for (let i = 0; i < ZIGZAG_PEAKS; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      ctx.lineTo(l.cx + side * 0.5 * g, l.resPin + (i + 0.5) * step);
+    }
+    ctx.lineTo(l.cx, l.resRail);
+    ctx.lineTo(l.cx, l.railY);
+    if (input.kind === 'pullup') {
+      ctx.moveTo(l.cx - BAR * g * 0.5, l.railY);
+      ctx.lineTo(l.cx + BAR * g * 0.5, l.railY);
+    } else {
+      for (const [i, scale] of [1, 0.6, 0.25].entries()) {
+        const y = l.railY + (i * g) / 2;
+        ctx.moveTo(l.cx - BAR * g * 0.5 * scale, y);
+        ctx.lineTo(l.cx + BAR * g * 0.5 * scale, y);
+      }
+    }
+    ctx.stroke();
   });
 }

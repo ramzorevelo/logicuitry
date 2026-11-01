@@ -10,7 +10,8 @@
 // exactly the model's own "a bubble is a NOT" framing,
 // applied per-terminal instead of only at gate output.
 
-import type { Circuit, Component, Wire, WireEnd } from '../model/types';
+import type { ChipLibrary, Circuit, Component, Wire, WireEnd } from '../model/types';
+import { isBuiltinChipDef } from '../parts/packages';
 import {
   composeKind,
   decomposeKind,
@@ -27,6 +28,14 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): 
   const copy = { ...obj };
   for (const k of keys) delete copy[k];
   return copy;
+}
+
+/** Every def lowered. A built-in part carries no bubble params and is passed
+ *  through as is: compile recognizes a built-in def by identity. */
+export function lowerLibrary(lib: ChipLibrary): ChipLibrary {
+  return new Map(
+    [...lib].map(([id, def]) => [id, isBuiltinChipDef(def) ? def : lowerCircuit(def)]),
+  );
 }
 
 /** Pure; returns a new Circuit with every gate composed to its literal kind

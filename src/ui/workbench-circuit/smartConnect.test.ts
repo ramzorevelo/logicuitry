@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  inoutFaces,
+  pinFacing,
   smartConnect,
   smartConnectChain,
   smartConnectChainWithin,
   smartConnectSingleSource,
   type ChainComp,
+  type SmartConnectResult,
 } from './smartConnect';
 import type { PinTarget } from './pinTargets';
+import type { Component } from '../../core/model/types';
+import { symbolBounds } from '../../render/glyphs/symbol';
+import { makeTestTheme } from '../../render/theme.fixture';
+import '../../core/sim/primitives/registry';
+import '../../render/glyphs/chip';
 
 const src = (id: string, over: Partial<PinTarget> = {}): PinTarget => ({
   componentId: id,
@@ -1176,5 +1184,172 @@ describe('smartConnectChainWithin (no-hover F: selection first, board as fallbac
     const within = smartConnectChainWithin(all, new Set(['sw1', 'sw2', 'gate', 'led']));
     expect(within.pairs).toEqual(smartConnectChain([...all], 0).pairs);
     expect(within.pairs.some((p) => p.target.componentId === 'led')).toBe(true);
+  });
+});
+
+describe('smart-connect with bidirectional pins', () => {
+  const io = (componentId: string, pinName: string, x: number): PinTarget => ({
+    componentId,
+    pinName,
+    width: 8,
+    role: 'data',
+    order: 0,
+    dir: 'inout',
+    worldPos: { x, y: 0 },
+    free: true,
+  });
+  const bus = (componentId: string, pinName: string, dir: 'in' | 'out', x: number): PinTarget => ({
+    ...io(componentId, pinName, x),
+    dir,
+  });
+  // Switch bank, transceiver (a faces left, b right), LED array, along x.
+  const sw: ChainComp = {
+    id: 'sw',
+    pos: { x: 0, y: 0 },
+    center: { x: 8, y: 0 },
+    hasAnyInputPinSpec: false,
+    freeIns: [],
+    freeOuts: [bus('sw', 'y', 'out', 16)],
+  };
+  const xcvr = (wired: ReadonlySet<string> = new Set()): ChainComp => ({
+    id: 'u1',
+    pos: { x: 100, y: 0 },
+    center: { x: 124, y: 0 },
+    hasAnyInputPinSpec: true,
+    freeIns: [],
+    freeOuts: [],
+    inouts: [io('u1', 'a', 100), io('u1', 'b', 148)],
+    wiredInouts: wired,
+  });
+  const led: ChainComp = {
+    id: 'led',
+    pos: { x: 250, y: 0 },
+    center: { x: 258, y: 0 },
+    hasAnyInputPinSpec: true,
+    freeIns: [bus('led', 'a', 'in', 250)],
+    freeOuts: [],
+  };
+  const wiring = (pairs: SmartConnectResult['pairs']) =>
+    pairs.map(
+      (p) =>
+        `${p.source.componentId}.${p.source.pinName}->${p.target.componentId}.${p.target.pinName}`,
+    );
+
+  it('reads on the pin facing upstream and drives from the one facing downstream', () => {
+    const { pairs } = smartConnectChain([sw, xcvr(), led]);
+    expect(wiring(pairs).sort()).toEqual(['sw.y->u1.a', 'u1.b->led.a']);
+  });
+
+  it('never offers a wired inout pin as a target, but still lets it drive', () => {
+    expect(wiring(smartConnectChain([sw, xcvr(new Set(['u1 a']))]).pairs)).toEqual([]);
+    expect(wiring(smartConnectChain([xcvr(new Set(['u1 a'])), led]).pairs)).toEqual([
+      'u1.b->led.a',
+    ]);
+  });
+
+  it('inoutFaces is true only toward the side the pin sits on', () => {
+    const a = io('u1', 'a', 100);
+    const body = { x: 100, y: -8, w: 48, h: 16 };
+    expect(inoutFaces(a, body, { x: 8, y: 0 })).toBe(true);
+    expect(inoutFaces(a, body, { x: 258, y: 0 })).toBe(false);
+  });
+});
+
+describe('pin facing on a tall DIP', () => {
+  // A 20-pin DIP body: side pins at x = 100 and x = 204, rows 16 apart.
+  const body = { x: 100, y: 0, w: 104, h: 176 };
+  const rowY = (i: number) => 16 + 16 * i;
+
+  it('reads an end pin by the edge it sits on, not by its offset from the centre', () => {
+    expect(pinFacing({ x: 100, y: rowY(0) }, body)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing({ x: 100, y: rowY(9) }, body)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing({ x: 204, y: rowY(0) }, body)).toEqual({ x: 1, y: 0 });
+    expect(pinFacing({ x: 204, y: rowY(9) }, body)).toEqual({ x: 1, y: 0 });
+  });
+
+  it('reads a pin beyond the body by the edge it overshoots', () => {
+    expect(pinFacing({ x: 84, y: 4 }, body)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing({ x: 120, y: 192 }, body)).toEqual({ x: 0, y: 1 });
+  });
+
+  it('reads the end data pins of an 8:1 mux by its side, as the centre rule did not', () => {
+    const mux = {
+      id: 'm',
+      kind: 'mux',
+      pos: { x: 0, y: 0 },
+      params: { selectBits: 3, width: 1 },
+    } as Component;
+    const { bounds, pins } = symbolBounds(mux, makeTestTheme());
+    expect(pinFacing(pins.get('d0')!, bounds)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing(pins.get('d7')!, bounds)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing(pins.get('y')!, bounds)).toEqual({ x: 1, y: 0 });
+  });
+
+  it('keeps the centre rule for a zero-size body', () => {
+    const point = { x: 0, y: 0, w: 0, h: 0 };
+    expect(pinFacing({ x: 5, y: 5 }, point)).toEqual({ x: 1, y: 0 });
+    expect(pinFacing({ x: -5, y: 5 }, point)).toEqual({ x: -1, y: 0 });
+    expect(pinFacing({ x: 3, y: -5 }, point)).toEqual({ x: 0, y: -1 });
+  });
+
+  it('chains all eight lines through a transceiver whose end pins sit near the corners', () => {
+    const bit = (
+      componentId: string,
+      pinName: string,
+      dir: PinTarget['dir'],
+      x: number,
+      y: number,
+    ) =>
+      ({
+        componentId,
+        pinName,
+        width: 1,
+        role: 'data',
+        order: 0,
+        dir,
+        worldPos: { x, y },
+        free: true,
+      }) as PinTarget;
+    const rows = [0, 1, 2, 3, 4, 5, 6, 7];
+    const switches: ChainComp[] = rows.map((i) => ({
+      id: `s${i}`,
+      pos: { x: 0, y: rowY(i) - 8 },
+      center: { x: 8, y: rowY(i) },
+      hasAnyInputPinSpec: false,
+      freeIns: [],
+      freeOuts: [bit(`s${i}`, 'y', 'out', 16, rowY(i))],
+    }));
+    const xcvr: ChainComp = {
+      id: 'u1',
+      pos: { x: 100, y: 0 },
+      center: { x: 152, y: 88 },
+      bounds: body,
+      hasAnyInputPinSpec: true,
+      freeIns: [],
+      freeOuts: [],
+      inouts: rows.flatMap((i) => [
+        bit('u1', `A${i + 1}`, 'inout', 100, rowY(i)),
+        bit('u1', `B${i + 1}`, 'inout', 204, rowY(i)),
+      ]),
+    };
+    const leds: ChainComp[] = rows.map((i) => ({
+      id: `l${i}`,
+      pos: { x: 300, y: rowY(i) - 8 },
+      center: { x: 308, y: rowY(i) },
+      hasAnyInputPinSpec: true,
+      freeIns: [bit(`l${i}`, 'a', 'in', 300, rowY(i))],
+      freeOuts: [],
+    }));
+    const { pairs } = smartConnectChain([...switches, xcvr, ...leds]);
+    const lines = pairs.map((p) => `${p.source.pinName}->${p.target.pinName}`);
+    for (const i of rows) {
+      expect(
+        pairs.some((p) => p.source.componentId === `s${i}` && p.target.pinName === `A${i + 1}`),
+      ).toBe(true);
+      expect(
+        pairs.some((p) => p.source.pinName === `B${i + 1}` && p.target.componentId === `l${i}`),
+      ).toBe(true);
+    }
+    expect(lines).toHaveLength(16);
   });
 });

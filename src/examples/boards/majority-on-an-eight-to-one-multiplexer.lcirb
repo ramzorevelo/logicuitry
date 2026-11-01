@@ -1,0 +1,435 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 7,
+  "id": "majority-on-an-eight-to-one-multiplexer",
+  "name": "Majority on an eight-to-one multiplexer",
+  "components": [
+    {
+      "id": "k0",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 16
+      },
+      "label": "0",
+      "params": {
+        "value": 0
+      }
+    },
+    {
+      "id": "k1",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 72
+      },
+      "label": "0",
+      "params": {
+        "value": 0
+      }
+    },
+    {
+      "id": "k2",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 128
+      },
+      "label": "0",
+      "params": {
+        "value": 0
+      }
+    },
+    {
+      "id": "k3",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 184
+      },
+      "label": "1",
+      "params": {
+        "value": 1
+      }
+    },
+    {
+      "id": "k4",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 240
+      },
+      "label": "0",
+      "params": {
+        "value": 0
+      }
+    },
+    {
+      "id": "k5",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 296
+      },
+      "label": "1",
+      "params": {
+        "value": 1
+      }
+    },
+    {
+      "id": "k6",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 352
+      },
+      "label": "1",
+      "params": {
+        "value": 1
+      }
+    },
+    {
+      "id": "k7",
+      "kind": "constant",
+      "pos": {
+        "x": 144,
+        "y": 408
+      },
+      "label": "1",
+      "params": {
+        "value": 1
+      }
+    },
+    {
+      "id": "m",
+      "kind": "mux",
+      "pos": {
+        "x": 336,
+        "y": 152
+      },
+      "params": {
+        "selectBits": 3
+      }
+    },
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 488
+      },
+      "label": "A"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 536
+      },
+      "label": "B"
+    },
+    {
+      "id": "c",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 584
+      },
+      "label": "C"
+    },
+    {
+      "id": "y",
+      "kind": "led",
+      "pos": {
+        "x": 520,
+        "y": 168
+      },
+      "label": "Y"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "k0",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d0"
+      },
+      "points": [
+        {
+          "x": 336,
+          "y": 56
+        },
+        {
+          "x": 336,
+          "y": 184
+        },
+        {
+          "x": 328,
+          "y": 184
+        },
+        {
+          "x": 328,
+          "y": 192
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "k1",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d1"
+      },
+      "points": [
+        {
+          "x": 304,
+          "y": 112
+        },
+        {
+          "x": 304,
+          "y": 208
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "k2",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d2"
+      },
+      "points": [
+        {
+          "x": 320,
+          "y": 168
+        },
+        {
+          "x": 320,
+          "y": 224
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "k3",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d3"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 224
+        },
+        {
+          "x": 232,
+          "y": 240
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d4"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "k4",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 232,
+          "y": 256
+        },
+        {
+          "x": 232,
+          "y": 280
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d5"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "k5",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 320,
+          "y": 272
+        },
+        {
+          "x": 320,
+          "y": 336
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d6"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "k6",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 304,
+          "y": 288
+        },
+        {
+          "x": 304,
+          "y": 392
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "d7"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "k7",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 328,
+          "y": 304
+        },
+        {
+          "x": 328,
+          "y": 312
+        },
+        {
+          "x": 336,
+          "y": 312
+        },
+        {
+          "x": 336,
+          "y": 448
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "s2"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "a",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 368,
+          "y": 504
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "s1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "b",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 384,
+          "y": 552
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "s0"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "c",
+        "pin": "y"
+      },
+      "points": [
+        {
+          "x": 400,
+          "y": 600
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "m",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "y",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ"
+  }
+}

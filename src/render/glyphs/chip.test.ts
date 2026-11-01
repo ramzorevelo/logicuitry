@@ -440,6 +440,10 @@ describe('sequential block glyphs', () => {
     ['counter', { width: 4, hasLoad: true, dualEnable: true, activeLow: true }],
     ['shiftreg', { width: 8 }],
     [
+      'register',
+      { width: 4, outputEnable: true, clear: 'async', dualEnable: true, enableLow: true },
+    ],
+    [
       'shiftreg',
       { width: 4, clear: 'async', serialAnd: true, activeLow: true, pinView: 'q=expanded' },
     ],

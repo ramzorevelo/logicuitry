@@ -9,10 +9,8 @@ export interface GroupHandleQuery {
   rects: ReadonlyMap<string, Rect>;
   /** World-space slop, the caller's screen tolerance divided by the zoom. */
   tol: number;
-  /** Cap height of the name, drawn sitting on the rect's top edge. */
-  nameHeight: number;
-  /** World width of the name as the scene draws it. */
-  measureName: (name: string) => number;
+  /** The name's box as the scene draws it, above the rect's top edge. */
+  nameBox: (group: Group, rect: Rect) => Rect;
 }
 
 const onBorder = (r: Rect, p: Vec2, tol: number): boolean => {
@@ -25,8 +23,8 @@ const onBorder = (r: Rect, p: Vec2, tol: number): boolean => {
   return !(insideX && insideY);
 };
 
-const onName = (r: Rect, p: Vec2, w: number, h: number, tol: number): boolean =>
-  p.x >= r.x - tol && p.x <= r.x + w + tol && p.y >= r.y - h - tol && p.y <= r.y;
+const onName = (box: Rect, p: Vec2, tol: number): boolean =>
+  p.x >= box.x - tol && p.x <= box.x + box.w + tol && p.y >= box.y - tol && p.y <= box.y + box.h;
 
 /** The group whose border or name is under the point, innermost first: a
  *  child's border sitting close to its parent's must win, or a nested group
@@ -40,7 +38,7 @@ export function groupHandleAt(q: GroupHandleQuery, world: Vec2): string | undefi
     .sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h);
   for (const { group, rect } of candidates) {
     if (onBorder(rect, world, q.tol)) return group.id;
-    if (onName(rect, world, q.measureName(group.name), q.nameHeight, q.tol)) return group.id;
+    if (onName(q.nameBox(group, rect), world, q.tol)) return group.id;
   }
   return undefined;
 }

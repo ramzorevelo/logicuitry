@@ -172,3 +172,104 @@ describe('pre-rename format token', () => {
     expect(() => migrate({ format: 'logiclab.mystery', formatVersion: 1 })).toThrow();
   });
 });
+
+describe('board v7 -> v8, chip v5 -> v6 (instance contents, inout pins)', () => {
+  const chipV5 = {
+    format: 'lcir.chip',
+    formatVersion: 5,
+    id: 'buf',
+    name: 'buf',
+    version: 1,
+    pins: [
+      { id: 'p1', name: 'a', dir: 'in', width: 1, role: 'data', order: 0, boundComponent: 'in1' },
+    ],
+    components: [{ id: 'in1', kind: 'inport', pos: { x: 0, y: 0 } }],
+    wires: [],
+    junctions: [],
+  };
+  const boardV7 = {
+    ...structuredClone(boardV1),
+    formatVersion: 7,
+    components: [{ id: 'u1', kind: 'chip', defId: 'buf', label: 'U1', pos: { x: 0, y: 0 } }],
+    wires: [],
+    junctions: [],
+  };
+
+  it('carries a v7 board and a v5 chip through unchanged except the version', () => {
+    const board = migrate(structuredClone(boardV7));
+    expect(board).toEqual({ ...boardV7, formatVersion: CURRENT_VERSION['lcir.board'] });
+    expect(validateDocument(board)).toEqual({ valid: true });
+    const chip = migrate(structuredClone(chipV5));
+    expect(chip).toEqual({ ...chipV5, formatVersion: CURRENT_VERSION['lcir.chip'] });
+    expect(validateDocument(chip)).toEqual({ valid: true });
+  });
+
+  it('loads a v8 board whose instance carries contents', () => {
+    const v8 = {
+      ...structuredClone(boardV7),
+      formatVersion: 8,
+      components: [{ ...boardV7.components[0]!, contents: { u1: '0A 1B', 'U4/u1': '' } }],
+    };
+    expect(validateDocument(migrate(v8))).toEqual({ valid: true });
+  });
+
+  it('refuses a file newer than this app, before any validation', () => {
+    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 10 })).toThrow(
+      'file is version 10, app supports up to 9',
+    );
+    expect(() => migrate({ ...structuredClone(chipV5), formatVersion: 8 })).toThrow(
+      'file is version 8, app supports up to 7',
+    );
+  });
+});
+
+describe('board v8 -> v9, chip v6 -> v7 (group and wire colours)', () => {
+  const boardV8 = {
+    ...structuredClone(boardV1),
+    formatVersion: 8,
+    components: [{ id: 's', kind: 'toggle', pos: { x: 0, y: 0 }, group: 'g' }],
+    groups: [{ id: 'g', name: 'G' }],
+    wires: [],
+    junctions: [],
+  };
+
+  it('carries a v8 board through unchanged except the version', () => {
+    const out = migrate(structuredClone(boardV8));
+    expect(out).toEqual({ ...boardV8, formatVersion: 9 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts colours on groups and wires, in a board and in a chip', () => {
+    const wire = {
+      id: 'w',
+      a: { kind: 'free', pos: { x: 0, y: 0 } },
+      b: { kind: 'free', pos: { x: 8, y: 0 } },
+      points: [],
+      color: 'g5',
+    };
+    const groups = [{ id: 'g', name: 'G', color: 'g2', tab: true }];
+    const board = migrate({ ...structuredClone(boardV8), groups, wires: [wire] });
+    expect(validateDocument(board)).toEqual({ valid: true });
+    const chip = migrate({
+      format: 'lcir.chip',
+      formatVersion: 6,
+      id: 'c',
+      name: 'c',
+      version: 1,
+      pins: [],
+      components: [{ id: 's', kind: 'toggle', pos: { x: 0, y: 0 }, group: 'g' }],
+      groups,
+      wires: [wire],
+      junctions: [],
+    });
+    expect(validateDocument(chip)).toEqual({ valid: true });
+  });
+
+  it('refuses a colour outside the palette', () => {
+    const bad = migrate({
+      ...structuredClone(boardV8),
+      groups: [{ id: 'g', name: 'G', color: '#f00' }],
+    });
+    expect(validateDocument(bad).valid).toBe(false);
+  });
+});

@@ -11,6 +11,7 @@ import { Simulator } from '../core/sim/kernel';
 import { toString } from '../core/value/busValue';
 import { componentPaths } from '../core/model/compile';
 import { analysisTablesOf } from '../core/gates/verify';
+import { builtinChipLibrary } from '../core/parts/packages';
 import { EXAMPLES } from './index';
 import '../core/sim/primitives/registry';
 
@@ -179,7 +180,7 @@ describe('Analyze shows labels, never component ids', () => {
         idByPath.set(paths.get(c.id)!, c.id);
       }
 
-      for (const a of analysisTablesOf(e.board, new Map())) {
+      for (const a of analysisTablesOf(e.board, new Map(builtinChipLibrary()))) {
         for (const path of [a.outputPath, ...(a.table?.inputPaths ?? [])]) {
           const shown = nameByPath.get(base(path));
           expect({ path, resolved: shown !== undefined }).toEqual({ path, resolved: true });

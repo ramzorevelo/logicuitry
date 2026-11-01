@@ -3,11 +3,13 @@
 
 import type { SetupClass } from '../parts/partsDb';
 import { getPrimitive } from '../sim/primitives/registry';
+import { inputSlotPins } from '../model/pinSlots';
 import { clearParam } from '../sim/primitives/sequential';
 import { boolParam, type Params } from '../sim/primitives/types';
 
-/** `arrival`: an async control or latch input. It ends a path but breaks it: no arc to Q. */
-export type PinTiming = 'clock' | 'arrival' | { sampled: SetupClass };
+/** `arrival`: an async control or latch input. It ends a path but breaks it: no arc to Q.
+ *  `through`: a combinational input (a RAM's address); its path runs on through the arc. */
+export type PinTiming = 'clock' | 'arrival' | 'through' | { sampled: SetupClass };
 
 export interface ThroughArc {
   from: string;
@@ -34,7 +36,11 @@ const isDataLane = (pin: string) => /^d\d*$/.test(pin);
 
 const CLASSIFIERS: Record<string, Classifier> = {
   dff: (pin) => (pin === 'clk' ? 'clock' : pin === 'pre' || pin === 'clr' ? 'arrival' : DATA),
-  register: (pin) => (pin === 'clk' ? 'clock' : pin === 'en' ? ENABLE : DATA),
+  register: (pin) => {
+    if (pin === 'clk') return 'clock';
+    if (pin === 'clr' || pin === 'oe') return 'arrival';
+    return pin === 'en' || pin === 'en2' ? ENABLE : DATA;
+  },
   counter: (pin, params) => {
     if (pin === 'clk') return 'clock';
     if (pin === 'clr') return clearTiming(params, 'sync');
@@ -52,23 +58,35 @@ const CLASSIFIERS: Record<string, Classifier> = {
     return DATA;
   },
   srlatch: () => 'arrival',
+  // No write check in STA: we and d only report arrival.
+  ram: (pin) => (isRamReadPin(pin) ? 'through' : 'arrival'),
 };
+
+const isRamReadPin = (pin: string) => pin === 'cs' || /^a\d*$/.test(pin);
 
 /** The timing shape of a stateful kind, or null for a combinational one (dlatch included: it stays transparent). */
 export function timingShape(kind: string, params: Params): TimingShape | null {
   const classify = CLASSIFIERS[kind];
   if (!classify) return null;
-  const ins = getPrimitive(kind)
-    .pins(params)
-    .filter((p) => p.dir === 'in')
-    .map((p) => p.name);
+  const ins = inputSlotPins(getPrimitive(kind).pins(params)).map((p) => p.name);
   const pins = new Map(ins.map((pin) => [pin, classify(pin, params)]));
   const hasClock = ins.includes('clk') && !boolParam(params, 'clockInhibit');
   return {
     ...(hasClock ? { clock: 'clk' } : {}),
     pins,
-    through: kind === 'counter' ? counterThrough(ins) : [],
+    through:
+      kind === 'counter'
+        ? counterThrough(ins)
+        : kind === 'ram'
+          ? ramThrough(ins, getPrimitive(kind).pins(params))
+          : [],
   };
+}
+
+// The read is combinational: address and cs reach every q lane.
+function ramThrough(ins: readonly string[], pins: readonly { name: string }[]): ThroughArc[] {
+  const outs = pins.map((p) => p.name).filter((name) => /^q\d*$/.test(name));
+  return ins.filter(isRamReadPin).flatMap((from) => outs.map((to) => ({ from, to })));
 }
 
 // tc is gated by the enable combinationally; with two enables only ent gates it.
