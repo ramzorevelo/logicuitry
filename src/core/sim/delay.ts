@@ -12,6 +12,7 @@ import {
   type EnableRow,
   type OutputEdge,
   type TypMax,
+  type Vendor,
 } from '../parts/partsDb';
 import { getPrimitive } from './primitives/registry';
 import { inputSlotPins, outputSlotPins } from '../model/pinSlots';
@@ -38,6 +39,14 @@ const NS_TO_PS = 1000;
 /** Unbound primitives in datasheet mode fall back to a generic LS-family 10 ns. */
 export const FALLBACK_NS = 10;
 
+/** Not LS parts, and their sheets print no input to output delay in a table:
+ *  the edge lands on the datasheet interval, one unit step late, in both models. */
+const UNIT_STEP_KINDS = new Set(['timer555']);
+
+export function isUnitStepKind(kind: string): boolean {
+  return UNIT_STEP_KINDS.has(kind);
+}
+
 /**
  * A generated chip's power gate and output buffers are wiring, not silicon
  * with a datasheet row: they pass a value on in one delta and add no time.
@@ -50,8 +59,8 @@ export function isStructuralHop(prim: CompiledPrimitive): boolean {
  * The enable rows an edge may follow: a moved input with a row of its own takes
  * that one, any other the part's `enable`. Several candidates time as the slowest.
  */
-function enableRows(part: unknown, moved?: readonly string[]): EnableRow[] {
-  const entry = typeof part === 'string' ? getPart(part) : undefined;
+function enableRows(part: unknown, vendor: Vendor, moved?: readonly string[]): EnableRow[] {
+  const entry = typeof part === 'string' ? getPart(part, vendor) : undefined;
   if (!entry) return [];
   const own = entry.enable_from ?? {};
   const rows = (moved ?? []).flatMap((pin) => (own[pin] ? [own[pin]] : []));
@@ -104,7 +113,7 @@ export function pinNamesOf(prim: CompiledPrimitive): PinNames {
   };
 }
 
-export function datasheetDelay(column: DatasheetColumn): DelayModel {
+export function datasheetDelay(column: DatasheetColumn, vendor: Vendor = 'ti'): DelayModel {
   // Checked against params too: a live param edit can change the pin list.
   const names = new WeakMap<CompiledPrimitive, { params: unknown; pins: PinNames }>();
   const pinsOf = (prim: CompiledPrimitive): PinNames => {
@@ -117,25 +126,32 @@ export function datasheetDelay(column: DatasheetColumn): DelayModel {
   return {
     delayPs(prim, out, oldValue, newValue, changedInputs): number {
       if (isStructuralHop(prim)) {
-        const rows = enableRows(prim.params['enableTiming']);
+        const rows = enableRows(prim.params['enableTiming'], vendor);
         const enableNs = enableEdgeNs(rows, oldValue, newValue, column);
-        return enableNs === undefined ? IDEAL_DELAY_PS : Math.round(enableNs * NS_TO_PS);
+        return enableNs === undefined ? 0 : Math.round(enableNs * NS_TO_PS);
       }
+      if (UNIT_STEP_KINDS.has(prim.kind)) return IDEAL_DELAY_PS;
       if (!prim.part) return FALLBACK_NS * NS_TO_PS;
       const part = prim.part;
       const { ins, outs } = pinsOf(prim);
       const moved = changedInputs?.flatMap((i) => (ins[i] === undefined ? [] : [ins[i]]));
       if (oldValue.z | newValue.z) {
         const width = outputSlotPins(getPrimitive(prim.kind).pins(prim.params))[out]?.width;
-        const enableNs = enableEdgeNs(enableRows(part, moved), oldValue, newValue, column, width);
+        const enableNs = enableEdgeNs(
+          enableRows(part, vendor, moved),
+          oldValue,
+          newValue,
+          column,
+          width,
+        );
         if (enableNs !== undefined) return Math.round(enableNs * NS_TO_PS);
       }
       const outPin = outs[out]!;
       // The row this edge follows is the arc from the inputs that moved; an
       // edge no moved input times (a state write, a wake) takes the slowest.
       const figure = (edge: OutputEdge): number =>
-        (moved?.length ? arcPropagationNs(part, moved, outPin, edge, column) : undefined) ??
-        outputPropagationNs(part, ins, outPin, edge, column) ??
+        (moved?.length ? arcPropagationNs(part, moved, outPin, edge, column, vendor) : undefined) ??
+        outputPropagationNs(part, ins, outPin, edge, column, vendor) ??
         FALLBACK_NS;
       // A clean 0->1 output edge takes tPLH, 1->0 takes tPHL; anything
       // involving X/Z or multi-bit mixes takes the slower of the two.

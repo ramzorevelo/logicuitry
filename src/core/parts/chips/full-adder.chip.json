@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "full-adder",
   "name": "Full adder",
   "version": 1,

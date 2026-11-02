@@ -1,5 +1,7 @@
 // Hierarchy data model: chip definitions referenced by id, lightweight instances.
 
+import type { DatasheetColumn, Vendor } from '../parts/partsDb';
+
 export type PinRole = 'data' | 'clock' | 'enable' | 'asyncSet' | 'asyncClear' | 'select';
 /** `passive` is a net LABEL's pin: neither driver nor sink, it takes the
  *  direction and width of whatever net it is attached to. Only `netlabel` has
@@ -40,7 +42,9 @@ export type ComponentKind =
   | 'buf'
   | 'toggle'
   | 'button'
+  | 'spdt'
   | 'clock'
+  | 'timer555'
   | 'constant'
   | 'inport'
   | 'led'
@@ -172,6 +176,9 @@ export interface Circuit {
    *  and label uniqueness, so two unconnected groups may each name a net `A`.
    *  Absent on every board written before groups existed. */
   groups?: Group[];
+  /** Checks the author silenced, as check keys. Absent means none; undefined
+   *  is allowed so an undo can clear it through a spread. */
+  hiddenChecks?: string[] | undefined;
 }
 
 /** A bordered sub-circuit. The rectangle is drawn and hit-tested but carries
@@ -206,7 +213,7 @@ export interface ChipAppearance {
 
 export interface ChipDef extends Circuit {
   format: 'lcir.chip';
-  formatVersion: 7;
+  formatVersion: 8;
   id: string;
   name: string;
   version: number;
@@ -219,18 +226,24 @@ export type TimingMode = 'ideal' | 'datasheet';
 export interface TimingSetting {
   mode: TimingMode;
   /** Which datasheet column drives delays in datasheet mode. */
-  datasheet: 'typ' | 'max';
+  datasheet: DatasheetColumn;
+  vendor: Vendor;
 }
+
+/** Run paces sim time against the wall clock, in sim ps per wall second. */
+export const RUN_SPEEDS = [25_000, 1_000_000, 100_000_000, 10_000_000_000, 1_000_000_000_000];
+export const DEFAULT_RUN_SPEED = RUN_SPEEDS[0]!;
 
 export interface Board extends Circuit {
   format: 'lcir.board';
-  formatVersion: 9;
+  formatVersion: 12;
   id: string;
   name: string;
   /** Hierarchical net paths pinned to the waveform view. */
   probes: { path: string; label?: string }[];
   view: { x: number; y: number; zoom: number };
   timing: TimingSetting;
+  runSpeed: number;
 }
 
 export interface LessonStep {

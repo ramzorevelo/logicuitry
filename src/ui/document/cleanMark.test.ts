@@ -44,7 +44,7 @@ describe('dirty against the saved board', () => {
     expect(s.hasTabEdits()).toBe(false);
     const def = {
       format: 'lcir.chip' as const,
-      formatVersion: 7 as const,
+      formatVersion: 8 as const,
       id: 'mine',
       name: 'mine',
       version: 1,
@@ -62,6 +62,12 @@ describe('dirty against the saved board', () => {
   it('turns dirty on a timing switch, which the file saves', () => {
     const clean = board();
     useCircuitStore.getState().setTiming({ mode: 'datasheet' });
+    expect(isDirtyAgainst(board(), clean)).toBe(true);
+  });
+
+  it('turns dirty on a run speed change, which the file saves', () => {
+    const clean = board();
+    useCircuitStore.getState().setRunSpeed(100_000_000);
     expect(isDirtyAgainst(board(), clean)).toBe(true);
   });
 });

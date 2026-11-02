@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 7,
+  "formatVersion": 10,
   "id": "ripple-carry-adder",
   "name": "Ripple-carry adder",
   "components": [
@@ -521,6 +521,7 @@
   },
   "timing": {
     "mode": "datasheet",
-    "datasheet": "typ"
+    "datasheet": "typ",
+    "vendor": "fairchild"
   }
 }

@@ -8,7 +8,7 @@ import type { Board, ChipDef } from '../core/model/types';
 
 const board = (name: string): Board => ({
   format: 'lcir.board',
-  formatVersion: 9,
+  formatVersion: 12,
   id: 'b1',
   name,
   components: [],
@@ -16,7 +16,8 @@ const board = (name: string): Board => ({
   junctions: [],
   probes: [],
   view: { x: 0, y: 0, zoom: 1 },
-  timing: { mode: 'ideal', datasheet: 'typ' },
+  timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+  runSpeed: 25_000,
 });
 
 describe('parseBoard', () => {
@@ -31,14 +32,25 @@ describe('parseBoard', () => {
       components: [{ id: 'i', kind: 'input', pos: { x: 0, y: 0 } }],
     };
     const out = parseBoard(JSON.stringify(v2));
-    expect(out.formatVersion).toBe(9);
+    expect(out.formatVersion).toBe(12);
     expect(out.components[0]!.kind).toBe('inport');
+  });
+
+  it('round-trips a 555 with exact R and C, with no format change', () => {
+    const params = { mode: 'monostable', r1: 8200, r2: 1e6, c: 4.7e-6 };
+    const b = {
+      ...board('timer'),
+      components: [{ id: 'u', kind: 'timer555' as const, pos: { x: 0, y: 0 }, params }],
+    };
+    const out = parseBoard(serializeDocument(b));
+    expect(out.formatVersion).toBe(12);
+    expect(out.components[0]!.params).toEqual(params);
   });
 
   it('rejects a chip file by format rather than loading it as a board', () => {
     const chip: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 7,
+      formatVersion: 8,
       id: 'c',
       name: 'c',
       version: 1,
@@ -72,7 +84,7 @@ describe('parseDocumentFile', () => {
   it('accepts a chip instead of refusing it -- its internals are a circuit', () => {
     const chip: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 7,
+      formatVersion: 8,
       id: 'c1',
       name: 'buf1',
       version: 1,

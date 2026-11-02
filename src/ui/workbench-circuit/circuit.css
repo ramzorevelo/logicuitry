@@ -992,6 +992,145 @@
   gap: 2px;
 }
 
+/* --- Checks tab: terse rows, severity by shape (there is no red token) --- */
+
+.check-sev {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: -0.15em;
+}
+
+.check-sev--error .check-sev__fill,
+.check-sev--warning .check-sev__fill {
+  fill: var(--warn);
+}
+
+.check-sev--error .check-sev__cut {
+  fill: var(--surface);
+}
+
+.check-sev--warning .check-sev__line {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.check-sev--info .check-sev__line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
+.check-sev--info .check-sev__fill {
+  fill: var(--muted);
+}
+
+.check-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.wave-panel__body--checks {
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.checks-panel__group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 4px var(--space-unit) 2px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  padding: 2px var(--space-unit);
+  border-bottom: 1px solid var(--line);
+}
+
+.check-row--picked {
+  background: var(--accent-fill);
+}
+
+.check-row--hidden {
+  opacity: 0.6;
+}
+
+.check-row__main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 2px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.check-row__main:disabled {
+  cursor: default;
+}
+
+.check-row__main .check-sev {
+  margin-top: 0.2em;
+}
+
+.check-row__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.check-row__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.check-row__detail {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.check-row__live {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  font-weight: 400;
+}
+
+.check-row__hide {
+  flex: none;
+}
+
+.app-shell--compact .check-row__main,
+.app-shell--compact .check-row__hide {
+  min-height: var(--touch-h);
+}
+
 /* --- Memory tab: one card per RAM --- */
 
 .wave-panel__body--memory {
@@ -1116,6 +1255,56 @@
 .circuit-clock-edit__hint,
 .circuit-param-edit__hint {
   color: var(--muted);
+}
+
+.circuit-param-edit__unit-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.circuit-param-edit__slider {
+  display: flex;
+  flex-direction: column;
+  min-width: 22ch;
+}
+
+.circuit-param-edit .circuit-param-edit__slider input {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  accent-color: var(--accent);
+}
+
+.circuit-param-edit__ticks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.circuit-param-edit__readout {
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.circuit-param-edit__readout div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.circuit-param-edit__readout dt {
+  color: var(--muted);
+}
+
+.circuit-param-edit__readout dd {
+  margin: 0;
 }
 
 .circuit-param-edit__segmented {
@@ -1358,6 +1547,12 @@
 
 .selection-actions::-webkit-scrollbar {
   display: none;
+}
+
+/* A menu taller than a short screen scrolls and ends on the bar, so its cut-off foot read as
+   the bar drawn over it. The menu is above it either way; the bar steps aside while one is open. */
+.app-shell:has(.menubar__popup) .selection-actions {
+  visibility: hidden;
 }
 
 .selection-actions .tool-btn {

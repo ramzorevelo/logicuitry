@@ -44,6 +44,9 @@ export interface EvalResult {
   state?: unknown;
   /** Absolute ps at which to re-evaluate with no input change (clock sources). */
   nextWake?: number;
+  /** The wake ends a finite sequence (contact bounce), so it is kept while
+   *  parked, unlike a clock's endless one, and a settle plays it out. */
+  finite?: boolean;
 }
 
 export interface PrimitiveSpec {

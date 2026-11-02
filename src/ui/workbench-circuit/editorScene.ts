@@ -8,6 +8,7 @@ import type {
   Circuit,
   Component,
   Group,
+  Point,
   Wire,
   WireEnd,
 } from '../../core/model/types';
@@ -38,6 +39,7 @@ import { drawDip, isDipPackage } from '../../render/glyphs/dip';
 import {
   drawBusDisplay,
   drawButton,
+  drawSpdt,
   drawClock,
   drawLed,
   drawLedMatrix,
@@ -48,6 +50,8 @@ import {
   drawSwitch,
 } from '../../render/glyphs/io';
 import type { GeometryInput, Placement } from '../../render/glyphs/symbol';
+import type { Params } from '../../core/sim/primitives/types';
+import { contactToGround, spdtPosition, type Throw } from '../../core/sim/primitives/stimulus';
 import {
   busLabelGeometry,
   pinKeysOfWires,
@@ -88,6 +92,7 @@ import { wireDisplayInfo } from './wireDisplay';
 import { lodFor } from '../../render/lod';
 import { paintEmphasis } from '../../render/glyphs/relief';
 import { glyphVariant } from '../../render/glyphs/variants';
+import { drawTimer } from '../../render/glyphs/timer';
 import '../../render/glyphs/charVariants'; // side-effect: registers per-theme device glyphs
 
 const GATE_SET = new Set<string>(GATE_KINDS);
@@ -122,6 +127,10 @@ export interface GlyphContext {
     componentId: string,
     pinName: string,
   ) => { v: number; x: number; z: number } | undefined;
+  /** Where a powered SPDT's lever sits; its outputs cannot say while it bounces. */
+  throwOf?: (componentId: string) => Throw | undefined;
+  /** Whether a powered button is held: a contact to GND's net cannot say. */
+  heldOf?: (componentId: string) => boolean | undefined;
 }
 
 const defSerials = new WeakMap<ChipDef, number>();
@@ -155,6 +164,8 @@ export function glyphKey(comp: Component, theme: Theme, p: GlyphContext): string
     comp.nameOffset ? `${comp.nameOffset.x},${comp.nameOffset.y}` : '-',
     comp.defId ?? '-',
     defSerial(def),
+    comp.kind === 'spdt' ? (p.throwOf?.(comp.id) ?? '-') : '-',
+    comp.kind === 'button' ? heldKey(p.heldOf?.(comp.id)) : '-',
   ];
   for (const pin of resolveComponentPins(comp, def)) {
     const raw = p.pinRawValue?.(comp.id, pin.name);
@@ -243,6 +254,15 @@ export interface RenderParams extends GlyphContext {
   /** View > Sub-expressions: `<componentId>.<pin>` -> the expression that
    *  output computes, drawn beside the pin. */
   subExpressions?: ReadonlyMap<string, Expr> | undefined;
+  /** Checks tab open: rings on open pins, a badge on an unpowered DIP, a
+   *  dashed overlay on a net that can float. */
+  checkMarkers?:
+    | {
+        pins: readonly { component: string; pin: string }[];
+        badges: ReadonlySet<string>;
+        dashedWires: ReadonlySet<string>;
+      }
+    | undefined;
 }
 
 interface Geo {
@@ -303,10 +323,13 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
   theme = { ...theme, lod: lodFor(vp.zoom, p.board.components.length) };
 
   const geo = componentGeometry(p.board.components, p.chipLib, baseTheme);
+  const routes = p.routeBase
+    ? previewRoutes(p.board, p.routeBase, p.chipLib, baseTheme, p.grid)
+    : circuitRoutes(p.board, p.chipLib, baseTheme, p.grid);
 
   // Group borders go down first, so every wire and body draws over them: the
   // border says "these belong together", it is not part of the circuit.
-  drawGroups(ctx, theme, p.board, geo);
+  drawGroups(ctx, theme, p.board, geo, routes);
 
   const resolveEnd = endResolver(p.board, p.chipLib, baseTheme);
 
@@ -320,9 +343,6 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
   // CircuitWorkbench.tsx must compute from the exact same inputs, or a click
   // lands on a path that isn't the one drawn (M4.2 follow-up route-
   // consistency bug).
-  const routes = p.routeBase
-    ? previewRoutes(p.board, p.routeBase, p.chipLib, baseTheme, p.grid)
-    : circuitRoutes(p.board, p.chipLib, baseTheme, p.grid);
   const showWireColors = getPrefs().showWireColors;
   const display = wireDisplayInfo(p.board, p.chipLib);
   // Only what is drawn is culled; hit-tests and routing still see every item.
@@ -451,6 +471,22 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
     }
   }
 
+  if (p.checkMarkers?.dashedWires.size) {
+    ctx.save();
+    ctx.strokeStyle = theme.colors.warn;
+    ctx.lineWidth = theme.strokes.wire * 2;
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([theme.gridSchematic * 0.6, theme.gridSchematic * 0.4]);
+    for (const id of p.checkMarkers.dashedWires) {
+      const pts = routes.get(id);
+      if (!pts || !inView(polylineBounds(pts), wirePad)) continue;
+      ctx.beginPath();
+      pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   for (const j of p.board.junctions)
     if (inView({ ...j.pos, w: 0, h: 0 }, theme.gridSchematic)) drawJunction(ctx, theme, j.pos);
 
@@ -502,6 +538,8 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
 
   if (p.subExpressions && theme.lod !== 'flat')
     drawSubExpressions(ctx, theme, p.subExpressions, geo);
+
+  if (p.checkMarkers) drawCheckMarkers(ctx, theme, p.checkMarkers, geo, inView);
 
   if (p.ghost) {
     ctx.globalAlpha = GHOST_ALPHA;
@@ -693,6 +731,46 @@ function drawSubExpressions(
   }
 }
 
+function drawCheckMarkers(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  markers: NonNullable<RenderParams['checkMarkers']>,
+  geo: ReadonlyMap<string, Geo>,
+  inView: (r: Rect, pad: number) => boolean,
+): void {
+  const g = theme.gridSchematic;
+  ctx.save();
+  ctx.strokeStyle = theme.colors.warn;
+  ctx.lineWidth = theme.strokes.wire * 1.5;
+  for (const { component, pin } of markers.pins) {
+    const at = geo.get(component)?.pins.get(pin);
+    if (!at || !inView({ ...at, w: 0, h: 0 }, g)) continue;
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, g * 0.55, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // The warning triangle the Checks tab shows for the row, on the chip's corner.
+  const s = g * 1.4;
+  for (const id of markers.badges) {
+    const b = geo.get(id)?.bounds;
+    if (!b || !inView(b, s)) continue;
+    const cx = b.x + b.w;
+    const top = b.y - s * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(cx, top);
+    ctx.lineTo(cx + s * 0.55, top + s * 0.9);
+    ctx.lineTo(cx - s * 0.55, top + s * 0.9);
+    ctx.closePath();
+    ctx.fillStyle = theme.colors.surface;
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = theme.colors.warn;
+    ctx.fillRect(cx - s * 0.05, top + s * 0.32, s * 0.1, s * 0.3);
+    ctx.fillRect(cx - s * 0.05, top + s * 0.68, s * 0.1, s * 0.1);
+  }
+  ctx.restore();
+}
+
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
@@ -770,6 +848,22 @@ const GHOST_BADGES: BusBadgeContext = {
   alwaysShow: false,
 };
 
+/** Live and scrubbed caps draw differently at the same stub, so all three
+ *  states key apart. */
+function heldKey(held: boolean | undefined): string {
+  return held === undefined ? '-' : held ? 'H' : 'h';
+}
+
+/** A scrub has no lever history: the throw carrying the common's level while
+ *  the other does not is the one touched. Undefined when the nets cannot tell. */
+function throwFromPins(signal: (pin: string) => SignalState | undefined): Throw | undefined {
+  const c = signal('c');
+  if (c === undefined) return undefined;
+  const onA = signal('a') === c;
+  const onB = signal('b') === c;
+  return onA === onB ? undefined : onA ? 'a' : 'b';
+}
+
 /** Cached path for the board loop: identical output to drawComponent, blitted
  *  from an offscreen tile when the glyph's identity and state are unchanged. */
 /** Rect enclosing a group's members, padded so the border clears their bodies
@@ -788,6 +882,94 @@ export function groupRect(bounds: readonly Rect[], g: number): Rect | undefined 
   };
 }
 
+/** Last result per route map: drawGroups runs every frame and the hit-tests on
+ *  every pointer move, and a route map is itself memoised per board state. */
+const wirePointsCache = new WeakMap<
+  ReadonlyMap<string, Vec2[]>,
+  { groups: Circuit['groups']; value: Map<string, Point[]> }
+>();
+
+/** Points of the wires each group keeps to itself, so its border encloses them
+ *  as well as the parts. A wire tree (wires joined at junctions and taps)
+ *  belongs to the innermost group holding every pin it reaches; one reaching an
+ *  ungrouped part or two unrelated groups has to cross a border. `routes` are
+ *  the drawn paths: most wires store no bends and are routed when drawn. */
+export function groupWirePoints(
+  board: Circuit,
+  routes?: ReadonlyMap<string, Vec2[]>,
+): Map<string, Point[]> {
+  const cached = routes && wirePointsCache.get(routes);
+  // Nesting groups changes no route, only which group a tree falls to.
+  if (cached && cached.groups === board.groups) return cached.value;
+  const out = new Map<string, Point[]>();
+  if (routes) wirePointsCache.set(routes, { groups: board.groups, value: out });
+  const groups = board.groups ?? [];
+  if (!groups.length || !board.wires.length) return out;
+  const parentOf = new Map(groups.map((g) => [g.id, g.parent]));
+  const ancestry = (id: string): string[] => {
+    const chain = [id];
+    // Bounded by the group count: a hand-edited parent cycle must not hang.
+    for (
+      let p = parentOf.get(id);
+      p !== undefined && chain.length <= groups.length;
+      p = parentOf.get(p)
+    )
+      chain.push(p);
+    return chain;
+  };
+  const common = (a: string, b: string): string | undefined => {
+    const above = new Set(ancestry(b));
+    return ancestry(a).find((id) => above.has(id));
+  };
+
+  const link = new Map<string, string>();
+  const find = (k: string): string => {
+    let r = k;
+    while (link.has(r)) r = link.get(r)!;
+    if (r !== k) link.set(k, r);
+    return r;
+  };
+  const join = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) link.set(ra, rb);
+  };
+  for (const w of board.wires)
+    for (const e of [w.a, w.b]) {
+      if (e.kind === 'junction') join(`w:${w.id}`, `j:${e.junction}`);
+      else if (e.kind === 'tap') join(`w:${w.id}`, `w:${e.wire}`);
+    }
+
+  const groupOf = new Map(board.components.map((c) => [c.id, c.group]));
+  const junctionAt = new Map(board.junctions.map((j) => [j.id, j.pos]));
+  // undefined: no pin seen yet; null: the tree has to cross a border.
+  const trees = new Map<string, { group: string | null | undefined; points: Point[] }>();
+  for (const w of board.wires) {
+    const key = find(`w:${w.id}`);
+    const tree = trees.get(key) ?? { group: undefined, points: [] };
+    trees.set(key, tree);
+    tree.points.push(...(routes?.get(w.id) ?? w.points));
+    for (const e of [w.a, w.b]) {
+      if (e.kind === 'pin') {
+        const g = groupOf.get(e.component);
+        if (tree.group === null) continue;
+        tree.group =
+          g === undefined ? null : tree.group === undefined ? g : (common(tree.group, g) ?? null);
+      } else if (e.kind === 'junction') {
+        const pos = junctionAt.get(e.junction);
+        if (pos) tree.points.push(pos);
+      } else tree.points.push(e.pos);
+    }
+  }
+  for (const { group, points } of trees.values()) {
+    if (!group) continue;
+    const into = out.get(group);
+    if (into) for (const p of points) into.push(p);
+    else out.set(group, points);
+  }
+  return out;
+}
+
 /** Height of a group's name above its border, in grid units. */
 const GROUP_NAME_ROOM = 2;
 
@@ -798,6 +980,7 @@ export function groupRects(
   board: Circuit,
   boundsOf: (id: string) => Rect | undefined,
   g: number,
+  routes?: ReadonlyMap<string, Vec2[]>,
 ): Map<string, Rect> {
   const out = new Map<string, Rect>();
   if (!board.groups?.length) return out;
@@ -806,6 +989,11 @@ export function groupRects(
     if (!c.group) continue;
     const b = boundsOf(c.id);
     if (b) ownBounds.set(c.group, [...(ownBounds.get(c.group) ?? []), b]);
+  }
+  for (const [id, points] of groupWirePoints(board, routes)) {
+    const own = ownBounds.get(id) ?? [];
+    for (const p of points) own.push({ x: p.x, y: p.y, w: 0, h: 0 });
+    ownBounds.set(id, own);
   }
   const childrenOf = new Map<string, string[]>();
   for (const group of board.groups)
@@ -872,10 +1060,11 @@ function drawGroups(
   theme: Theme,
   board: Circuit,
   geo: ReadonlyMap<string, Geo>,
+  routes: ReadonlyMap<string, Vec2[]>,
 ): void {
   if (!board.groups?.length) return;
   const g = theme.gridSchematic;
-  const rects = groupRects(board, (id) => geo.get(id)?.bounds, g);
+  const rects = groupRects(board, (id) => geo.get(id)?.bounds, g, routes);
   ctx.save();
   ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
   ctx.textAlign = 'left';
@@ -995,11 +1184,24 @@ export function drawComponent(
   } else if (comp.kind === 'toggle') {
     drawSwitch(ctx, theme, input, placement, raw, comp.label, live);
   } else if (comp.kind === 'button') {
-    drawButton(ctx, theme, input, placement, on('y'), comp.label, live);
+    if (contactToGround(input.params)) {
+      const stub = p.pinSignal(comp.id, 'y');
+      // A scrub has no press history, so it reads the pulled-down net instead.
+      const held = p.heldOf?.(comp.id) ?? stub === '0';
+      drawButton(ctx, theme, input, placement, held, comp.label, live, { stub });
+    } else drawButton(ctx, theme, input, placement, on('y'), comp.label, live);
+  } else if (comp.kind === 'spdt') {
+    const position =
+      p.throwOf?.(comp.id) ??
+      throwFromPins((pin) => p.pinSignal(comp.id, pin)) ??
+      spdtPosition((comp.params ?? {}) as Params);
+    drawSpdt(ctx, theme, placement, position, (pin) => p.pinSignal(comp.id, pin), comp.label);
   } else if (comp.kind === 'led') {
     drawLed(ctx, theme, input, placement, raw, comp.label, live);
   } else if (comp.kind === 'clock') {
     drawClock(ctx, theme, input, placement, comp.label);
+  } else if (comp.kind === 'timer555') {
+    drawTimer(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin), comp.label);
   } else if (comp.kind === 'sevenseg') {
     // A common-anode display lights on a driven 0 and stays dark on Z, which
     // is exactly what an open-collector 74LS47 gives it. The common terminal

@@ -615,3 +615,59 @@ describe('kernel: datasheet delay follows the input that moved', () => {
     expect(edgeToY(() => sim.setToggle('main/S0', false), outNet('main/S0'))).toBe(19_000);
   });
 });
+
+describe('kernel: fightingNets', () => {
+  /** Two tristates onto one net Y, each with its own data and enable switch. */
+  function fightBoard(withData = true) {
+    const b = board({
+      components: [
+        comp('a1', 'toggle', undefined, 'A1'),
+        comp('a2', 'toggle', undefined, 'A2'),
+        comp('e1', 'toggle', undefined, 'E1'),
+        comp('e2', 'toggle', undefined, 'E2'),
+        comp('t1', 'tristate'),
+        comp('t2', 'tristate'),
+        comp('y', 'led', undefined, 'Y'),
+      ],
+      wires: [
+        ...(withData ? [wire('w1', ['a1', 'y'], ['t1', 'a'])] : []),
+        wire('w2', ['a2', 'y'], ['t2', 'a']),
+        wire('w3', ['e1', 'y'], ['t1', 'en']),
+        wire('w4', ['e2', 'y'], ['t2', 'en']),
+        wire('w5', ['t1', 'y'], ['y', 'a']),
+        wire('w6', ['t2', 'y'], ['y', 'a']),
+      ],
+    });
+    const compiled = compile(b, lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    const yNet = compiled.drivers.findIndex((d) => d.length === 2);
+    return { sim, yNet, settle: () => sim.settle() };
+  }
+
+  it('reports a net only while two enabled drivers disagree', () => {
+    const { sim, yNet, settle } = fightBoard();
+    expect(sim.fightingNets()).toEqual([]);
+    sim.setToggle('main/A1', true);
+    sim.setToggle('main/E1', true);
+    sim.setToggle('main/E2', true);
+    settle();
+    expect(sim.fightingNets()).toEqual([yNet]);
+    sim.setToggle('main/A2', true);
+    settle();
+    expect(sim.fightingNets()).toEqual([]);
+    sim.setToggle('main/A2', false);
+    sim.setToggle('main/E1', false);
+    settle();
+    expect(sim.fightingNets()).toEqual([]);
+  });
+
+  it('does not count an X driver as a fight', () => {
+    const { sim, settle } = fightBoard(false);
+    sim.setToggle('main/E1', true);
+    sim.setToggle('main/E2', true);
+    sim.setToggle('main/A2', true);
+    settle();
+    expect(sim.fightingNets()).toEqual([]);
+  });
+});

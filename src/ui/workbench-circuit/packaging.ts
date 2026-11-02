@@ -26,6 +26,7 @@ export function cloneCircuit(c: Circuit): Circuit {
     wires: c.wires.map((w) => ({ ...w, points: [...w.points] })),
     junctions: c.junctions.map((j) => ({ ...j })),
     ...(c.groups ? { groups: c.groups.map((g) => ({ ...g })) } : {}),
+    ...(c.hiddenChecks ? { hiddenChecks: [...c.hiddenChecks] } : {}),
   };
 }
 
@@ -217,7 +218,7 @@ export function renamePinRefs(
  *  primitive -- if that net is also a label's boundary pin, the def ends up
  *  with a driver baked in, which collides with whatever the def gets wired
  *  to externally once placed (the "drive the same wire" packaging bug). */
-const INTERACTIVE_KINDS = new Set(['toggle', 'button', 'led']);
+const INTERACTIVE_KINDS = new Set(['toggle', 'button', 'spdt', 'led']);
 
 /** Drops switches/LEDs and every wire touching them; a packaged def keeps
  *  only its In/Out label pins and the logic wired between them. */
@@ -283,7 +284,7 @@ export function draftChipDef(id: string, name: string, source: Circuit): ChipDef
   const { pins } = derivePins([], stripped.components);
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     id,
     name,
     version: 1,

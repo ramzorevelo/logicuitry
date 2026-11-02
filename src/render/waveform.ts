@@ -170,7 +170,7 @@ function drawChevron(
   ctx.fill();
 }
 
-/** '1200 ps' / '1.2 ns' / '3 us' style, trimming trailing zeros. */
+/** '1200 ps' / '1.2 ns' / '3 µs' style, trimming trailing zeros. */
 export function formatTimePs(ps: number): string {
   const abs = Math.abs(ps);
   const fmt = (v: number, unit: string) => {
@@ -179,7 +179,9 @@ export function formatTimePs(ps: number): string {
   };
   if (abs < 1_000) return `${ps} ps`;
   if (abs < 1_000_000) return fmt(ps / 1_000, 'ns');
-  return fmt(ps / 1_000_000, 'us');
+  if (abs < 1_000_000_000) return fmt(ps / 1_000_000, 'µs');
+  if (abs < 1_000_000_000_000) return fmt(ps / 1_000_000_000, 'ms');
+  return fmt(ps / 1_000_000_000_000, 's');
 }
 
 /** Largest 1/2/5 x 10^k step giving at most maxTicks ticks over span. */

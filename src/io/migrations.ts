@@ -4,8 +4,8 @@
 export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
-  'lcir.chip': 7,
-  'lcir.board': 9,
+  'lcir.chip': 8,
+  'lcir.board': 12,
   'lcir.lesson': 1,
 };
 
@@ -112,6 +112,20 @@ registerMigration('lcir.chip', 5, (doc) => doc);
 // Board v8 -> v9, chip v6 -> v7: optional group and wire colours, absent before.
 registerMigration('lcir.board', 8, (doc) => doc);
 registerMigration('lcir.chip', 6, (doc) => doc);
+
+// Board v9 -> v10: the timing vendor. Every board before it timed from TI's sheets.
+registerMigration('lcir.board', 9, (doc) => {
+  const timing = doc['timing'] as Record<string, unknown> | undefined;
+  return timing ? { ...doc, timing: { ...timing, vendor: 'ti' } } : doc;
+});
+
+// Board v10 -> v11: the run speed, sim ps per wall second. Every board before
+// it ran at 400 ps a frame, close to the 25 ns/s that is its first preset.
+registerMigration('lcir.board', 10, (doc) => ({ ...doc, runSpeed: 25_000 }));
+
+// Board v11 -> v12, chip v7 -> v8: optional silenced checks, absent before.
+registerMigration('lcir.board', 11, (doc) => doc);
+registerMigration('lcir.chip', 7, (doc) => doc);
 
 // Files written under an earlier name carry an older format prefix: `logiclab.`
 // from the original name, `lcir.` from the Logic Design Workbench one. Rewriting

@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 7,
+  "formatVersion": 10,
   "id": "eight-bit-adder",
   "name": "Eight-bit adder",
   "components": [
@@ -332,6 +332,7 @@
   },
   "timing": {
     "mode": "datasheet",
-    "datasheet": "max"
+    "datasheet": "max",
+    "vendor": "fairchild"
   }
 }

@@ -5,7 +5,13 @@ import type { Board, ChipDef, ChipLibrary, Circuit, Component, PinDir, WireEnd }
 import { isChipInstance } from './types';
 import type { Params } from '../sim/primitives/types';
 import { CONNECTIVITY_KINDS, getPrimitive } from '../sim/primitives/registry';
-import { canFloat, isInputSlot, isOutputSlot, outputSlotPins } from './pinSlots';
+import {
+  OUTPUT_STAGE_PARAM,
+  driverFloats,
+  isInputSlot,
+  isOutputSlot,
+  outputSlotPins,
+} from './pinSlots';
 import { anyRamPreloadError, ramPreloadError } from '../sim/primitives/ram';
 import { isBuiltinChipDef } from '../parts/packages';
 
@@ -327,7 +333,15 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
   const isTap = (d: { prim: number; out: number }) => primitives[d.prim]!.kind === 'tapdrive';
   const floats = (d: { prim: number; out: number }) => {
     const pin = outPinOf(d);
-    return pin !== undefined && canFloat(pin);
+    return pin !== undefined && driverFloats(pin, primitives[d.prim]!.params);
+  };
+  // A DIP output stage is named as the package pin it drives, not its buffer.
+  const pinName = (d: { prim: number; out: number }) => {
+    const prim = primitives[d.prim]!;
+    const stage = prim.params[OUTPUT_STAGE_PARAM];
+    if (prim.packageInstance && typeof stage === 'string')
+      return `${prim.packageInstance}.${stage}`;
+    return `${prim.path}.${outPinOf(d)?.name ?? d.out}`;
   };
   drivers.forEach((ds, i) => {
     if (ds.length <= 1) return;
@@ -336,7 +350,7 @@ export function compile(top: Board | ChipDef, lib: ChipLibrary): CompiledCircuit
     // Name the actual driving pins, not the synthetic net (main/n0 means
     // nothing to the person holding the mouse).
     const clashing = plain.length > 1 ? plain : ds.filter((d) => !floats(d));
-    const names = clashing.map((d) => `${primitives[d.prim]!.path}.${outPinOf(d)?.name ?? d.out}`);
+    const names = clashing.map(pinName);
     throw new CompileError(
       `pins ${names.join(' and ')} drive the same wire; a net takes at most one output that cannot float`,
       outNets[i]!.paths[0]!,

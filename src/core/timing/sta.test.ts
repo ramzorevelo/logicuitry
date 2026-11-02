@@ -177,6 +177,81 @@ describe('analyzeTiming sequential', () => {
     expect(p.holdMarginPs).toBe(5_000 - (5_000 + 5_000));
   });
 
+  it('clocks a register from an astable 555 at tH + tL, as a source not a hop', () => {
+    const params = { r1: 1000, r2: 2000, c: 1e-9 };
+    const b = board({
+      components: [
+        comp('k', 'constant', { value: 1 }),
+        comp('u', 'timer555', params),
+        comp('ff', 'dff'),
+        comp('n1', 'not'),
+      ],
+      wires: [
+        wire('w0', ['k', 'y'], ['u', 'reset']),
+        wire('w1', ['u', 'out'], ['ff', 'clk']),
+        wire('w2', ['ff', 'q'], ['n1', 'a']),
+        wire('w3', ['n1', 'y'], ['ff', 'd']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    const p = r.sequential!.paths[0]!;
+    expect(p.clockPeriodPs).toBe(2_079_000 + 1_386_000);
+    expect(r.endpoints.some((e) => e.critical.some((h) => h.path === 'main/u'))).toBe(false);
+  });
+
+  // Two 555s with equal R and C are two oscillators that drift, never one clock.
+  it.each([
+    ['two astable 555s with equal values', 'timer555'],
+    ['a Clock and a 555 of equal period', 'clock'],
+  ] as const)('times %s as separate domains', (_name, first) => {
+    const timer = { r1: 1000, r2: 2000, c: 1e-9 };
+    const b = board({
+      components: [
+        comp('k', 'constant', { value: 1 }),
+        first === 'clock'
+          ? comp('s1', 'clock', { periodPs: 2_079_000 + 1_386_000 })
+          : comp('s1', 'timer555', timer),
+        comp('s2', 'timer555', timer),
+        comp('f1', 'dff'),
+        comp('f2', 'dff'),
+      ],
+      wires: [
+        wire('w0', ['k', 'y'], ['s2', 'reset']),
+        ...(first === 'clock' ? [] : [wire('w4', ['k', 'y'], ['s1', 'reset'])]),
+        wire('w1', ['s1', first === 'clock' ? 'y' : 'out'], ['f1', 'clk']),
+        wire('w2', ['s2', 'out'], ['f2', 'clk']),
+        wire('w3', ['f1', 'q'], ['f2', 'd']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.sequential?.multiDomain).toBe(true);
+    expect(r.sequential?.paths.some((x) => x.launch === 'main/f1' && x.capture === 'main/f2')).toBe(
+      false,
+    );
+  });
+
+  it('times two registers on one 555 as one domain', () => {
+    const b = board({
+      components: [
+        comp('k', 'constant', { value: 1 }),
+        comp('u', 'timer555', { r1: 1000, r2: 2000, c: 1e-9 }),
+        comp('f1', 'dff'),
+        comp('f2', 'dff'),
+      ],
+      wires: [
+        wire('w0', ['k', 'y'], ['u', 'reset']),
+        wire('w1', ['u', 'out'], ['f1', 'clk']),
+        wire('w2', ['u', 'out'], ['f2', 'clk']),
+        wire('w3', ['f1', 'q'], ['f2', 'd']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.sequential?.multiDomain).toBe(false);
+    expect(r.sequential?.paths.some((x) => x.launch === 'main/f1' && x.capture === 'main/f2')).toBe(
+      true,
+    );
+  });
+
   it('skips cross-domain paths and flags multiDomain', () => {
     const b = board({
       components: [

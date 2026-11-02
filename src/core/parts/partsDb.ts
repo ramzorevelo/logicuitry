@@ -1,6 +1,9 @@
 import rawDb from './74ls.json';
+import rawFairchild from './74ls-fairchild.json';
 
 export interface TypMax {
+  /** Published minimum; only some sheets print one (Fairchild's gate sheets). */
+  min?: number;
   /** Absent when the datasheet publishes a max only (74LS47/'48 leave the typ
    *  column blank). Readers fall back to max rather than invent a figure. */
   typ?: number;
@@ -28,6 +31,9 @@ export interface PartEntry {
   tphl?: TypMax;
   tplh_worst?: TypMax;
   tphl_worst?: TypMax;
+  /** The sheet's test condition for the plain and the worst rows ('86: the other input's level). */
+  condition?: string;
+  condition_worst?: string;
   tplh_clk_q?: TypMax;
   tphl_clk_q?: TypMax;
   paths?: Record<string, ArcRow>;
@@ -50,26 +56,42 @@ export interface PartsDb {
   parts: PartEntry[];
 }
 
+/** Whose sheets time a board. TI covers every bound part; another vendor's table
+ *  covers a few, and a part it lacks falls back to its TI row. */
+export type Vendor = 'ti' | 'fairchild';
+export const VENDOR_NAME: Record<Vendor, string> = { ti: 'TI', fairchild: 'Fairchild' };
+
 /** Which setup and hold row a sampled pin is held to. */
 export type SetupClass = 'data' | 'enable' | 'load' | 'clear';
 
-export type DatasheetColumn = 'typ' | 'max';
+export type DatasheetColumn = 'min' | 'typ' | 'max';
 export type OutputEdge = 'lh' | 'hl';
 
-/** Read one column, falling back to max when the typ column is unpublished. */
+/** Read one column. An unpublished typ falls back to max; an unpublished min to the contamination estimate. */
 export function column(fig: TypMax, col: DatasheetColumn): number {
-  return col === 'max' ? fig.max : (fig.typ ?? fig.max);
+  if (col === 'max') return fig.max;
+  if (col === 'min') return fig.min ?? estimatedContaminationNs(fig.typ ?? fig.max);
+  return fig.typ ?? fig.max;
 }
 
 const db = rawDb as PartsDb;
 const byPart = new Map(db.parts.map((p) => [p.part, p]));
+const byVendor: Record<Vendor, Map<string, PartEntry>> = {
+  ti: byPart,
+  fairchild: new Map((rawFairchild.parts as PartEntry[]).map((p) => [p.part, p])),
+};
 
 export function partsDb(): PartsDb {
   return db;
 }
 
-export function getPart(part: string): PartEntry | undefined {
-  return byPart.get(part);
+export function getPart(part: string, vendor: Vendor = 'ti'): PartEntry | undefined {
+  return byVendor[vendor].get(part) ?? byPart.get(part);
+}
+
+/** False when a vendor other than TI has no row for the part, so TI's times it. */
+export function vendorHasRow(part: string, vendor: Vendor): boolean {
+  return byVendor[vendor].has(part) || !byPart.has(part);
 }
 
 /**
@@ -90,8 +112,9 @@ export function propagationNs(
   part: string,
   edge: OutputEdge,
   col: DatasheetColumn,
+  vendor: Vendor = 'ti',
 ): number | undefined {
-  const p = byPart.get(part);
+  const p = getPart(part, vendor);
   if (!p) return undefined;
   const plain = edge === 'lh' ? p.tplh : p.tphl;
   const worst = edge === 'lh' ? p.tplh_worst : p.tphl_worst;
@@ -114,13 +137,23 @@ export function propagationNs(
  * number it reports is really the published max. Drawn as a caveat next to the
  * figure, the same way an estimated t_cd is.
  */
-export function typPublished(part: string): boolean {
-  const p = byPart.get(part);
-  if (!p) return true;
+export function typPublished(part: string, vendor: Vendor = 'ti'): boolean {
+  const present = delayFigures(part, vendor);
+  return present.length === 0 || present.some((f) => f.typ !== undefined);
+}
+
+/** True when every delay figure the part has carries a printed min, so its t_cd is not estimated. */
+export function minPublished(part: string, vendor: Vendor = 'ti'): boolean {
+  const present = delayFigures(part, vendor);
+  return present.length > 0 && present.every((f) => f.min !== undefined);
+}
+
+function delayFigures(part: string, vendor: Vendor): TypMax[] {
+  const p = getPart(part, vendor);
+  if (!p) return [];
   const figs = [p.tplh, p.tphl, p.tplh_worst, p.tphl_worst, p.tplh_clk_q, p.tphl_clk_q];
   for (const path of Object.values(p.paths ?? {})) figs.push(path.tplh, path.tphl);
-  const present = figs.filter((f): f is TypMax => f !== undefined);
-  return present.length === 0 || present.some((f) => f.typ !== undefined);
+  return figs.filter((f): f is TypMax => f !== undefined);
 }
 
 /** Setup and hold minimums in ns for one class of sampled pin; 0 when unpublished. */
@@ -140,12 +173,15 @@ export function estimatedContaminationNs(typNs: number): number {
 }
 
 /**
- * Contamination delay in ns. 74LS datasheets guarantee no minimums, so the
- * documented estimate is 0.35 x typical propagation; surfaces with an
- * "estimated" caveat wherever it is drawn. On a max-only part the typical is
- * itself the max, which typPublished reports so the caveat can say so.
+ * Contamination delay in ns: the printed min where the sheet has one, else the
+ * documented estimate of 0.35 x typical propagation, which surfaces with an
+ * "estimated" caveat wherever it is drawn (minPublished tells the two apart).
+ * On a max-only part the typical is itself the max, which typPublished reports.
  */
-export function contaminationNs(part: string, edge: OutputEdge): number | undefined {
-  const tpd = propagationNs(part, edge, 'typ');
-  return tpd === undefined ? undefined : estimatedContaminationNs(tpd);
+export function contaminationNs(
+  part: string,
+  edge: OutputEdge,
+  vendor: Vendor = 'ti',
+): number | undefined {
+  return propagationNs(part, edge, 'min', vendor);
 }

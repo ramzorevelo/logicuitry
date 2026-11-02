@@ -23,3 +23,14 @@ export const mayShareNet = (
   a: { dir: PinDir; threeState?: boolean },
   b: { dir: PinDir; threeState?: boolean },
 ): boolean => !(isOutputSlot(a.dir) && isOutputSlot(b.dir)) || canFloat(a) || canFloat(b);
+
+/** Param naming the package pin a power-gate buffer is the output stage of.
+ *  That buffer floats only while its chip is unpowered, so it drives like a
+ *  totem-pole output, not a three-state one. */
+export const OUTPUT_STAGE_PARAM = 'outputStage';
+
+/** canFloat, for a placed or compiled driver whose params may mark it an output stage. */
+export const driverFloats = (
+  pin: { dir: PinDir; threeState?: boolean },
+  params: Readonly<Record<string, unknown>>,
+): boolean => canFloat(pin) && params[OUTPUT_STAGE_PARAM] === undefined;

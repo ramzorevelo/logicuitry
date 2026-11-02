@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS139",
   "name": "74LS139",
   "version": 1,
@@ -410,7 +410,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Y0"
       }
     },
     {
@@ -421,7 +422,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Y1"
       }
     },
     {
@@ -432,7 +434,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Y2"
       }
     },
     {
@@ -443,7 +446,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Y3"
       }
     },
     {
@@ -469,7 +473,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Y3"
       }
     },
     {
@@ -480,7 +485,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Y2"
       }
     },
     {
@@ -491,7 +497,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Y1"
       }
     },
     {
@@ -502,7 +509,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Y0"
       }
     }
   ],

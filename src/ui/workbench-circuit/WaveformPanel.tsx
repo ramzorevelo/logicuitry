@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { useCircuitStore } from './circuitStore';
@@ -41,21 +42,31 @@ import { effectiveWindow, type Win } from './waveWindow';
 import { MemoryPanel, useMemoryAvailable } from './MemoryPanel';
 import { clampPopupToCanvas } from './paramEdit';
 import type { DockTab } from './circuitStore';
+import { CheckCounts, ChecksPanel, useChecksView } from './ChecksPanel';
 
 /** Pending Δt measure: first clicked edge, waiting for the second. */
 interface MeasureState {
   t0: number;
 }
 
-export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement> }) {
+export function WaveformPanel({
+  rootRef,
+  viewOnly = false,
+}: {
+  rootRef?: RefObject<HTMLDivElement>;
+  viewOnly?: boolean;
+}) {
   const store = useCircuitStore;
   const dockOpen = useCircuitStore((s) => s.waveformOpen);
   const dockTab = useCircuitStore((s) => s.dockTab);
   const memoryAvailable = useMemoryAvailable();
   const memoryShown = dockOpen && memoryAvailable && dockTab === 'memory';
-  // `open` is the waveform view's own: the Memory tab hides it but keeps this
+  const checksShown = dockOpen && dockTab === 'checks';
+  const checks = useChecksView();
+  const [showHiddenChecks, setShowHiddenChecks] = useState(false);
+  // `open` is the waveform view's own: the other tabs hide it but keep this
   // component, and with it the track order, hiding and window, mounted.
-  const open = dockOpen && !memoryShown;
+  const open = dockOpen && !memoryShown && !checksShown;
   // Memory can also appear without a tab click (back on the board tab, a RAM placed).
   useEffect(() => {
     if (memoryShown) store.getState().setDockTab('memory');
@@ -151,6 +162,7 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
   const scrollSyncRef = useRef<number | null>(null);
 
   const column = timing.mode === 'datasheet' ? timing.datasheet : undefined;
+  const vendor = timing.vendor;
 
   // Click outside the Signals popover closes it, same rule as every other
   // popup in this workbench (param overlay, label-conflict dialog).
@@ -231,12 +243,12 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
     return buildTraceView(st.board, trace.compiled, trace.records, {
       ...(effectiveWin ? { t0: effectiveWin.t0, t1: effectiveWin.t1 } : {}),
       spanEnd: st.simNow(),
-      ...(column ? { column } : {}),
+      ...(column ? { column, vendor } : {}),
       glitchThresholdPs: Math.max(1, Math.round(thresholdNs * 1000)),
       // Pass-through suppression window: real critical-path t_pd when STA ran.
       ...(staReport?.report.worst ? { glitchWindowPs: staReport.report.worst.totalTpdPs } : {}),
     });
-  }, [open, viewLen, effectiveWin, column, thresholdNs, powered, store, staReport]);
+  }, [open, viewLen, effectiveWin, column, vendor, thresholdNs, powered, store, staReport]);
 
   // Fixed on a phone, placed from its button: the compact header scrolls sideways and a
   // scroller clips an absolute child.
@@ -824,7 +836,7 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
     playStartRef.current = null;
   }, [replayTime]);
 
-  const hasBands = !!view?.tracks.some((t) => t.bands.length);
+  const hasEstimatedBands = !!view?.tracks.some((t) => t.bands.some((b) => b.estimated));
 
   return (
     <div ref={rootRef} className={`wave-panel${dockOpen ? ' wave-panel--open' : ''}`}>
@@ -851,20 +863,25 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
         />
       )}
       <div className="wave-panel__header">
-        {memoryAvailable ? (
-          <span className="dock-tabs" role="tablist">
-            <DockTabButton tab="waves" label="Waveforms" shown={open} />
-            <DockTabButton tab="memory" label="Memory" shown={memoryShown} />
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="tool-btn"
-            title="Toggle the waveform panel"
-            onClick={() => store.getState().setWaveformOpen(!open)}
+        <span className="dock-tabs" role="tablist">
+          <DockTabButton tab="waves" label="Waveforms" shown={open} />
+          <DockTabButton tab="checks" label="Checks" shown={checksShown}>
+            <CheckCounts counts={checks.counts} />
+          </DockTabButton>
+          {memoryAvailable && <DockTabButton tab="memory" label="Memory" shown={memoryShown} />}
+        </span>
+        {checksShown && (
+          <label
+            className="wave-panel__toggle"
+            title="List the checks hidden in this document, to unhide them"
           >
-            {open ? '▾ Waveforms' : '▸ Waveforms'}
-          </button>
+            <input
+              type="checkbox"
+              checked={showHiddenChecks}
+              onChange={(e) => setShowHiddenChecks(e.target.checked)}
+            />
+            Show hidden ({checks.hidden.length})
+          </label>
         )}
         {open && (
           <>
@@ -1012,12 +1029,23 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
                 {compact ? 'cursor' : 'cursor · Live or Esc returns to the live sim'}
               </span>
             )}
-            {hasBands && (
-              <span className="wave-panel__footnote">t_cd estimated (0.35 × t_pd typ)</span>
+            {hasEstimatedBands && (
+              <span className="wave-panel__footnote">
+                t_cd estimated (0.35 × t_pd typ, or max without typ)
+              </span>
             )}
           </>
         )}
       </div>
+      {checksShown && (
+        <div
+          className="wave-panel__body wave-panel__body--checks"
+          ref={wrapRef}
+          style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
+        >
+          <ChecksPanel view={checks} viewOnly={viewOnly} showHidden={showHiddenChecks} />
+        </div>
+      )}
       {memoryShown && (
         <div
           className="wave-panel__body wave-panel__body--memory"
@@ -1114,7 +1142,17 @@ export function WaveformPanel({ rootRef }: { rootRef?: RefObject<HTMLDivElement>
 }
 
 /** A dock tab: picks its view, or folds the dock when that view is already up. */
-function DockTabButton({ tab, label, shown }: { tab: DockTab; label: string; shown: boolean }) {
+function DockTabButton({
+  tab,
+  label,
+  shown,
+  children,
+}: {
+  tab: DockTab;
+  label: string;
+  shown: boolean;
+  children?: ReactNode;
+}) {
   const pick = () => {
     const st = useCircuitStore.getState();
     if (shown) return st.setWaveformOpen(false);
@@ -1132,6 +1170,7 @@ function DockTabButton({ tab, label, shown }: { tab: DockTab; label: string; sho
       onClick={pick}
     >
       {shown ? `▾ ${label}` : `▸ ${label}`}
+      {children}
     </button>
   );
 }

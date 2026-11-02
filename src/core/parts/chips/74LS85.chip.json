@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS85",
   "name": "74LS85",
   "version": 1,
@@ -407,7 +407,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "A>Bout"
       }
     },
     {
@@ -418,7 +419,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "A=Bout"
       }
     },
     {
@@ -429,7 +431,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "A<Bout"
       }
     }
   ],

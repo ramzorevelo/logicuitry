@@ -10,6 +10,7 @@ import type { ChipDef, Component, ComponentKind, ParamValue, PinDef, Wire } from
 import { getPart } from './partsDb';
 import { getPrimitive } from '../sim/primitives/registry';
 import type { PrimitivePin } from '../sim/primitives/types';
+import { OUTPUT_STAGE_PARAM } from '../model/pinSlots';
 
 export interface PackagePin {
   pin: number;
@@ -183,6 +184,8 @@ export function partCore(part: string): PackageCore | undefined {
 }
 
 const OUTPUT_ENABLE_FN = 'oe';
+/** Outputs that only pull low: two may share a net, as a wired-AND. */
+const OPEN_COLLECTOR_PARTS = new Set(['74LS47']);
 const CHIP_LEVEL_FNS = new Set(['vcc', 'gnd', 'nc', OUTPUT_ENABLE_FN]);
 
 export function packageCore(entry: PackageEntry): PackageCore {
@@ -387,6 +390,9 @@ export function buildPackageChipDef(
         nextWire(pinEnd(gateId(gate), p.fn), pinEnd(portId(p.pin), 'a'));
         continue;
       }
+      // Without an enable pin the buffer floats only an unpowered chip, so it
+      // is the pin's totem-pole stage and refuses a second driver like a gate.
+      const totemPole = oePins.length === 0 && !OPEN_COLLECTOR_PARTS.has(entry.part);
       components.push({
         id: bufId(p.pin),
         kind: 'tristate',
@@ -394,7 +400,9 @@ export function buildPackageChipDef(
         params:
           oePins.length > 0 && getPart(entry.part)?.enable
             ? { ...STRUCTURAL, enableTiming: entry.part }
-            : STRUCTURAL,
+            : totemPole
+              ? { ...STRUCTURAL, [OUTPUT_STAGE_PARAM]: p.name }
+              : STRUCTURAL,
       });
       nextWire(pinEnd(gateId(gate), p.fn), pinEnd(bufId(p.pin), 'a'));
       nextWire(pinEnd(chipEnable, 'y'), pinEnd(bufId(p.pin), 'en'));
@@ -404,7 +412,7 @@ export function buildPackageChipDef(
 
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     id: entry.part,
     name: entry.part,
     version: 1,

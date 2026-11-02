@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS151",
   "name": "74LS151",
   "version": 1,
@@ -408,7 +408,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "Y"
       }
     },
     {
@@ -419,7 +420,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "W"
       }
     }
   ],

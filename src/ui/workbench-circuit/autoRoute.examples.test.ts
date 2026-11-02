@@ -15,11 +15,14 @@ import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
 import { makeTestTheme } from '../../render/theme.fixture';
 import { autoRoute, type RoutableComponent, type RoutablePin } from './autoRoute';
 import { computeWireRoutes, polylineCrossesAny } from './wireGeom';
+import { circuitRoutes, componentGeometry } from './routeCache';
+import { groupRects } from './editorScene';
 import '../../core/sim/primitives/registry';
 import '../../render/glyphs/gates';
 import '../../render/glyphs/io';
 import '../../render/glyphs/chip';
 import '../../render/glyphs/power';
+import '../../render/glyphs/timer';
 
 const theme = makeTestTheme();
 
@@ -161,6 +164,7 @@ const HAND_TUNED_BUDGET: Record<string, number> = {
   // The bus and register output lines are drawn as combs; the router declines the bus
   // nets (no single driver) and sprawls on the rest.
   'bus-and-registers': 104,
+  'registers-and-alu': 130,
   'eight-bit-bus-computer': 378,
 };
 
@@ -317,4 +321,38 @@ describe('bundled example boards', () => {
         }
     }
   });
+});
+
+describe('example group frames', () => {
+  const G = theme.gridSchematic;
+  const grouped = EXAMPLES.filter((e) => e.board.groups?.length);
+
+  // A frame grows to take in its own drawn wires; it must not grow into a
+  // neighbour, name room above each border included.
+  it.each(grouped.map((e) => [e.id, e] as const))(
+    '%s keeps unrelated group frames apart',
+    (_id, e) => {
+      const b = e.board;
+      const lib = libraryOf(e);
+      const geo = componentGeometry(b.components, lib, theme);
+      const rects = groupRects(b, (id) => geo.get(id)?.bounds, G, circuitRoutes(b, lib, theme, G));
+      const parentOf = new Map(b.groups!.map((g) => [g.id, g.parent]));
+      const above = (x: string, y: string) => {
+        for (let p = parentOf.get(x); p; p = parentOf.get(p)) if (p === y) return true;
+        return false;
+      };
+      for (const g of b.groups!)
+        for (const h of b.groups!) {
+          if (g.id >= h.id || above(g.id, h.id) || above(h.id, g.id)) continue;
+          const r = rects.get(g.id)!;
+          const s = rects.get(h.id)!;
+          const meet =
+            r.x < s.x + s.w &&
+            s.x < r.x + r.w &&
+            r.y - 2 * G < s.y + s.h &&
+            s.y - 2 * G < r.y + r.h;
+          expect(meet, `${g.name} / ${h.name}`).toBe(false);
+        }
+    },
+  );
 });

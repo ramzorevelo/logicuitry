@@ -101,7 +101,10 @@ describe('formatTimePs', () => {
     expect(formatTimePs(1_000)).toBe('1 ns');
     expect(formatTimePs(1_200)).toBe('1.2 ns');
     expect(formatTimePs(25_000)).toBe('25 ns');
-    expect(formatTimePs(1_500_000)).toBe('1.5 us');
+    expect(formatTimePs(1_500_000)).toBe('1.5 µs');
+    expect(formatTimePs(499_000_000)).toBe('499 µs');
+    expect(formatTimePs(3_410_000_000)).toBe('3.41 ms');
+    expect(formatTimePs(2_000_000_000_000)).toBe('2 s');
   });
 });
 

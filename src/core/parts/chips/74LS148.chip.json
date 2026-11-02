@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS148",
   "name": "74LS148",
   "version": 1,
@@ -409,7 +409,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/A2"
       }
     },
     {
@@ -420,7 +421,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/A1"
       }
     },
     {
@@ -431,7 +433,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/A0"
       }
     },
     {
@@ -442,7 +445,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/GS"
       }
     },
     {
@@ -453,7 +457,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/EO"
       }
     }
   ],

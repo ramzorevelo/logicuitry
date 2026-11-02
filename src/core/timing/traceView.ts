@@ -8,13 +8,22 @@ import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
 import { componentPaths } from '../model/compile';
 import { outputSlotPins } from '../model/pinSlots';
 import type { NetChangeRecord } from '../sim/kernel';
-import type { DatasheetColumn } from '../parts/partsDb';
-import { isStructuralHop, pinNamesOf } from '../sim/delay';
+import type { DatasheetColumn, Vendor } from '../parts/partsDb';
+import { isStructuralHop, isUnitStepKind, pinNamesOf } from '../sim/delay';
 import { outputDelayPs } from './sta';
 import { hasPrimitive, getPrimitive } from '../sim/primitives/registry';
 
 /** Kinds that get a waveform track (owner decision: probes + clocks + top-level I/O). */
-const TRACK_KINDS = new Set(['clock', 'toggle', 'button', 'inport', 'outport', 'led', 'probe']);
+const TRACK_KINDS = new Set([
+  'clock',
+  'timer555',
+  'toggle',
+  'button',
+  'inport',
+  'outport',
+  'led',
+  'probe',
+]);
 
 export const DEFAULT_GLITCH_THRESHOLD_PS = 25_000;
 
@@ -85,6 +94,7 @@ export interface TraceViewOpts {
   spanEnd?: number;
   /** Datasheet column enables band + glitch computation; omit in ideal mode. */
   column?: DatasheetColumn;
+  vendor?: Vendor;
   glitchThresholdPs?: number;
   /** Pass-through suppression lookback (board critical-path t_pd); default 2x threshold. */
   glitchWindowPs?: number;
@@ -135,7 +145,10 @@ export function trackList(board: Board, circuit: CompiledCircuit): TrackSpec[] {
     // a single-output part's path/label is just the plain name. Chip
     // instances are not resolvable through the primitive registry (no
     // PrimitiveSpec for 'chip') and are not covered this session.
-    if (!comp.label || !hasPrimitive(comp.kind)) continue;
+    // An SPDT is an input like a switch, listed named or not; its two throws
+    // need this branch's one track per output.
+    const name = comp.label || (comp.kind === 'spdt' ? comp.id : undefined);
+    if (!name || !hasPrimitive(comp.kind)) continue;
     // componentToPrimitive, not pathToPrimitive: same-net label sharing
     // (labelSync.ts) lets a device inherit this component's own label, so
     // path-keyed lookup can resolve to the WRONG primitive (last-write-wins
@@ -159,7 +172,7 @@ export function trackList(board: Board, circuit: CompiledCircuit): TrackSpec[] {
       const multi = outs.length > 1;
       specs.push({
         path: multi ? `${compPath}.${outPin.name}` : compPath,
-        label: multi ? `${comp.label}.${outPin.name}` : comp.label!,
+        label: multi ? `${name}.${outPin.name}` : name,
         kind: comp.kind,
         net,
         width: circuit.nets[net]!.width,
@@ -262,6 +275,8 @@ function timedDrivers(
   const timed: TimedDriver[] = [];
   for (const d of circuit.drivers[net] ?? []) {
     const prim = circuit.primitives[d.prim]!;
+    // A unit-step part drives on its datasheet interval: no delay to band.
+    if (isUnitStepKind(prim.kind)) continue;
     if (!isStructuralHop(prim)) timed.push({ prim, out: d.out });
     else if (prim.kind === 'tristate') {
       const dataNet = prim.inputs[pinNamesOf(prim).ins.indexOf('a')];
@@ -281,6 +296,7 @@ function buildBands(
   circuit: CompiledCircuit,
   net: number,
   column: DatasheetColumn,
+  vendor: Vendor,
 ): EdgeBand[] {
   const drivers = timedDrivers(circuit, net);
   if (!drivers.length) return [];
@@ -288,7 +304,7 @@ function buildBands(
   let estimated = false;
   for (const { prim, out } of drivers) {
     const names = pinNamesOf(prim);
-    const del = outputDelayPs(prim.part, names.ins, names.outs[out]!, column);
+    const del = outputDelayPs(prim.part, names.ins, names.outs[out]!, column, vendor);
     spread = Math.max(spread, del.tpdPs - del.tcdPs);
     estimated ||= del.estimated;
   }
@@ -298,7 +314,7 @@ function buildBands(
 }
 
 /** Kinds whose track is a signal source, not a circuit response. */
-const INPUT_TRACK_KINDS = new Set(['clock', 'toggle', 'button', 'inport']);
+const INPUT_TRACK_KINDS = new Set(['clock', 'timer555', 'toggle', 'button', 'spdt', 'inport']);
 
 /** True when this track's own primitive is one of the net's drivers (as
  *  opposed to merely observing it, like an LED or a same-net probe). */
@@ -380,7 +396,9 @@ export function buildTraceView(
   const tracks: Track[] = specs.map((spec) => {
     const bucket = perNet.get(spec.net)!;
     const segments = buildSegments(bucket.times, bucket.values, spec.width, t0, t1);
-    const bands = opts.column ? buildBands(segments, circuit, spec.net, opts.column) : [];
+    const bands = opts.column
+      ? buildBands(segments, circuit, spec.net, opts.column, opts.vendor ?? 'ti')
+      : [];
     return { ...spec, segments, bands, times: bucket.times, values: bucket.values };
   });
 

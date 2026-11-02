@@ -5,6 +5,35 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.7.0] - 2026-11-03
+
+### Added
+
+- Datasheet timing per board from TI or Fairchild sheets, with a min column
+  beside typ and max.
+- A Checks tab: unwired inputs, unpowered chips, floating nets, unused
+  outputs, and three-state fights or oscillation while powered.
+- A 555 timer: astable, monostable or bistable, retimed live from its R and C.
+- An SPDT switch, optional contact bounce, and a button that pulls to GND.
+- Run speed per board, from 25 ns per second up to real time.
+- Examples: latch versus flip-flop, 74LS74 preset and clear, an enabled
+  register, a counter, a ring oscillator, a switch debouncer, the three-555
+  clock module, and registers with the ALU.
+
+### Changed
+
+- Times past a microsecond read in µs, ms and s.
+- Two 74LS outputs wired together are refused, as two gate outputs are.
+- Zoom to fit includes every wire, and a group's frame encloses its own wires.
+
+### Fixed
+
+- A board that never settles reads "oscillating" and names the loop instead
+  of jumping time ahead.
+- A switch flip while paused no longer jumps to the next clock edge.
+- A board powered off by an edit while running comes back paused.
+- On a phone, the selection bar steps aside while a menu is open.
+
 ## [0.6.0] - 2026-11-01
 
 ### Added

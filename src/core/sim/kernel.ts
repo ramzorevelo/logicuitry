@@ -4,7 +4,7 @@
 
 import * as bv from '../value/busValue';
 import type { CompiledCircuit } from '../model/compile';
-import type { DelayModel } from './delay';
+import { isStructuralHop, type DelayModel } from './delay';
 import { EventQueue } from './eventQueue';
 import { getPrimitive } from './primitives/registry';
 import type { Params, PrimitiveSpec } from './primitives/types';
@@ -30,6 +30,8 @@ interface SimEvent {
   cause: CauseEdge;
   /** Superseded by a later-issued drive of the same output; skipped on pop. */
   cancelled?: boolean;
+  /** A wake a primitive asked for itself: `finite` for a bounce, else a clock's. */
+  timed?: 'finite' | 'endless';
 }
 
 export interface NetChangeRecord {
@@ -84,8 +86,12 @@ export class Simulator {
   private readonly states: unknown[];
   private readonly lastInputs: bv.BusValue[][];
   private readonly pendingWake: number[];
-  /** Primitives that have ever asked to be re-woken (a clock is the only one
-   *  today). Recorded even while parked, so a paused Step can tell whether
+  /** The wake event behind pendingWake, valid while the two times agree. */
+  private readonly pendingWakeEv: (SimEvent | undefined)[];
+  /** Queued wakes a primitive asked for, so a pause or a new state can drop them. */
+  private readonly timedWakes = new Set<SimEvent>();
+  /** Primitives whose last evaluation asked to be re-woken (a clock, a running
+   *  555). Recorded even while parked, so a paused Step can tell whether
    *  there is any source of future events at all. */
   private readonly selfTimed: boolean[];
   /** Set only for the arming sweep inside stepToNextEvent: it lets a parked
@@ -119,6 +125,7 @@ export class Simulator {
       p.inputs.map((net) => bv.allX(circuit.nets[net]!.width)),
     );
     this.pendingWake = circuit.primitives.map(() => -1);
+    this.pendingWakeEv = circuit.primitives.map(() => undefined);
     this.selfTimed = circuit.primitives.map(() => false);
   }
 
@@ -129,6 +136,7 @@ export class Simulator {
     this.seq = 0;
     while (this.queue.size) this.queue.pop();
     this.cancelledInQueue = 0;
+    this.timedWakes.clear();
     for (const outs of this.pendingDrives) for (const pending of outs) pending.length = 0;
     this.trace.length = 0;
     this.traceHead = 0;
@@ -190,6 +198,7 @@ export class Simulator {
 
     while (this.peekLive()?.time === t) {
       const ev = this.queue.pop()!;
+      if (ev.timed) this.timedWakes.delete(ev);
       if (ev.out === -1) {
         if (this.pendingWake[ev.prim] === ev.time) this.pendingWake[ev.prim] = -1;
         toEvaluate.add(ev.prim);
@@ -248,7 +257,11 @@ export class Simulator {
         this.stepping = false;
       }
     }
-    return this.deltaStep();
+    const report = this.deltaStep();
+    // The sweep armed every source and the step took the earliest; the rest
+    // would drag the next paused settle out to their edges.
+    if (!this.running) this.cancelTimedWakes((ev) => ev.timed === 'endless');
+    return report;
   }
 
   /** Whether stepToNextEvent can still move: something queued, or some source
@@ -264,12 +277,18 @@ export class Simulator {
     this.circuit.primitives.forEach((_, pi) => this.scheduleWake(pi, this.time, NO_CAUSE));
   }
 
-  /** Parks clocks; already-queued events still fire, then the queue drains. */
+  /** Parks clocks. Their queued wakes go too: a paused settle would otherwise
+   *  play on to the next clock or 555 edge. start() wakes them all again. */
   stop(): void {
     this.running = false;
+    this.cancelTimedWakes((ev) => ev.timed === 'endless');
   }
 
-  /** Processes deltas while the next event is at or before targetPs. */
+  /**
+   * Processes deltas while the next event is at or before targetPs. A spent
+   * budget leaves time at the last event processed: jumping to the target
+   * would strand the remaining events in the past.
+   */
   runUntil(targetPs: number, budget = OSC_EVENT_LIMIT * 10): number {
     let processed = 0;
     while (processed < budget) {
@@ -278,8 +297,15 @@ export class Simulator {
       const report = this.deltaStep()!;
       processed += report.changedNets.length + report.evaluated.length;
     }
-    if (this.time < targetPs) this.time = targetPs;
+    const pending = this.peekLive();
+    if (this.time < targetPs && !(pending && pending.time <= targetPs)) this.time = targetPs;
     return processed;
+  }
+
+  /** Whether the last runUntil stopped short of its target on a spent budget. */
+  isBehind(targetPs: number): boolean {
+    const pending = this.peekLive();
+    return this.time < targetPs && !!pending && pending.time <= targetPs;
   }
 
   netValue(net: number): bv.BusValue {
@@ -305,6 +331,9 @@ export class Simulator {
   setPrimitiveStateAt(pi: number, state: unknown): void {
     if (pi < 0 || pi >= this.states.length) throw new Error(`no primitive at index ${pi}`);
     this.states[pi] = state;
+    // A bounce left over from the old state would wake it again later and drag
+    // a paused settle or Step out to that time for nothing.
+    this.cancelTimedWakes((ev) => ev.prim === pi && ev.timed === 'finite');
     this.scheduleWake(pi, this.time, NO_CAUSE);
   }
 
@@ -406,13 +435,19 @@ export class Simulator {
       if (bv.equal(value, prev)) return;
       this.lastScheduled[pi]![out] = value;
       changedInputs ??= inputs.flatMap((v, i) => (bv.equal(v, prevInputs[i]!) ? [] : [i]));
-      const ps = this.delay.delayPs(prim, out, prev, value, changedInputs);
-      this.scheduleDrive(pi, out, this.time + Math.max(1, Math.trunc(ps)), value, cause);
+      const ps = Math.trunc(this.delay.delayPs(prim, out, prev, value, changedInputs));
+      // Only wiring may pass a value on within the same time; silicon always takes time.
+      const floor = isStructuralHop(prim) ? 0 : 1;
+      this.scheduleDrive(pi, out, this.time + Math.max(floor, ps), value, cause);
     });
 
-    if (result.nextWake !== undefined) {
-      this.selfTimed[pi] = true;
-      if (this.running || this.stepping) this.scheduleWake(pi, result.nextWake, cause);
+    if (result.nextWake !== undefined && result.finite) {
+      this.scheduleWake(pi, result.nextWake, cause, 'finite');
+    } else {
+      // Per evaluation, not "ever": an idle monostable has nothing left to step to.
+      this.selfTimed[pi] = result.nextWake !== undefined;
+      if (result.nextWake !== undefined && (this.running || this.stepping))
+        this.scheduleWake(pi, result.nextWake, cause, 'endless');
     }
   }
 
@@ -438,11 +473,40 @@ export class Simulator {
     this.queue.push(ev);
   }
 
-  private scheduleWake(pi: number, time: number, cause: CauseEdge): void {
+  private scheduleWake(
+    pi: number,
+    time: number,
+    cause: CauseEdge,
+    timed?: SimEvent['timed'],
+  ): void {
     const at = Math.max(time, this.time);
-    if (this.pendingWake[pi] === at) return;
+    if (this.pendingWake[pi] === at) {
+      // A plain wake merged into a timed one must survive that one being dropped.
+      const merged = this.pendingWakeEv[pi];
+      if (!timed && merged?.timed) {
+        delete merged.timed;
+        this.timedWakes.delete(merged);
+      }
+      return;
+    }
     this.pendingWake[pi] = at;
-    this.queue.push({ time: at, seq: this.seq++, prim: pi, out: -1, value: bv.allZ(1), cause });
+    const ev: SimEvent = { time: at, seq: this.seq++, prim: pi, out: -1, value: bv.allZ(1), cause };
+    if (timed) {
+      ev.timed = timed;
+      this.timedWakes.add(ev);
+    }
+    this.pendingWakeEv[pi] = ev;
+    this.queue.push(ev);
+  }
+
+  private cancelTimedWakes(drop: (ev: SimEvent) => boolean): void {
+    for (const ev of this.timedWakes) {
+      if (!drop(ev)) continue;
+      this.timedWakes.delete(ev);
+      ev.cancelled = true;
+      this.cancelledInQueue++;
+      if (this.pendingWake[ev.prim] === ev.time) this.pendingWake[ev.prim] = -1;
+    }
   }
 
   /** Total records ever written (monotonic): a cheap has-the-trace-grown probe. */
@@ -460,8 +524,26 @@ export class Simulator {
     }
   }
 
+  /** Nets where two drivers now drive opposite known levels on some bit. An X
+   *  driver is not counted: an uninitialised flip-flop is not a fight. */
+  fightingNets(): number[] {
+    const out: number[] = [];
+    this.contributions.forEach((drives, net) => {
+      if (drives.length < 2) return;
+      let ones = 0;
+      let zeros = 0;
+      for (const d of drives) {
+        const known = ~(d.z | d.x);
+        ones |= d.v & known;
+        zeros |= ~d.v & known;
+      }
+      if ((ones & zeros & bv.widthMask(this.circuit.nets[net]!.width)) !== 0) out.push(net);
+    });
+    return out;
+  }
+
   /** Recent activity tells the instructor where the loop is. */
-  private oscillationReport(): NonNullable<SettleReport['oscillation']> {
+  oscillationReport(): NonNullable<SettleReport['oscillation']> {
     const recent = this.traceRecords().slice(-64);
     const nets = [...new Set(recent.map((r) => r.net))];
     const primitives = [

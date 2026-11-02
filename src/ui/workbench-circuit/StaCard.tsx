@@ -3,6 +3,13 @@
 // substituted. Pure over props; M7 lesson 6 reuses the inequality rendering.
 
 import type { PathTiming, SeqPathTiming, SequentialTiming } from '../../core/timing/sta';
+import {
+  minPublished,
+  vendorHasRow,
+  VENDOR_NAME,
+  type DatasheetColumn,
+  type Vendor,
+} from '../../core/parts/partsDb';
 import { formatTimePs } from '../../render/waveform';
 
 const short = (path: string) => (path.startsWith('main/') ? path.slice(5) : path);
@@ -45,9 +52,14 @@ export function StaCard(props: {
   path: PathTiming;
   sequential: SequentialTiming | null;
   directionBreaks?: readonly string[];
+  parts: readonly string[];
+  column: DatasheetColumn;
+  vendor: Vendor;
   onClose: () => void;
 }) {
-  const { path, sequential, directionBreaks = [] } = props;
+  const { path, sequential, directionBreaks = [], parts, column, vendor } = props;
+  const tiRows = vendor === 'ti' ? [] : parts.filter((p) => !vendorHasRow(p, vendor));
+  const minEstimated = column === 'min' ? parts.filter((p) => !minPublished(p, vendor)) : [];
   return (
     <div className="sta-card">
       <div className="sta-card__head">
@@ -68,9 +80,19 @@ export function StaCard(props: {
           <>{path.short.map((h) => formatTimePs(h.tcdPs)).join(' + ')} = </>
         )}
         <strong>{formatTimePs(path.totalTcdPs)}</strong>
-        {path.estimated && ' · t_cd estimated (0.35 × t_pd typ)'}
+        {path.estimated && ' · t_cd estimated (0.35 × t_pd typ, or max without typ)'}
         {path.typUnpublished && ' · typ not published: max used'}
       </div>
+      {tiRows.length > 0 && (
+        <div className="sta-card__muted">
+          no {VENDOR_NAME[vendor]} sheet: TI rows for {tiRows.join(', ')}
+        </div>
+      )}
+      {minEstimated.length > 0 && (
+        <div className="sta-card__muted">
+          min not published, estimated for {minEstimated.join(', ')}
+        </div>
+      )}
       {directionBreaks.map((at) => (
         <div key={at} className="sta-card__muted">
           direction not fixed: path broken at {short(at)}
@@ -79,6 +101,11 @@ export function StaCard(props: {
       {sequential && (
         <div className="sta-card__seq">
           <div className="sta-card__muted">sequential paths: inequality figures in ns</div>
+          {column === 'min' && (
+            <div className="sta-card__muted">
+              min column: setup slack and clock period are a best case, not a guarantee
+            </div>
+          )}
           {sequential.minPeriodPs !== null && (
             <div>
               min clock period = <strong>{formatTimePs(sequential.minPeriodPs)}</strong>

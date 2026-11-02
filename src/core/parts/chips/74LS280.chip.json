@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS280",
   "name": "74LS280",
   "version": 1,
@@ -361,7 +361,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "EVEN"
       }
     },
     {
@@ -372,7 +373,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "ODD"
       }
     }
   ],

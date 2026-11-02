@@ -26,6 +26,7 @@ import {
 import { paintEmphasis } from './relief';
 import type { Theme } from '../theme';
 import { registerGlyphVariant, type VariantState } from './variants';
+import { contactToGround } from '../../core/sim/primitives/stimulus';
 
 /** Draws an indicator body centred on (cx, cy) with radius r. */
 type Shape = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void;
@@ -665,7 +666,8 @@ function buttonVariant(motif: Motif) {
     state: VariantState,
   ): boolean => {
     const out = input.pins.find((p) => p.dir === 'out');
-    if (!out) return false;
+    // Not drawn here: a contact to GND's net cannot say whether it is held.
+    if (!out || contactToGround(input.params)) return false;
     const held = state.state(out.name) === '1';
     const l = buttonLayout(theme.gridSchematic, out.name);
     const { cx, cy, r } = buttonCapCircle(l);

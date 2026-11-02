@@ -44,6 +44,13 @@ describe('isWidthCapable', () => {
     expect(paramKeysFor('comparator', {})).toEqual(new Set(['hasCascade']));
   });
 
+  it("button contact to GND is structural and the button's own", () => {
+    expect(paramLiveness('button', 'toGround')).toBe('structural');
+    expect(paramKeysFor('button', {})).toEqual(new Set(['bounce', 'toGround']));
+    expect(clampParamValue('button', 'toGround', 1)).toBe(true);
+    expect(clampParamValue('spdt', 'toGround', true)).toBeNull();
+  });
+
   it('comparator hasCascade is structural and its own', () => {
     expect(paramLiveness('comparator', 'hasCascade')).toBe('structural');
     expect(clampParamValue('comparator', 'hasCascade', 1)).toBe(true);

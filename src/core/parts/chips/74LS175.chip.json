@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS175",
   "name": "74LS175",
   "version": 1,
@@ -407,7 +407,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "1Q"
       }
     },
     {
@@ -418,7 +419,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Q"
       }
     },
     {
@@ -441,7 +443,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Q"
       }
     },
     {
@@ -452,7 +455,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "2Q"
       }
     },
     {
@@ -475,7 +479,8 @@
         "y": 384
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "3Q"
       }
     },
     {
@@ -486,7 +491,8 @@
         "y": 384
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/3Q"
       }
     },
     {
@@ -509,7 +515,8 @@
         "y": 576
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/4Q"
       }
     },
     {
@@ -520,7 +527,8 @@
         "y": 576
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "4Q"
       }
     }
   ],

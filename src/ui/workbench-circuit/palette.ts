@@ -6,6 +6,7 @@ import { getPackage } from '../../core/parts/packages';
 import { COUNTER_DEFAULT_WIDTH } from '../../core/sim/primitives/counter';
 import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
 import { RAM_DEFAULT_ADDRESS_BITS, RAM_DEFAULT_WIDTH } from '../../core/sim/primitives/ram';
+import { TIMER_DEFAULTS } from '../../core/sim/primitives/timer555';
 
 export type PaletteGroup =
   | 'Inputs'
@@ -13,6 +14,7 @@ export type PaletteGroup =
   | 'Combinational'
   | 'Arithmetic'
   | 'Sequential'
+  | 'Timers'
   | 'Outputs'
   | 'Wiring';
 
@@ -29,6 +31,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
   'Combinational',
   'Arithmetic',
   'Sequential',
+  'Timers',
   'Wiring',
 ];
 
@@ -44,6 +47,7 @@ export interface PaletteItem {
 export const PALETTE: PaletteItem[] = [
   { kind: 'toggle', label: 'Switch', group: 'Inputs' },
   { kind: 'button', label: 'Button', group: 'Inputs' },
+  { kind: 'spdt', label: 'SPDT switch', group: 'Inputs' },
   { kind: 'clock', label: 'Clock', group: 'Inputs' },
   { kind: 'constant', label: 'Const 0', group: 'Inputs', params: { value: 0, width: 1 } },
   { kind: 'constant', label: 'Const 1', group: 'Inputs', params: { value: 1, width: 1 } },
@@ -86,6 +90,12 @@ export const PALETTE: PaletteItem[] = [
     label: 'RAM',
     group: 'Sequential',
     params: { width: RAM_DEFAULT_WIDTH, addressBits: RAM_DEFAULT_ADDRESS_BITS },
+  },
+  {
+    kind: 'timer555',
+    label: '555 timer',
+    group: 'Timers',
+    params: { mode: 'astable', ...TIMER_DEFAULTS },
   },
   { kind: 'led', label: 'LED', group: 'Outputs' },
   { kind: 'led', label: 'LED array', group: 'Outputs', params: { width: 8 } },

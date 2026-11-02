@@ -45,7 +45,7 @@ export function tapWire(
 export function board(over: Partial<Board>): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'test-board',
     name: 'test',
     components: [],
@@ -53,7 +53,8 @@ export function board(over: Partial<Board>): Board {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
     ...over,
   };
 }
@@ -61,7 +62,7 @@ export function board(over: Partial<Board>): Board {
 export function chipDef(over: Partial<ChipDef> & Pick<ChipDef, 'id' | 'name' | 'pins'>): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     version: 1,
     components: [],
     wires: [],

@@ -39,6 +39,12 @@ import mod10Counter from './boards/mod-10-counter.lcirb';
 import shiftRegister from './boards/shift-register.lcirb';
 import pcMarRam from './boards/program-counter-mar-and-ram.lcirb';
 import regToReg from './boards/register-to-register-path.lcirb';
+import latchVsFlipFlop from './boards/latch-versus-flip-flop.lcirb';
+import ls74PresetClear from './boards/preset-and-clear-on-a-74ls74.lcirb';
+import enabledRegister from './boards/enabled-register-on-a-74ls157-and-two-74ls74s.lcirb';
+import threeBitCounter from './boards/three-bit-counter-on-two-74ls74s.lcirb';
+import ringOscillator from './boards/ring-oscillator-on-a-74ls00-and-a-74ls04.lcirb';
+import switchDebouncer from './boards/switch-debouncer-on-a-74ls00.lcirb';
 import mux2 from './boards/two-to-one-multiplexer.lcirb';
 import muxTree from './boards/four-to-one-multiplexer-tree.lcirb';
 import muxFunction8 from './boards/function-on-an-eight-to-one-multiplexer.lcirb';
@@ -55,8 +61,10 @@ import segmentAZero from './boards/seven-segment-segment-a-unused-codes-0.lcirb'
 import segmentADontCare from './boards/seven-segment-segment-a-unused-codes-dont-care.lcirb';
 import ls47Display from './boards/seven-segment-display-on-a-74ls47.lcirb';
 import ls48Display from './boards/seven-segment-display-on-a-74ls48.lcirb';
+import clockModule from './boards/clock-module.lcirb';
 import busAndRegisters from './boards/bus-and-registers.lcirb';
 import aluAndFlags from './boards/alu-and-flags.lcirb';
+import registersAndAlu from './boards/registers-and-alu.lcirb';
 import eightBitBusComputer from './boards/eight-bit-bus-computer.lcirb';
 
 export interface Example {
@@ -101,6 +109,7 @@ const inGroup =
   (board: unknown, description: string): Example => ({ ...ex(board, description), group });
 const block = inGroup('Multiplexers and decoders');
 const display = inGroup('Seven-segment displays');
+const flipFlops = inGroup('Flip-flops and registers');
 const busComputer = inGroup('Bus computer');
 
 /** One flat list, in the order the menu shows it. */
@@ -130,19 +139,6 @@ export const EXAMPLES: readonly Example[] = [
     'Add, subtract, AND and OR on two 4-bit buses, chosen by F1 F0, with N, Z, C and V flags.',
   ),
   ex(fullAdderDelay, 'A full adder from five gates on datasheet timing, slowest from A to Cout.'),
-  ex(srLatch, 'Two cross-coupled NOR gates holding a bit.'),
-  ex(dLatch, 'A level-sensitive latch built from NAND gates.'),
-  ex(dFlipFlop, 'An edge-triggered flip-flop driven by a clock.'),
-  ex(
-    divideByTwo,
-    'A flip-flop with its inverted output fed back, halving the clock once /CLR is released.',
-  ),
-  ex(
-    mod10Counter,
-    'A 74LS163 cleared at the clock edge after 9. Hold /RST low for one clock edge, then release it to count 0 to 9.',
-  ),
-  ex(shiftRegister, 'Four stages that move the serial input one place along on every clock edge.'),
-  ex(regToReg, 'Two flip-flops with an inverter and an XOR between them, on datasheet timing.'),
   law(absorption, 'A + AB and A, which are the same circuit.'),
   law(elimination, "A(A' + B) reduced to AB."),
   law(consensus, "AB + A'C + BC beside the same sum without its consensus term."),
@@ -180,6 +176,53 @@ export const EXAMPLES: readonly Example[] = [
   display(segmentADontCare, "a = A + C + BD + B'D', lit on the codes 10 to 15."),
   display(ls47Display, 'Active-low outputs into a common-anode display.'),
   display(ls48Display, 'Active-high outputs into a common-cathode display.'),
+  flipFlops(srLatch, 'Two cross-coupled NOR gates holding a bit.'),
+  flipFlops(
+    switchDebouncer,
+    'A bouncing SPDT switch into the NAND /S /R latch: flip it, and /S chatters while Q changes once.',
+  ),
+  flipFlops(dLatch, 'A level-sensitive latch built from NAND gates.'),
+  flipFlops(dFlipFlop, 'An edge-triggered flip-flop driven by a clock.'),
+  flipFlops(
+    latchVsFlipFlop,
+    'One D and one clock into a latch and a flip-flop. D changes mid-phase, so the two outputs part.',
+  ),
+  flipFlops(
+    ls74PresetClear,
+    'Active-low /PRE and /CLR set or clear the flip-flop at once, whatever the clock and D. It starts held clear.',
+  ),
+  flipFlops(
+    divideByTwo,
+    'A flip-flop with its inverted output fed back, halving the clock once /CLR is released.',
+  ),
+  flipFlops(
+    enabledRegister,
+    'A 2:1 multiplexer in front of each D: LOAD high loads D3-D0 on the clock edge, LOAD low holds.',
+  ),
+  flipFlops(
+    shiftRegister,
+    'Four stages that move the serial input one place along on every clock edge.',
+  ),
+  flipFlops(
+    ringOscillator,
+    'A NAND and two inverters in a loop, on datasheet timing. EN high starts it oscillating.',
+  ),
+  flipFlops(
+    regToReg,
+    'Two flip-flops with an inverter and an XOR between them, on datasheet timing.',
+  ),
+  flipFlops(
+    threeBitCounter,
+    'Next-state logic from an XOR package and an AND package in front of three flip-flops, counting 0 to 7 once /CLR is released.',
+  ),
+  flipFlops(
+    mod10Counter,
+    'A 74LS163 cleared at the clock edge after 9. Hold /RST low for one clock edge, then release it to count 0 to 9.',
+  ),
+  busComputer(
+    clockModule,
+    'Three 555 timers: an astable clock, a monostable that debounces the STEP button and a bistable MODE select, with HLT holding CLK low.',
+  ),
   busComputer(
     busAndRegisters,
     'Two 8-bit registers and a switch bank reach a pulled-down bus through 74LS245 transceivers.',
@@ -187,6 +230,10 @@ export const EXAMPLES: readonly Example[] = [
   busComputer(
     aluAndFlags,
     'Two 74LS283 adders and 74LS86 gates give A + B or A - B onto a bus, with carry and zero flags latched in a 74LS173.',
+  ),
+  busComputer(
+    registersAndAlu,
+    'Registers A and B feed an adder-subtracter on one 8-bit bus: load them from the switches, put A + B or A - B on the bus, and clock it back into A to add again.',
   ),
   busComputer(
     pcMarRam,

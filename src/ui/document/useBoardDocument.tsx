@@ -357,7 +357,7 @@ export function useBoardDocument(): BoardDocument {
   };
 
   const fileSaveAs = async () => {
-    const board = store.getState().board;
+    const board = store.getState().pruneHiddenChecks();
     try {
       const file = await saveBoardAs(board, boardFileName(board), boardsDir ?? undefined);
       if (!file) return;
@@ -368,7 +368,7 @@ export function useBoardDocument(): BoardDocument {
   };
 
   const fileSave = async () => {
-    const board = store.getState().board;
+    const board = store.getState().pruneHiddenChecks();
     if (!currentFile) {
       if (filePickersSupported()) await fileSaveAs();
       else {

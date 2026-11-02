@@ -1,0 +1,304 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 10,
+  "id": "ring-oscillator-on-a-74ls00-and-a-74ls04",
+  "name": "Ring oscillator on a 74LS00 and a 74LS04",
+  "components": [
+    {
+      "id": "en",
+      "kind": "toggle",
+      "label": "EN",
+      "params": {
+        "initial": 0
+      },
+      "pos": {
+        "x": 64,
+        "y": -24
+      }
+    },
+    {
+      "id": "u1",
+      "kind": "chip",
+      "defId": "74LS00",
+      "pos": {
+        "x": 192,
+        "y": 64
+      }
+    },
+    {
+      "id": "u2",
+      "kind": "chip",
+      "defId": "74LS04",
+      "pos": {
+        "x": 456,
+        "y": 64
+      }
+    },
+    {
+      "id": "vcc1",
+      "kind": "vcc",
+      "pos": {
+        "x": 296,
+        "y": 16
+      }
+    },
+    {
+      "id": "vcc2",
+      "kind": "vcc",
+      "pos": {
+        "x": 560,
+        "y": 16
+      }
+    },
+    {
+      "id": "gnd1",
+      "kind": "gnd",
+      "pos": {
+        "x": 144,
+        "y": 216
+      }
+    },
+    {
+      "id": "gnd2",
+      "kind": "gnd",
+      "pos": {
+        "x": 408,
+        "y": 216
+      }
+    },
+    {
+      "id": "ly",
+      "kind": "led",
+      "label": "Y",
+      "pos": {
+        "x": 664,
+        "y": 216
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w7",
+      "a": {
+        "kind": "pin",
+        "component": "en",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "4A"
+      },
+      "points": [
+        {
+          "x": 344,
+          "y": -8
+        },
+        {
+          "x": 344,
+          "y": 96
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "1A"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "4Y"
+      },
+      "points": [
+        {
+          "x": 432,
+          "y": 80
+        },
+        {
+          "x": 432,
+          "y": 128
+        }
+      ]
+    },
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "1Y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "2A"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 96
+        },
+        {
+          "x": 448,
+          "y": 112
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "4B"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 304,
+          "y": 112
+        },
+        {
+          "x": 304,
+          "y": 144
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "2Y"
+      },
+      "b": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 128
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "a": {
+        "kind": "junction",
+        "junction": "j1"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "ly",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 448,
+          "y": 240
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "vcc1",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 312,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "a": {
+        "kind": "pin",
+        "component": "vcc2",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "VCC"
+      },
+      "points": [
+        {
+          "x": 576,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "a": {
+        "kind": "pin",
+        "component": "u1",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gnd1",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 160,
+          "y": 176
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "a": {
+        "kind": "pin",
+        "component": "u2",
+        "pin": "GND"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gnd2",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 424,
+          "y": 176
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "pos": {
+        "x": 448,
+        "y": 144
+      }
+    }
+  ],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "datasheet",
+    "datasheet": "max",
+    "vendor": "fairchild"
+  }
+}

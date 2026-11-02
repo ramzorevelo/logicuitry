@@ -17,6 +17,7 @@ import {
   type SignalState,
   type Theme,
 } from '../theme';
+import { contactToGround } from '../../core/sim/primitives/stimulus';
 import type { Params } from '../../core/sim/primitives/types';
 import {
   bitState,
@@ -298,16 +299,23 @@ function drawDipBank(
 
 // --- Button (momentary) ---
 
+/** Lead from the housing down to the earth bars of a contact to GND. */
+const GROUND_LEAD = 1; // * G
+/** The earth bars' band below the lead, as the GND rail tapers them. */
+const GROUND_BARS = 1; // * G
+
 /** Square housing (same 3G width as the switch, but 3G tall instead of 5G --
  *  the switch's lever needs travel room, the button's cap doesn't). `lever`
  *  is unused (drawButton draws its own circle cap directly) but kept on the
- *  shared SwitchLayout shape. */
-export function buttonLayout(g: number, outName: string): SwitchLayout {
+ *  shared SwitchLayout shape. A contact to GND grows downward only, so its
+ *  pin stays put when the option is ticked. */
+export function buttonLayout(g: number, outName: string, toGround = false): SwitchLayout {
   const housing: Rect = { x: 0, y: 0, w: 3 * g, h: 3 * g };
   const lever: Rect = { x: 0, y: 0, w: 0, h: 0 };
   const pinY = snap(housing.h / 2, g);
   const tipX = snap(housing.w + 2 * g, g);
-  const bounds: Rect = { x: 0, y: 0, w: tipX, h: housing.h };
+  const h = housing.h + (toGround ? (GROUND_LEAD + GROUND_BARS) * g : 0);
+  const bounds: Rect = { x: 0, y: 0, w: tipX, h };
   const pins = new Map<string, Vec2>([[outName, { x: tipX, y: pinY }]]);
   return { g, housing, lever, pinY, tipX, bounds, pins };
 }
@@ -321,9 +329,25 @@ export function buttonCapCircle(l: SwitchLayout): { cx: number; cy: number; r: n
 
 registerGlyphGeometry('button', (input, theme) => {
   const out = input.pins.find((p) => p.dir === 'out')!;
-  const l = buttonLayout(theme.gridSchematic, out.name);
+  const l = buttonLayout(theme.gridSchematic, out.name, contactToGround(input.params));
   return { bounds: l.bounds, pins: l.pins };
 });
+
+function drawGroundLead(ctx: CanvasRenderingContext2D, theme: Theme, l: SwitchLayout): void {
+  const cx = l.housing.x + l.housing.w / 2;
+  const barY = l.housing.y + l.housing.h + GROUND_LEAD * l.g;
+  ctx.strokeStyle = theme.colors.ink;
+  ctx.lineWidth = theme.strokes.wire;
+  ctx.beginPath();
+  ctx.moveTo(cx, l.housing.y + l.housing.h);
+  ctx.lineTo(cx, barY);
+  for (const [i, scale] of [1, 0.6, 0.25].entries()) {
+    const y = barY + (i * l.g) / 3;
+    ctx.moveTo(cx - l.g * scale, y);
+    ctx.lineTo(cx + l.g * scale, y);
+  }
+  ctx.stroke();
+}
 
 export function drawButton(
   ctx: CanvasRenderingContext2D,
@@ -335,28 +359,136 @@ export function drawButton(
   // False when no simulation is running: the stub then draws in ink like every
   // other unpowered glyph, instead of colouring a synthesised 0 muted.
   live = true,
+  // A contact to GND's net is set by its pull-up, not by `held`.
+  grounded?: { stub: SignalState | undefined },
 ): void {
   const out = input.pins.find((p) => p.dir === 'out')!;
-  const l = buttonLayout(theme.gridSchematic, out.name);
+  const toGround = contactToGround(input.params);
+  const l = buttonLayout(theme.gridSchematic, out.name, toGround);
+  const drives = toGround ? '0' : '1';
   withPlacement(ctx, l.bounds, placement, () => {
     paintBody(ctx, theme, () => bodyRectPath(ctx, theme, l.housing), { rect: l.housing });
+    if (toGround) drawGroundLead(ctx, theme, l);
 
     const { cx, cy, r } = buttonCapCircle(l);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2); // 2G-diameter cap per §4
-    ctx.fillStyle = held ? signalStyle(theme, '1').color : theme.colors.surface;
+    ctx.fillStyle = held ? signalStyle(theme, drives).color : theme.colors.surface;
     ctx.fill();
     ctx.strokeStyle = theme.colors.ink;
     ctx.stroke();
 
+    const stub = grounded ? grounded.stub : held ? '1' : '0';
     drawStub(
       ctx,
       theme,
       { x: l.housing.w, y: l.pinY },
       { x: l.tipX, y: l.pinY },
-      live ? (held ? '1' : '0') : undefined,
+      live ? stub : undefined,
     );
     drawDeviceLabel(ctx, theme, placement, label, { x: -0.5 * l.g, y: l.pinY }, { x: -1, y: 0 });
+  });
+}
+
+// --- SPDT switch: common in on the left, throws A (top) and B out on the right ---
+
+export interface SpdtLayout {
+  g: number;
+  housing: Rect;
+  pivot: Vec2;
+  contactA: Vec2;
+  contactB: Vec2;
+  bounds: Rect;
+  pins: Map<string, Vec2>;
+}
+
+export function spdtLayout(g: number): SpdtLayout {
+  const housing: Rect = { x: 2 * g, y: 0, w: 3 * g, h: 4 * g };
+  const right = housing.x + housing.w;
+  const bounds: Rect = { x: 0, y: 0, w: right + 2 * g, h: housing.h };
+  return {
+    g,
+    housing,
+    pivot: { x: housing.x + 0.75 * g, y: 2 * g },
+    contactA: { x: right - 0.75 * g, y: g },
+    contactB: { x: right - 0.75 * g, y: 3 * g },
+    bounds,
+    pins: new Map<string, Vec2>([
+      ['c', { x: 0, y: 2 * g }],
+      ['a', { x: bounds.w, y: g }],
+      ['b', { x: bounds.w, y: 3 * g }],
+    ]),
+  };
+}
+
+registerGlyphGeometry('spdt', (_input, theme) => {
+  const l = spdtLayout(theme.gridSchematic);
+  return { bounds: l.bounds, pins: l.pins };
+});
+
+export function drawSpdt(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  placement: Placement,
+  position: 'a' | 'b',
+  stateOf: (pin: string) => SignalState | undefined,
+  label?: string,
+): void {
+  const l = spdtLayout(theme.gridSchematic);
+  const right = l.housing.x + l.housing.w;
+  withPlacement(ctx, l.bounds, placement, () => {
+    paintBody(ctx, theme, () => bodyRectPath(ctx, theme, l.housing), { rect: l.housing });
+    drawStub(ctx, theme, { x: 0, y: l.pivot.y }, { x: l.housing.x, y: l.pivot.y }, stateOf('c'));
+    drawStub(
+      ctx,
+      theme,
+      { x: right, y: l.contactA.y },
+      { x: l.bounds.w, y: l.contactA.y },
+      stateOf('a'),
+    );
+    drawStub(
+      ctx,
+      theme,
+      { x: right, y: l.contactB.y },
+      { x: l.bounds.w, y: l.contactB.y },
+      stateOf('b'),
+    );
+    ctx.strokeStyle = theme.colors.ink;
+    ctx.lineWidth = theme.strokes.min;
+    ctx.beginPath();
+    ctx.moveTo(l.housing.x, l.pivot.y);
+    ctx.lineTo(l.pivot.x, l.pivot.y);
+    for (const contact of [l.contactA, l.contactB]) {
+      ctx.moveTo(contact.x, contact.y);
+      ctx.lineTo(right, contact.y);
+    }
+    ctx.stroke();
+    for (const contact of [l.contactA, l.contactB]) {
+      ctx.beginPath();
+      ctx.arc(contact.x, contact.y, 0.2 * l.g, 0, Math.PI * 2);
+      ctx.fillStyle = theme.colors.surface;
+      ctx.fill();
+      ctx.stroke();
+    }
+    const to = position === 'a' ? l.contactA : l.contactB;
+    ctx.beginPath();
+    ctx.moveTo(l.pivot.x, l.pivot.y);
+    ctx.lineTo(to.x, to.y + (position === 'a' ? 0.2 : -0.2) * l.g);
+    ctx.lineWidth = theme.strokes.min * 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(l.pivot.x, l.pivot.y, 0.2 * l.g, 0, Math.PI * 2);
+    ctx.fillStyle = theme.colors.ink;
+    ctx.fill();
+    drawDeviceLabel(
+      ctx,
+      theme,
+      placement,
+      label,
+      { x: l.housing.x + l.housing.w / 2, y: -0.5 * l.g },
+      { x: 0, y: -1 },
+    );
   });
 }
 

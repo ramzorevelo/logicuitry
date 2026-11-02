@@ -61,6 +61,38 @@ describe('trackList', () => {
     expect(tracks[2]!.net).toBe(tracks[3]!.net);
   });
 
+  it('a 555 gets a track on its OUT net, even unnamed', () => {
+    const b = board({
+      components: [comp('u', 'timer555'), comp('l', 'led')],
+      wires: [wire('w1', ['u', 'out'], ['l', 'a'])],
+    });
+    const c = compile(b, new Map());
+    const [timer, led] = trackList(b, c);
+    expect(timer?.kind).toBe('timer555');
+    expect(timer?.net).toBe(led?.net);
+  });
+
+  it('an SPDT gets a track per throw, even unnamed', () => {
+    const b = board({ components: [comp('s', 'spdt')], wires: [] });
+    const tracks = trackList(b, compile(b, new Map()));
+    expect(tracks.map((t) => [t.path, t.label, t.kind])).toEqual([
+      ['main/s.a', 's.a', 'spdt'],
+      ['main/s.b', 's.b', 'spdt'],
+    ]);
+  });
+
+  it('draws no delay band on a 555 output, which drives on its datasheet interval', () => {
+    const b = board({
+      components: [comp('u', 'timer555'), comp('l', 'led')],
+      wires: [wire('w1', ['u', 'out'], ['l', 'a'])],
+    });
+    const c = compile(b, new Map());
+    const net = trackList(b, c)[0]!.net;
+    const records = [rec(0, net, bv.known(1, 1)), rec(500_000, net, bv.known(0, 1))];
+    const view = buildTraceView(b, c, records, { column: 'max' });
+    expect(view.tracks.every((t) => t.bands.length === 0)).toBe(true);
+  });
+
   it('Task 1d: a named single-output part (a gate) gets one track under its own name', () => {
     const b = board({
       components: [comp('sw', 'toggle'), comp('g1', 'not', undefined, 'inv1')],

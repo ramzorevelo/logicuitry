@@ -69,6 +69,15 @@ describe('buttonLayout', () => {
     expect(cap.cx - cap.r).toBeGreaterThanOrEqual(btn.housing.x);
     expect(cap.cy - cap.r).toBeGreaterThanOrEqual(btn.housing.y);
   });
+
+  it('a contact to GND grows downward and keeps its pin and cap', () => {
+    const plain = buttonLayout(G, 'y');
+    const grounded = buttonLayout(G, 'y', true);
+    expect(grounded.pins).toEqual(plain.pins);
+    expect(buttonCapCircle(grounded)).toEqual(buttonCapCircle(plain));
+    expect(grounded.bounds.h).toBe(5 * G);
+    expect(grounded.bounds.w).toBe(plain.bounds.w);
+  });
 });
 
 describe('ledLayout', () => {

@@ -7,11 +7,18 @@ import { builtinChipLibrary } from '../core/parts/packages';
 import { Simulator } from '../core/sim/kernel';
 import { datasheetDelay, idealDelay, type DelayModel } from '../core/sim/delay';
 import { analyzeTiming } from '../core/timing/sta';
-import { column, getPart } from '../core/parts/partsDb';
+import {
+  column,
+  getPart,
+  vendorHasRow,
+  type DatasheetColumn,
+  type Vendor,
+} from '../core/parts/partsDb';
 import type { Board, ChipDef, ChipLibrary } from '../core/model/types';
 import * as bv from '../core/value/busValue';
 import { getPrimitive } from '../core/sim/primitives/registry';
 import { segmentLit, sevenSegCommon } from '../core/sim/primitives/display';
+import { BOUNCE_EDGES_PS } from '../core/sim/primitives/bounce';
 
 /** The library the app opens an example with: built-ins under its own chips. */
 function libraryOf(e: Example): ChipLibrary {
@@ -378,8 +385,8 @@ describe('bundled examples', () => {
 
   /** The larger of tPLH and tPHL in one column, the figure the delay
    *  calculation takes; the 74LS86 takes its worst-case row on max. */
-  function larger(part: string, col: 'typ' | 'max'): number {
-    const p = getPart(part)!;
+  function larger(part: string, col: 'typ' | 'max', vendor: Vendor = 'ti'): number {
+    const p = getPart(part, vendor)!;
     const rows =
       col === 'max' ? [p.tplh_worst ?? p.tplh, p.tphl_worst ?? p.tphl] : [p.tplh, p.tphl];
     return Math.max(...rows.map((r) => column(r!, col)));
@@ -388,23 +395,136 @@ describe('bundled examples', () => {
     const row = getPart(part)!.paths![arc]!;
     return Math.max(column(row.tplh!, col), column(row.tphl!, col));
   };
-  const timingOf = (id: string, col: 'typ' | 'max') => {
+  const timingOf = (id: string, col: DatasheetColumn, vendor?: Vendor) => {
     const example = EXAMPLES.find((e) => e.id === id)!;
-    return analyzeTiming(compile(example.board, libraryOf(example)), { column: col });
+    return analyzeTiming(compile(example.board, libraryOf(example)), {
+      column: col,
+      vendor: vendor ?? example.board.timing.vendor,
+    });
   };
 
   it('full-adder-propagation-delay is slowest from A or B through X1, A2 and O1 to Cout', () => {
     const example = EXAMPLES.find((e) => e.id === 'full-adder-propagation-delay')!;
-    expect(example.board.timing).toEqual({ mode: 'datasheet', datasheet: 'max' });
-    for (const col of ['typ', 'max'] as const) {
-      const worst = timingOf('full-adder-propagation-delay', col).worst!;
-      expect(worst.endpoint).toBe('main/Cout');
-      expect(['main/A', 'main/B']).toContain(worst.startpoint);
-      expect(worst.critical.map((h) => h.part)).toEqual(['74LS86', '74LS08', '74LS32']);
-      expect(worst.totalTpdPs).toBe(
-        1000 * (larger('74LS86', col) + larger('74LS08', col) + larger('74LS32', col)),
-      );
-    }
+    expect(example.board.timing).toEqual({
+      mode: 'datasheet',
+      datasheet: 'max',
+      vendor: 'fairchild',
+    });
+    for (const vendor of ['fairchild', 'ti'] as const)
+      for (const col of ['typ', 'max'] as const) {
+        const worst = timingOf('full-adder-propagation-delay', col, vendor).worst!;
+        expect(worst.endpoint).toBe('main/Cout');
+        expect(['main/A', 'main/B']).toContain(worst.startpoint);
+        expect(worst.critical.map((h) => h.part)).toEqual(['74LS86', '74LS08', '74LS32']);
+        expect(worst.totalTpdPs).toBe(
+          1000 *
+            (larger('74LS86', col, vendor) +
+              larger('74LS08', col, vendor) +
+              larger('74LS32', col, vendor)),
+        );
+      }
+  });
+
+  // The chapter's figures: 18 + 13 + 11 from Fairchild's sheets against TI's 30 + 20 + 22,
+  // and a t_cd of AND min + OR min that is printed, not estimated.
+  it('full-adder-propagation-delay reads 42 ns on Fairchild and 72 ns on TI', () => {
+    const fairchild = timingOf('full-adder-propagation-delay', 'max').worst!;
+    expect(fairchild.totalTpdPs).toBe(42_000);
+    expect(fairchild.totalTcdPs).toBe(6_000);
+    expect(fairchild.estimated).toBe(false);
+    // Max-only sheets: max stands in for typ only where typ is the column read.
+    expect(fairchild.typUnpublished).toBe(false);
+    expect(timingOf('full-adder-propagation-delay', 'typ').worst!.typUnpublished).toBe(true);
+    const ti = timingOf('full-adder-propagation-delay', 'max', 'ti').worst!;
+    expect(ti.totalTpdPs).toBe(72_000);
+    expect(ti.estimated).toBe(true);
+  });
+
+  // The register is a seed, not a hop, so the board-wide list is what names it.
+  it('lists the TI-timed 74LS74 among the parts of a Fairchild register board', () => {
+    const report = timingOf('register-to-register-path', 'max');
+    expect(report.parts).toContain('74LS74');
+    expect(vendorHasRow('74LS74', 'fairchild')).toBe(false);
+  });
+
+  // Six stage delays a period: Fairchild's 3 ns min and 10 ns max for the '00 and '04.
+  it.each([
+    ['min', 18_000],
+    ['max', 60_000],
+  ] as const)(
+    'ring-oscillator-on-a-74ls00-and-a-74ls04 runs a %s period of %i ps',
+    (col, period) => {
+      const example = EXAMPLES.find((e) => e.id === 'ring-oscillator-on-a-74ls00-and-a-74ls04')!;
+      expect(example.board.timing).toEqual({
+        mode: 'datasheet',
+        datasheet: 'max',
+        vendor: 'fairchild',
+      });
+      const circuit = compile(example.board, libraryOf(example));
+      const sim = new Simulator(circuit, datasheetDelay(col, 'fairchild'));
+      sim.powerOn();
+      sim.settle();
+      const y = resolveOutputNet(circuit, 'main/Y');
+      expect(sim.netValue(y), 'EN low holds the ring').toEqual(bv.known(1, 1));
+      sim.setToggle('main/EN', true);
+      sim.runUntil(sim.time + 10 * period);
+      const rises = sim
+        .traceRecords()
+        .filter((r) => r.net === y && r.value.v === 1 && r.value.x === 0)
+        .map((r) => r.time);
+      const gaps = rises.slice(-4).map((t, i, a) => (i ? t - a[i - 1]! : 0));
+      expect(gaps.slice(1)).toEqual(Array(3).fill(period));
+    },
+  );
+
+  it('switch-debouncer-on-a-74ls00 sets Q once while /S bounces', () => {
+    const example = EXAMPLES.find((e) => e.id === 'switch-debouncer-on-a-74ls00')!;
+    expect(example.board.runSpeed).toBe(100_000_000);
+    const circuit = compile(example.board, libraryOf(example));
+    const sim = new Simulator(circuit, datasheetDelay('max', 'fairchild'));
+    sim.powerOn();
+    sim.settle();
+    const q = resolveOutputNet(circuit, 'main/Q');
+    const s = circuit.pathToNet.get('main//S')!;
+    expect(sim.netValue(q), 'starts reset, the lever on B').toEqual(bv.known(0, 1));
+    const t0 = sim.time;
+    sim.setPrimitiveState('main/SW', { position: 'a' });
+    sim.settle();
+    const after = sim.traceRecords().filter((r) => r.time > t0);
+    expect(after.filter((r) => r.net === s)).toHaveLength(BOUNCE_EDGES_PS.length);
+    expect(after.filter((r) => r.net === q).map((r) => bv.toString(r.value, 1))).toEqual(['1']);
+  });
+
+  it('times every Chapter 7 and 8 example from Fairchild and the bus computer from TI', () => {
+    const vendorOf = (id: string) => EXAMPLES.find((e) => e.id === id)!.board.timing.vendor;
+    const fairchildIds = [
+      'half-adder',
+      'full-adder',
+      'full-adder-on-a-74ls153',
+      'ripple-carry-adder',
+      'four-bit-adder-on-a-74ls283',
+      'eight-bit-adder',
+      'adder-subtracter',
+      'four-operation-alu',
+      'full-adder-propagation-delay',
+      'static-hazard',
+      'sr-latch',
+      'd-latch',
+      'd-flip-flop',
+      'divide-by-two',
+      'mod-10-counter',
+      'shift-register',
+      'register-to-register-path',
+      'latch-versus-flip-flop',
+      'preset-and-clear-on-a-74ls74',
+      'enabled-register-on-a-74ls157-and-two-74ls74s',
+      'three-bit-counter-on-two-74ls74s',
+      'ring-oscillator-on-a-74ls00-and-a-74ls04',
+      'switch-debouncer-on-a-74ls00',
+    ];
+    for (const id of fairchildIds) expect(vendorOf(id), id).toBe('fairchild');
+    for (const e of EXAMPLES.filter((x) => x.group === 'Bus computer'))
+      expect(e.board.timing.vendor, e.id).toBe('ti');
   });
 
   // Ai, Bi to C4 of the low package, then its carry to a sum of the high one.
@@ -424,6 +544,8 @@ describe('bundled examples', () => {
     ['ideal', idealDelay],
     ['datasheet typ', datasheetDelay('typ')],
     ['datasheet max', datasheetDelay('max')],
+    ['datasheet min', datasheetDelay('min')],
+    ['datasheet Fairchild max', datasheetDelay('max', 'fairchild')],
   ];
 
   describe.each(TIMINGS)('clocked examples, %s', (_, delay) => {
@@ -435,6 +557,8 @@ describe('bundled examples', () => {
     };
     /** Rising edges fall on whole periods; this is the settled low phase. */
     const sampleAt = (id: string, cycle: number) => (cycle + 0.75) * periodOf(id);
+    /** Past the slowest asynchronous preset or clear, still short of the next rising edge. */
+    const SETTLE_PS = 80_000;
 
     /** A powered, free-running board and a reader for its LEDs as one
      *  number, first label most significant. */
@@ -484,6 +608,96 @@ describe('bundled examples', () => {
       });
       let expected = 0;
       expect(seen).toEqual(pattern.map((bit) => (expected = ((expected << 1) | bit) & 15)));
+    });
+
+    // CLK rises every 400 ns; D is a 600 ns clock from 50 ns, so the pattern repeats every
+    // 1200 ns and each D edge sits 50 ns from a CLK edge, in both phases.
+    it('latch-versus-flip-flop parts the latch from the flip-flop when D moves mid-phase', () => {
+      const { sim, read } = running('latch-versus-flip-flop', ['Latch Q', 'Flip-flop Q']);
+      const offsets = [150, 300, 500, 700, 900, 1100];
+      const seen: number[] = [];
+      for (const start of [1200, 2400])
+        for (const ns of offsets) {
+          sim.runUntil((start + ns) * 1000);
+          seen.push(read());
+        }
+      const latch = [1, 1, 0, 0, 1, 0];
+      const flipFlop = [0, 0, 0, 0, 1, 1];
+      const once = latch.map((l, i) => l * 2 + flipFlop[i]!);
+      expect(seen).toEqual([...once, ...once]);
+    });
+
+    it('preset-and-clear-on-a-74ls74 overrides the clock and D through /PRE and /CLR', () => {
+      const { sim, read } = running('preset-and-clear-on-a-74ls74', ['Q', '/Q']);
+      const at = (cycle: number) => sampleAt('preset-and-clear-on-a-74ls74', cycle);
+      const Q0 = 0b01;
+      const Q1 = 0b10;
+      sim.runUntil(at(0));
+      expect(read(), 'held clear at power-on').toBe(Q0);
+      sim.setToggle('main//CLR', true);
+      sim.setToggle('main/D', true);
+      sim.runUntil(at(1));
+      expect(read(), 'D clocked in').toBe(Q1);
+      sim.setToggle('main//CLR', false);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'cleared mid-phase').toBe(Q0);
+      sim.runUntil(at(3));
+      expect(read(), 'clear beats two edges with D high').toBe(Q0);
+      sim.setToggle('main//CLR', true);
+      sim.setToggle('main/D', false);
+      sim.setToggle('main//PRE', false);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'preset mid-phase').toBe(Q1);
+      sim.runUntil(at(5));
+      expect(read(), 'preset beats two edges with D low').toBe(Q1);
+      sim.setToggle('main//CLR', false);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'both low drives Q and /Q high').toBe(Q0 | Q1);
+      sim.setToggle('main//PRE', true);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'clear alone again').toBe(Q0);
+    });
+
+    it('enabled-register-on-a-74ls157-and-two-74ls74s loads with LOAD high and holds with it low', () => {
+      const id = 'enabled-register-on-a-74ls157-and-two-74ls74s';
+      const { sim, read: q } = running(id, ['Q3', 'Q2', 'Q1', 'Q0']);
+      const at = (cycle: number) => sampleAt(id, cycle);
+      const setD = (word: number) =>
+        [3, 2, 1, 0].forEach((i) => sim.setToggle(`main/D${i}`, ((word >> i) & 1) === 1));
+      setD(0b1011);
+      sim.runUntil(at(1));
+      expect(q(), 'held clear').toBe(0);
+      sim.setToggle('main//CLR', true);
+      sim.runUntil(at(2));
+      expect(q(), 'LOAD low holds the cleared word').toBe(0);
+      sim.setToggle('main/LOAD', true);
+      sim.runUntil(at(3));
+      expect(q(), 'loaded').toBe(0b1011);
+      sim.setToggle('main/LOAD', false);
+      setD(0b0110);
+      sim.runUntil(at(5));
+      expect(q(), 'held through two edges').toBe(0b1011);
+      sim.setToggle('main/LOAD', true);
+      sim.runUntil(at(6));
+      expect(q(), 'loaded again').toBe(0b0110);
+      sim.setToggle('main//CLR', false);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(q(), 'cleared mid-phase').toBe(0);
+    });
+
+    it('three-bit-counter-on-two-74ls74s counts 0 to 7 and wraps once /CLR is released', () => {
+      const id = 'three-bit-counter-on-two-74ls74s';
+      const { sim, read: q } = running(id, ['Q2', 'Q1', 'Q0']);
+      const at = (cycle: number) => sampleAt(id, cycle);
+      sim.runUntil(at(1));
+      expect(q()).toBe(0);
+      sim.setToggle('main//CLR', true);
+      const counts: number[] = [];
+      for (let cycle = 2; cycle <= 11; cycle++) {
+        sim.runUntil(at(cycle));
+        counts.push(q());
+      }
+      expect(counts).toEqual([1, 2, 3, 4, 5, 6, 7, 0, 1, 2]);
     });
 
     describe('program-counter-mar-and-ram', () => {
@@ -736,18 +950,181 @@ describe('bundled examples', () => {
     });
   });
 
+  /** A grouped bus board on its free-running clock. Switch paths carry the
+   *  group name, so `where` maps each control line to its full path. */
+  function groupedComputer(
+    id: string,
+    where: Record<string, string>,
+    idle: Record<string, boolean>,
+    delay: DelayModel,
+  ) {
+    const example = EXAMPLES.find((e) => e.id === id)!;
+    const circuit = compile(example.board, libraryOf(example));
+    const sim = new Simulator(circuit, delay);
+    sim.powerOn();
+    sim.start();
+    const period = example.board.components.find((c) => c.kind === 'clock')!.params![
+      'periodPs'
+    ] as number;
+    let now = 0.45 * period;
+    sim.runUntil(now);
+    const lane = (label: string, bit: number) => resolveOutputNet(circuit, `main/${label}.a${bit}`);
+    const word = (label: string) =>
+      range(8).reduce((acc, bit) => {
+        const v = sim.netValue(lane(label, bit));
+        expect(v.x | v.z, `${label} bit ${bit}`).toBe(0);
+        return acc | (v.v << bit);
+      }, 0);
+    /** Switches change in the high phase and act at the next rising edge. */
+    const cycle = (set: Record<string, boolean> = {}) => {
+      for (const [name, on] of Object.entries({ ...idle, ...set }))
+        sim.setToggle(`main/${where[name]}`, on);
+      now += period;
+      sim.runUntil(now);
+      return word('BUS');
+    };
+    const put = (name: string, value: number) => sim.setToggleValue(`main/${name}`, value);
+    return { cycle, word, put, sim, circuit, period };
+  }
+
+  /** The controls the Input, Register A, Register B and ALU groups share. */
+  const DATAPATH_WHERE: Record<string, string> = {
+    '/IE': 'Input//IE',
+    '/AI': 'Register A//AI',
+    '/AO': 'Register A//AO',
+    '/BI': 'Register B//BI',
+    '/BO': 'Register B//BO',
+    SU: 'ALU/SU',
+    '/EO': 'ALU//EO',
+    '/FI': 'ALU//FI',
+    CLR: 'CLR',
+  };
+  const DATAPATH_IDLE: Record<string, boolean> = {
+    '/IE': true,
+    '/AI': true,
+    '/AO': true,
+    '/BI': true,
+    '/BO': true,
+    SU: false,
+    '/EO': true,
+    '/FI': true,
+  };
+
+  describe.each(TIMINGS)('clock-module, %s', (_, delay) => {
+    const MS = 1_000_000_000;
+    function clockModule() {
+      const example = EXAMPLES.find((e) => e.id === 'clock-module')!;
+      const circuit = compile(example.board, libraryOf(example));
+      const sim = new Simulator(circuit, delay);
+      sim.powerOn();
+      sim.start();
+      const net = (name: string) => resolveOutputNet(circuit, `main/${name}`);
+      const level = (name: string) => bv.toString(sim.netValue(net(name)), 1);
+      const changes = (name: string, from: number) =>
+        sim.traceRecords().filter((r) => r.net === net(name) && r.time > from);
+      const edges = (name: string, from: number) =>
+        changes(name, from).map((r) => bv.toString(r.value, 1));
+      const at = (ms: number) => sim.runUntil(ms * MS);
+      return { sim, level, changes, edges, at };
+    }
+
+    it('runs from the real time astable on MODE B, with /CLK its complement', () => {
+      const example = EXAMPLES.find((e) => e.id === 'clock-module')!;
+      expect(example.board.runSpeed).toBe(1_000_000_000_000);
+      const { level, at } = clockModule();
+      // Inside the 1101 ms first HIGH, the 693 ms LOW and the next HIGH.
+      const seen = [500, 1200, 1900].map((ms) => {
+        at(ms);
+        return [level('MANUAL'), level('TICK'), level('CLK'), level('/CLK')].join('');
+      });
+      expect(seen).toEqual(['0110', '0001', '0110']);
+    });
+
+    it('HLT holds CLK low while the astable keeps running', () => {
+      const { sim, level, at } = clockModule();
+      at(500);
+      sim.setToggle('main/HLT', true);
+      at(510);
+      expect([level('TICK'), level('CLK'), level('/CLK')]).toEqual(['1', '0', '1']);
+    });
+
+    it('MODE A selects the step button, and one bouncing press gives one 110 ms pulse', () => {
+      const { sim, level, changes, edges, at } = clockModule();
+      at(500);
+      const flipped = sim.time;
+      sim.setPrimitiveState('main/MODE', { position: 'a' });
+      at(510);
+      expect(edges('MANUAL', flipped), 'the bistable debounces the lever').toEqual(['1']);
+      expect([level('TICK'), level('CLK')]).toEqual(['1', '0']);
+
+      const pressed = sim.time;
+      sim.setPrimitiveState('main/STEP', { on: true });
+      at(530);
+      expect(level('CLK')).toBe('1');
+      sim.setPrimitiveState('main/STEP', { on: false });
+      at(700);
+      expect(edges('CLK', pressed)).toEqual(['1', '0']);
+      const [rise, fall] = changes('CLK', pressed);
+      // tw = 1.1 R C = 110 ms; the gates' rise and fall delays differ by nanoseconds.
+      expect(Math.abs(fall!.time - rise!.time - 110 * MS)).toBeLessThan(1_000_000);
+    });
+  });
+
+  describe.each(TIMINGS)('registers-and-alu, %s', (_, delay) => {
+    const computer = () =>
+      groupedComputer('registers-and-alu', DATAPATH_WHERE, DATAPATH_IDLE, delay);
+
+    it('keeps only the input, the two registers and the ALU', () => {
+      const board = EXAMPLES.find((e) => e.id === 'registers-and-alu')!.board;
+      expect(board.groups?.map((g) => g.name)).toEqual([
+        'Input',
+        'Register B',
+        'Register A',
+        'ALU',
+      ]);
+      expect(board.components.some((c) => c.defId === '74LS189' || c.defId === '74LS161')).toBe(
+        false,
+      );
+    });
+
+    it('reads 0 on an undriven bus', () => {
+      const { cycle } = computer();
+      expect(cycle({ CLR: false })).toBe(0);
+    });
+
+    it('loads A and B from the switches and puts A + B or A - B on the bus', () => {
+      const { cycle, word, put } = computer();
+      cycle({ CLR: false });
+      put('Input/IN', 0x2a);
+      cycle({ '/IE': false, '/AI': false });
+      put('Input/IN', 0x07);
+      cycle({ '/IE': false, '/BI': false });
+      expect([word('Register A/A'), word('Register B/B')]).toEqual([0x2a, 0x07]);
+      expect(cycle({ '/EO': false })).toBe(0x31);
+      expect(cycle({ '/EO': false, SU: true })).toBe(0x23);
+    });
+
+    it('clocks the sum back into A, so each /AI edge adds B again', () => {
+      const { cycle, word, put } = computer();
+      cycle({ CLR: false });
+      put('Input/IN', 0x05);
+      cycle({ '/IE': false, '/AI': false });
+      cycle({ '/IE': false, '/BI': false });
+      const sums = [1, 2, 3].map(() => {
+        cycle({ '/EO': false, '/AI': false });
+        return word('Register A/A');
+      });
+      expect(sums).toEqual([0x0a, 0x0f, 0x14]);
+      // A copied into B leaves A - B at zero.
+      expect(cycle({ '/AO': false, '/BI': false })).toBe(0x14);
+      expect(cycle({ '/EO': false, SU: true })).toBe(0);
+    });
+  });
+
   describe.each(TIMINGS)('eight-bit-bus-computer, %s', (_, delay) => {
     const id = 'eight-bit-bus-computer';
-    /** Switch paths: each module is a group, so its switches carry the group name. */
     const where: Record<string, string> = {
-      '/IE': 'Input//IE',
-      '/AI': 'Register A//AI',
-      '/AO': 'Register A//AO',
-      '/BI': 'Register B//BI',
-      '/BO': 'Register B//BO',
-      SU: 'ALU/SU',
-      '/EO': 'ALU//EO',
-      '/FI': 'ALU//FI',
+      ...DATAPATH_WHERE,
       CE: 'Program counter/CE',
       '/CO': 'Program counter//CO',
       '/J': 'Program counter//J',
@@ -755,17 +1132,9 @@ describe('bundled examples', () => {
       RI: 'RAM/RI',
       '/RO': 'RAM//RO',
       PROG: 'RAM/PROG',
-      CLR: 'CLR',
     };
     const idle: Record<string, boolean> = {
-      '/IE': true,
-      '/AI': true,
-      '/AO': true,
-      '/BI': true,
-      '/BO': true,
-      SU: false,
-      '/EO': true,
-      '/FI': true,
+      ...DATAPATH_IDLE,
       CE: false,
       '/CO': true,
       '/J': true,
@@ -773,37 +1142,7 @@ describe('bundled examples', () => {
       RI: false,
       '/RO': true,
     };
-
-    function computer() {
-      const example = EXAMPLES.find((e) => e.id === id)!;
-      const circuit = compile(example.board, libraryOf(example));
-      const sim = new Simulator(circuit, delay);
-      sim.powerOn();
-      sim.start();
-      const period = example.board.components.find((c) => c.kind === 'clock')!.params![
-        'periodPs'
-      ] as number;
-      let now = 0.45 * period;
-      sim.runUntil(now);
-      const lane = (label: string, bit: number) =>
-        resolveOutputNet(circuit, `main/${label}.a${bit}`);
-      const word = (label: string) =>
-        range(8).reduce((acc, bit) => {
-          const v = sim.netValue(lane(label, bit));
-          expect(v.x | v.z, `${label} bit ${bit}`).toBe(0);
-          return acc | (v.v << bit);
-        }, 0);
-      /** Switches change in the high phase and act at the next rising edge. */
-      const cycle = (set: Record<string, boolean> = {}) => {
-        for (const [name, on] of Object.entries({ ...idle, ...set }))
-          sim.setToggle(`main/${where[name]}`, on);
-        now += period;
-        sim.runUntil(now);
-        return word('BUS');
-      };
-      const put = (name: string, value: number) => sim.setToggleValue(`main/${name}`, value);
-      return { cycle, word, put, sim, circuit, period };
-    }
+    const computer = () => groupedComputer(id, where, idle, delay);
 
     it('reads 0 on an undriven bus', () => {
       const { cycle } = computer();

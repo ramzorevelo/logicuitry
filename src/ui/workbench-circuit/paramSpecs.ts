@@ -11,6 +11,13 @@ import type { ParamValue } from '../../core/model/types';
 import { MAX_WIDTH } from '../../core/value/busValue';
 import { MATRIX_MAX, MATRIX_MIN } from '../../core/sim/primitives/display';
 import { RAM_MAX_ADDRESS_BITS } from '../../core/sim/primitives/ram';
+import {
+  TIMER_C_MAX,
+  TIMER_C_MIN,
+  TIMER_MODES,
+  TIMER_R_MAX,
+  type TimerMode,
+} from '../../core/sim/primitives/timer555';
 import { isLedColor, isLedShape } from '../../render/theme';
 import { VARIABLE_ARITY_GATES } from './circuitStore';
 
@@ -69,6 +76,9 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
   if (kind === 'mux' || kind === 'demux') keys.add('selSide');
   if (kind === 'comparator') keys.add('hasCascade');
   if (kind === 'toggle') keys.add('initial');
+  if (kind === 'button' || kind === 'spdt') keys.add('bounce');
+  if (kind === 'button') keys.add('toGround');
+  if (kind === 'spdt') keys.add('position');
   if (kind === 'led') {
     keys.add('color');
     keys.add('shape');
@@ -82,6 +92,7 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
     keys.add('cols');
   }
   if (kind === 'constant') keys.add('value');
+  if (kind === 'timer555') for (const k of ['mode', 'r1', 'r2', 'c']) keys.add(k);
   return keys;
 }
 
@@ -123,6 +134,12 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
       return kind === 'dff' ? !!raw : null;
     case 'outputEnable':
       return kind === 'register' ? !!raw : null;
+    case 'bounce':
+      return kind === 'button' || kind === 'spdt' ? !!raw : null;
+    case 'toGround':
+      return kind === 'button' ? !!raw : null;
+    case 'position':
+      return kind === 'spdt' ? (raw === 'b' ? 'b' : 'a') : null;
     case 'form':
       return kind === 'srlatch' ? (raw === 'nand' ? 'nand' : 'nor') : null;
     case 'clear':
@@ -155,6 +172,17 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
     }
     case 'value':
       return kind === 'constant' ? raw : null;
+    case 'mode':
+      return kind === 'timer555' && TIMER_MODES.includes(raw as TimerMode) ? raw : null;
+    case 'r1':
+    case 'r2':
+    case 'c': {
+      const n = Number(raw);
+      if (kind !== 'timer555' || typeof raw !== 'number' || !Number.isFinite(n)) return null;
+      return key === 'c'
+        ? Math.min(TIMER_C_MAX, Math.max(TIMER_C_MIN, n))
+        : Math.min(TIMER_R_MAX, Math.max(0, n));
+    }
     default:
       return null;
   }

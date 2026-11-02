@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS164",
   "name": "74LS164",
   "version": 1,
@@ -368,7 +368,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QA"
       }
     },
     {
@@ -379,7 +380,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QB"
       }
     },
     {
@@ -390,7 +392,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QC"
       }
     },
     {
@@ -401,7 +404,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QD"
       }
     },
     {
@@ -412,7 +416,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QE"
       }
     },
     {
@@ -423,7 +428,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QF"
       }
     },
     {
@@ -434,7 +440,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QG"
       }
     },
     {
@@ -445,7 +452,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "QH"
       }
     }
   ],

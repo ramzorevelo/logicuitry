@@ -1,0 +1,81 @@
+{
+  "family": "74LS",
+  "vendor": "fairchild",
+  "parts": [
+    {
+      "part": "74LS00",
+      "primitive": "nand2",
+      "tplh": { "min": 3, "max": 10 },
+      "tphl": { "min": 3, "max": 10 },
+      "verified": true,
+      "source": "Fairchild DM74LS00 DS006439, p.2, RL = 2 kOhm, CL = 15 pF; no typ column"
+    },
+
+    {
+      "part": "74LS02",
+      "primitive": "nor2",
+      "tplh": { "max": 13 },
+      "tphl": { "max": 10 },
+      "verified": true,
+      "source": "Fairchild DM74LS02 DS006441, p.2, RL = 2 kOhm, CL = 15 pF; no min or typ column"
+    },
+
+    {
+      "part": "74LS02-SR",
+      "primitive": "srlatch",
+      "tplh": { "max": 23 },
+      "tphl": { "max": 10 },
+      "verified": true,
+      "source": "Derived, not a datasheet row: SR latch of two cross-coupled 74LS02 NOR gates (Fairchild DM74LS02 DS006441, CL = 15 pF). The output that falls does so one tPHL after its input (10); the output that rises follows one tPLH later, tPHL + tPLH (10 + 13)"
+    },
+
+    {
+      "part": "74LS00-SR",
+      "primitive": "srlatch",
+      "tplh": { "min": 3, "max": 10 },
+      "tphl": { "min": 6, "max": 20 },
+      "verified": true,
+      "source": "Derived, not a datasheet row: /S-/R latch of two cross-coupled 74LS00 NAND gates (Fairchild DM74LS00 DS006439, CL = 15 pF). The output that rises does so one tPLH after its input (3/10); the output that falls follows one tPHL later, tPLH + tPHL (3 + 3 / 10 + 10)"
+    },
+
+    {
+      "part": "74LS04",
+      "primitive": "not",
+      "tplh": { "min": 3, "max": 10 },
+      "tphl": { "min": 3, "max": 10 },
+      "verified": true,
+      "source": "Fairchild DM74LS04 DS006345, p.2, RL = 2 kOhm, CL = 15 pF; no typ column"
+    },
+
+    {
+      "part": "74LS08",
+      "primitive": "and2",
+      "tplh": { "min": 4, "max": 13 },
+      "tphl": { "min": 3, "max": 11 },
+      "verified": true,
+      "source": "Fairchild DM74LS08 DS006347, p.2, RL = 2 kOhm, CL = 15 pF; no typ column"
+    },
+
+    {
+      "part": "74LS32",
+      "primitive": "or2",
+      "tplh": { "min": 3, "max": 11 },
+      "tphl": { "min": 3, "max": 11 },
+      "verified": true,
+      "source": "Fairchild DM74LS32 DS006361, p.2, RL = 2 kOhm, CL = 15 pF; no typ column"
+    },
+
+    {
+      "part": "74LS86",
+      "primitive": "xor2",
+      "tplh": { "max": 10 },
+      "tphl": { "max": 12 },
+      "condition": "other input HIGH",
+      "tplh_worst": { "max": 18 },
+      "tphl_worst": { "max": 17 },
+      "condition_worst": "other input LOW",
+      "verified": true,
+      "source": "Fairchild DM74LS86 DS006380, p.2, RL = 2 kOhm, CL = 15 pF; no min or typ column. The slow row is other input LOW, the reverse of TI's sheet"
+    }
+  ]
+}

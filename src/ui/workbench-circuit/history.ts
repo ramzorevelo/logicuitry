@@ -6,9 +6,17 @@
 
 import type { Circuit, Component, Junction, Wire, Group } from '../../core/model/types';
 
-export type EntityKind = 'component' | 'wire' | 'junction' | 'group';
+export type EntityKind = 'component' | 'wire' | 'junction' | 'group' | 'checks';
 
-export type Entity = Component | Wire | Junction | Group;
+/** The circuit's silenced checks, as one entity so a hide is one undo step. */
+export interface HiddenChecksEntity {
+  id: typeof HIDDEN_CHECKS_ID;
+  keys: string[];
+}
+
+export const HIDDEN_CHECKS_ID = 'hiddenChecks';
+
+export type Entity = Component | Wire | Junction | Group | HiddenChecksEntity;
 
 export interface PickedItem {
   kind: EntityKind;
@@ -50,6 +58,9 @@ function diffKind(
   return items;
 }
 
+const hiddenChecksOf = (c: Circuit): HiddenChecksEntity[] =>
+  c.hiddenChecks?.length ? [{ id: HIDDEN_CHECKS_ID, keys: c.hiddenChecks }] : [];
+
 /** Diff two circuit snapshots into one command's picked-item list. */
 export function diffCircuits(before: Circuit, after: Circuit, label: string): Command {
   return {
@@ -59,6 +70,7 @@ export function diffCircuits(before: Circuit, after: Circuit, label: string): Co
       ...diffKind('wire', before.wires, after.wires),
       ...diffKind('junction', before.junctions, after.junctions),
       ...diffKind('group', before.groups ?? [], after.groups ?? []),
+      ...diffKind('checks', hiddenChecksOf(before), hiddenChecksOf(after)),
     ],
   };
 }
@@ -110,6 +122,11 @@ export function applyToCircuit(
   id: string,
   value: Entity | null,
 ): void {
+  if (kind === 'checks') {
+    const keys = (value as HiddenChecksEntity | null)?.keys;
+    circuit.hiddenChecks = keys?.length ? [...keys] : undefined;
+    return;
+  }
   const key: keyof Circuit =
     kind === 'component'
       ? 'components'

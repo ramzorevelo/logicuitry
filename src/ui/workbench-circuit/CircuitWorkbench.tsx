@@ -29,10 +29,22 @@ import {
 const SWAPPABLE_GATE_KINDS = ['and', 'or', 'nand', 'nor', 'xor', 'xnor'] as const;
 import { MAX_WIDTH } from '../../core/value/busValue';
 import { clampInt, clampPopupToCanvas, parseConstantValue } from './paramEdit';
+import { useToolPopup } from './toolPopup';
+import { bounceOn } from '../../core/sim/primitives/bounce';
+import { contactToGround, spdtPosition, type Throw } from '../../core/sim/primitives/stimulus';
+import { timerValues } from '../../core/sim/primitives/timer555';
+import { frameAdvance, RUN_SPEED_PRESETS, runSpeedLabel } from './runSpeed';
 import { renderPreviewParams } from './paramPreview';
 import { clampParamValue, clampWidth, isWidthCapable, paramKeysFor } from './paramSpecs';
 import { warnPulse } from '../../render/anim';
 import { liveParamsOnly, paramLiveness } from './paramLiveness';
+import { TimerFields } from './TimerFields';
+import {
+  parseTimerFields,
+  parseTimerValue,
+  timerFieldText,
+  type TimerFieldText,
+} from './timerOverlay';
 import {
   NOTICE_LINGER_MS,
   NoticePolicy,
@@ -61,6 +73,7 @@ import { SelectionActionBar } from './SelectionActionBar';
 import { LONG_PRESS_MS, initialGestureState, reduceGesture, type Intent } from './touchGestures';
 import { WaveformPanel } from './WaveformPanel';
 import { buildStaOverlay } from './staOverlay';
+import { activeChecks, checksTabShown, revealViewport } from './checksView';
 import type { RoutablePin } from './autoRoute';
 import { StaCard } from './StaCard';
 import {
@@ -93,6 +106,7 @@ import type {
   Wire,
   WireEnd,
 } from '../../core/model/types';
+import { VENDOR_NAME, type DatasheetColumn } from '../../core/parts/partsDb';
 import { ColorSwatches } from './ColorSwatches';
 import { wireDisplayInfo } from './wireDisplay';
 import { recoloredWire, styledGroup } from '../../core/model/palette';
@@ -421,6 +435,12 @@ const WIDTH_LABEL_KINDS = new Set(['inport', 'outport', 'probe', 'busdisplay', '
 const LIFT_BUZZ_MS = 30;
 // A pull draws no caption, so its overlay offers the width alone.
 const PULL_KINDS = new Set(['pullup', 'pulldown']);
+
+const NEXT_COLUMN: Record<DatasheetColumn, DatasheetColumn> = {
+  typ: 'max',
+  max: 'min',
+  min: 'typ',
+};
 // Distinctive-shape gate kinds get a shape-accurate click hit-test instead
 // of bbox; lasso/routing stay bbox, via GATE_SHAPE_KINDS being scoped to
 // click dispatch only.
@@ -429,7 +449,7 @@ const GATE_SHAPE_KINDS = new Set<string>(GATE_KINDS);
 /** Kinds whose label is a caption the reader looks at, so it may run to a
  *  second row (Shift+Enter). A port, a net label and a clock are excluded on
  *  purpose: their text is a net identifier, not a caption. */
-const CAPTION_KINDS = new Set(['led', 'probe', 'busdisplay', 'toggle', 'switch', 'button']);
+const CAPTION_KINDS = new Set(['led', 'probe', 'busdisplay', 'toggle', 'switch', 'button', 'spdt']);
 
 /** The wires a wire colour overlay restyles. */
 function styledWireIds(se: {
@@ -467,39 +487,13 @@ export function CircuitWorkbench() {
   const [lassoFreehand, setLassoFreehand] = useState(
     () => getPrefs().defaultSelectShape === 'lasso',
   );
-  const [lassoMenuOpen, setLassoMenuOpen] = useState(false);
-  const lassoMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!lassoMenuOpen) return;
-    const dismiss = (e: Event) => {
-      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
-      if (e.type === 'pointerdown' && lassoMenuRef.current?.contains(e.target as Node)) return;
-      setLassoMenuOpen(false);
-    };
-    window.addEventListener('pointerdown', dismiss, true);
-    window.addEventListener('keydown', dismiss, true);
-    // The popup is placed once, in viewport pixels; a rotation would strand it.
-    window.addEventListener('resize', dismiss);
-    return () => {
-      window.removeEventListener('pointerdown', dismiss, true);
-      window.removeEventListener('keydown', dismiss, true);
-      window.removeEventListener('resize', dismiss);
-    };
-  }, [lassoMenuOpen]);
-  const lassoPopupRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const popup = lassoPopupRef.current;
-    const anchor = lassoMenuRef.current;
-    if (!lassoMenuOpen || !popup || !anchor) return;
-    const r = anchor.getBoundingClientRect();
-    const { x, y } = clampPopupToCanvas(
-      { compLeft: r.left, compTop: r.top, compRight: r.right, compBottom: r.bottom },
-      { w: popup.offsetWidth, h: popup.offsetHeight },
-      { w: window.innerWidth, h: window.innerHeight },
-    );
-    popup.style.left = `${x}px`;
-    popup.style.top = `${y}px`;
-  }, [lassoMenuOpen]);
+  const {
+    open: lassoMenuOpen,
+    setOpen: setLassoMenuOpen,
+    anchorRef: lassoMenuRef,
+    popupRef: lassoPopupRef,
+  } = useToolPopup();
+  const speedMenu = useToolPopup();
   const lassoFreehandRef = useRef(lassoFreehand);
   lassoFreehandRef.current = lassoFreehand;
   const cutRef = useRef<CutState | null>(null);
@@ -643,6 +637,11 @@ export function CircuitWorkbench() {
     hasLoad?: boolean;
     parallelOut?: boolean;
     outputEnable?: boolean;
+    bounce?: boolean;
+    toGround?: boolean;
+    position?: Throw;
+    /** 555: R and C as typed, so a half-typed value survives a re-render. */
+    timer?: TimerFieldText;
     inputs?: number;
     /** Gate-kind swap (variable-arity gates only): same pin vocabulary, so
      *  every wire survives the change. */
@@ -859,6 +858,9 @@ export function CircuitWorkbench() {
   const timing = useCircuitStore((s) => s.timing);
   const error = useCircuitStore((s) => s.error);
   const simTime = useCircuitStore((s) => (s.rev >= 0 ? s.simTimePs() : null));
+  const runSpeed = useCircuitStore((s) => s.board.runSpeed);
+  const runBehind = useCircuitStore((s) => s.runBehind);
+  const oscillation = useCircuitStore((s) => s.oscillation);
   const tabs = useCircuitStore((s) => s.tabs);
   const activeTabId = useCircuitStore((s) => s.activeTabId);
   const chipLib = useCircuitStore((s) => s.chipLib);
@@ -884,6 +886,8 @@ export function CircuitWorkbench() {
   const hoverTrackPath = useCircuitStore((s) => s.hoverTrackPath);
   const staReport = useCircuitStore((s) => s.staReport);
   const waveformOpen = useCircuitStore((s) => s.waveformOpen);
+  const dockTab = useCircuitStore((s) => s.dockTab);
+  const revealRequest = useCircuitStore((s) => s.revealRequest);
   const bubbleFocus = useCircuitStore((s) => s.bubbleFocus);
   const bubblePreview = useCircuitStore((s) => s.bubblePreview);
   const bubblePairMode = useCircuitStore((s) => s.bubblePairMode);
@@ -1152,6 +1156,8 @@ export function CircuitWorkbench() {
             : undefined,
         peerLabels: netLabelPeers()?.comps,
         pinRawValue: (id, pin) => st.pinRawValue(id, pin, prefix),
+        throwOf: (id) => st.spdtThrow(id, prefix),
+        heldOf: (id) => st.buttonHeld(id, prefix),
         staOverlay: (() => {
           if (!st.staReport || activeTab.kind !== 'board') return undefined;
           const data = buildStaOverlay(
@@ -1163,6 +1169,7 @@ export function CircuitWorkbench() {
           return data ?? undefined;
         })(),
         subExpressions: subExpressionsNow(),
+        checkMarkers: checksTabShown(st) ? activeChecks(st).markers : undefined,
         hoverPin: hoverPin ?? (from ? (wireTip ?? from.worldPos) : undefined),
         // The committed wire is elbowed by orthogonalPolyline on the way in, so
         // the ghost is built by the same function: assembling it by hand left
@@ -1296,7 +1303,47 @@ export function CircuitWorkbench() {
     showSubExprs,
     // The colour overlay previews on the canvas without touching the store.
     styleEdit,
+    // Check markers show only while the Checks tab is up.
+    waveformOpen,
+    dockTab,
   ]);
+
+  // A Checks row click: pan what it points at into view, zoom kept.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const theme = themeRef.current;
+    if (!revealRequest || !canvas || !theme) return;
+    const st = store.getState();
+    const circuit = st.activeCircuit();
+    const ids = new Set(revealRequest.ids);
+    const geo = componentGeometry(circuit.components, st.chipLib, theme);
+    const routes = circuitRoutes(circuit, st.chipLib, theme, theme.gridSchematic);
+    const points = [
+      ...[...ids].flatMap((id) => {
+        const b = geo.get(id)?.bounds;
+        return b ? [b, { x: b.x + b.w, y: b.y + b.h }] : [];
+      }),
+      ...[...ids].flatMap((id) => routes.get(id) ?? []),
+    ];
+    if (points.length === 0) return;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const margin = 2 * theme.gridSchematic;
+    const target = {
+      x: Math.min(...xs) - margin,
+      y: Math.min(...ys) - margin,
+      w: Math.max(...xs) - Math.min(...xs) + 2 * margin,
+      h: Math.max(...ys) - Math.min(...ys) + 2 * margin,
+    };
+    setViewport((vp) =>
+      revealViewport(
+        vp,
+        target,
+        canvas.clientWidth || canvas.width,
+        canvas.clientHeight || canvas.height,
+      ),
+    );
+  }, [revealRequest, store]);
 
   // Entering/leaving bubble mode cancels any in-flight editing gesture; the
   // rest of the lockout is the top-of-handler delegation in the handlers.
@@ -1439,6 +1486,18 @@ export function CircuitWorkbench() {
       maxX = Math.max(maxX, b.x + b.w);
       maxY = Math.max(maxY, b.y + b.h);
     }
+    // A wire can run past every part, as a bus or a loop-back does.
+    const take = (p: Vec2) => {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    };
+    for (const j of circuit.junctions) take(j.pos);
+    for (const w of circuit.wires) {
+      w.points.forEach(take);
+      for (const e of [w.a, w.b]) if (e.kind === 'free' || e.kind === 'tap') take(e.pos);
+    }
     const margin = 2 * theme.gridSchematic;
     const w = maxX - minX + 2 * margin;
     const h = maxY - minY + 2 * margin;
@@ -1495,12 +1554,17 @@ export function CircuitWorkbench() {
     };
   }, []);
 
-  // Continuous run: advance sim time each frame while running.
+  // Continuous run: advance sim time by the wall time each frame took, at the board's speed.
   useEffect(() => {
     if (!running) return;
     let raf = 0;
-    const tick = () => {
-      store.getState().pump(400);
+    let last = performance.now();
+    let carry = 0;
+    const tick = (now: number) => {
+      const step = frameAdvance(store.getState().board.runSpeed, now - last, carry);
+      last = now;
+      carry = step.carry;
+      store.getState().pump(step.ps);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -2584,7 +2648,13 @@ export function CircuitWorkbench() {
     const circuit = st.activeCircuit();
     if (!theme || !circuit.groups?.length) return undefined;
     const geo = componentGeometry(circuit.components, st.chipLib, theme);
-    const rects = groupRects(circuit, (id) => geo.get(id)?.bounds, theme.gridSchematic);
+    // The drawn routes, as the scene frames them, so a click meets the border on screen.
+    const rects = groupRects(
+      circuit,
+      (id) => geo.get(id)?.bounds,
+      theme.gridSchematic,
+      computeRoutes(),
+    );
     return { circuit, rects };
   };
 
@@ -3696,7 +3766,7 @@ export function CircuitWorkbench() {
   // Back on a phone throws the wire away, like the toolbar's Cancel.
   useBackLayer(coarse && wiring ? discardWire : null);
   // And closes a param editor unsaved, as Esc does.
-  useBackLayer(coarse && paramEdit ? () => setParamEdit(null) : null);
+  useBackLayer(coarse && paramEdit ? () => cancelParamEdit() : null);
   useBackLayer(coarse && styleEdit ? () => setStyleEdit(null) : null);
 
   /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
@@ -4820,6 +4890,8 @@ export function CircuitWorkbench() {
     if (!powered) return;
     if (c && c.kind === 'toggle') {
       store.getState().toggleInput(c.id, dipBankBitAt(c, world), prefix);
+    } else if (c && c.kind === 'spdt') {
+      store.getState().flipSpdt(c.id, prefix);
     }
   };
 
@@ -5004,6 +5076,9 @@ export function CircuitWorkbench() {
     if (
       c.kind === 'chip' ||
       c.kind === 'toggle' ||
+      c.kind === 'button' ||
+      c.kind === 'spdt' ||
+      c.kind === 'timer555' ||
       c.kind === 'constant' ||
       c.kind === 'decoder' ||
       c.kind === 'encoder' ||
@@ -5039,7 +5114,10 @@ export function CircuitWorkbench() {
         c.kind === 'comparator' ||
         c.kind === 'srlatch' ||
         c.kind === 'chip' ||
-        c.kind === 'sevenseg';
+        c.kind === 'sevenseg' ||
+        c.kind === 'button' ||
+        c.kind === 'spdt' ||
+        c.kind === 'timer555';
       // Task 6: a multi-selection containing the double-clicked component
       // batches -- the shown/applied fields are the intersection of every
       // selected component's own descriptor-key set (paramSpecs.ts), empty
@@ -5112,6 +5190,10 @@ export function CircuitWorkbench() {
             }
           : {}),
         ...(c.kind === 'register' ? { outputEnable: c.params?.['outputEnable'] === true } : {}),
+        ...(c.kind === 'button' || c.kind === 'spdt' ? { bounce: bounceOn(c.params ?? {}) } : {}),
+        ...(c.kind === 'button' ? { toGround: contactToGround(c.params ?? {}) } : {}),
+        ...(c.kind === 'spdt' ? { position: spdtPosition(c.params ?? {}) } : {}),
+        ...(c.kind === 'timer555' ? { timer: timerFieldText(c.params ?? {}) } : {}),
         ...(c.kind === 'srlatch'
           ? { form: c.params?.['form'] === 'nand' ? ('nand' as const) : ('nor' as const) }
           : {}),
@@ -5155,9 +5237,9 @@ export function CircuitWorkbench() {
       });
       return;
     }
-    // netlabel joins the plain-rename set: its name IS its function (same
-    // text joins nets), and it has no width of its own to edit.
-    const renameKinds = new Set(['button', 'netlabel']);
+    // A netlabel's name IS its function (same text joins nets), and it has no
+    // width of its own to edit, so it keeps the plain rename overlay.
+    const renameKinds = new Set(['netlabel']);
     if (powered && renameKinds.has(c.kind)) {
       // A netlabel's name IS its connectivity, and any label feeds the compiled
       // net paths the value readouts resolve through, so a rename needs the
@@ -5168,9 +5250,6 @@ export function CircuitWorkbench() {
     if (renameKinds.has(c.kind)) {
       // Ports aren't chip instances, so double-click is free for an
       // inline rename here (chip instances keep "open internals" below).
-      // button has no width param, so it keeps the plain rename overlay;
-      // input/output/toggle/probe/busdisplay/led moved to the width+label
-      // paramEdit overlay above.
       const theme = themeRef.current!;
       const def = c.defId ? store.getState().chipLib.get(c.defId) : undefined;
       const bounds = symbolBounds(c, theme, def).bounds;
@@ -5233,7 +5312,15 @@ export function CircuitWorkbench() {
 
   const paramEditCheckbox = (
     pe: NonNullable<typeof paramEdit>,
-    key: 'asyncSet' | 'asyncClear' | 'hasLoad' | 'hasEnable' | 'parallelOut' | 'outputEnable',
+    key:
+      | 'asyncSet'
+      | 'asyncClear'
+      | 'hasLoad'
+      | 'hasEnable'
+      | 'parallelOut'
+      | 'outputEnable'
+      | 'bounce'
+      | 'toGround',
     label: string,
   ) =>
     paramEditFieldVisible(pe, key) && (
@@ -5286,6 +5373,18 @@ export function CircuitWorkbench() {
         return pe.parallelOut;
       case 'outputEnable':
         return pe.outputEnable;
+      case 'bounce':
+        return pe.bounce;
+      case 'toGround':
+        return pe.toGround;
+      case 'position':
+        return pe.position;
+      case 'mode':
+        return pe.timer?.mode;
+      case 'r1':
+      case 'r2':
+      case 'c':
+        return pe.timer ? (parseTimerValue(key, pe.timer[key]) ?? undefined) : undefined;
       case 'selSide':
         return pe.selSide;
       case 'initial':
@@ -5330,6 +5429,23 @@ export function CircuitWorkbench() {
     return specs;
   };
 
+  // R and C never move a pin (the body is sized for the widest values), so the
+  // body text can show them while typed or slid, ahead of the commit.
+  const withTimerPreview = (
+    pe: NonNullable<typeof paramEdit>,
+    preview: Map<string, Record<string, ParamValue>> | null,
+  ): Map<string, Record<string, ParamValue>> | null => {
+    if (pe.kind !== 'timer555' || !pe.timer) return preview;
+    const values: Record<string, ParamValue> = {};
+    for (const key of ['r1', 'r2', 'c'] as const) {
+      const v = parseTimerValue(key, pe.timer[key]);
+      if (v !== null) values[key] = v;
+    }
+    const out = new Map(preview ?? []);
+    out.set(pe.id, { ...out.get(pe.id), ...values });
+    return out;
+  };
+
   const buildParamPreview = (
     pe: NonNullable<typeof paramEdit>,
   ): Map<string, Record<string, ParamValue>> | null => {
@@ -5348,7 +5464,9 @@ export function CircuitWorkbench() {
     return preview.size > 0 ? preview : null;
   };
 
-  paramPreviewRef.current = paramEdit ? buildParamPreview(paramEdit) : null;
+  paramPreviewRef.current = paramEdit
+    ? withTimerPreview(paramEdit, buildParamPreview(paramEdit))
+    : null;
 
   // Outside the store, so no store subscription redraws for it.
   const paramPreviewKey = paramPreviewRef.current
@@ -5451,6 +5569,14 @@ export function CircuitWorkbench() {
       params['hasEnable'] = !!paramEdit.hasEnable;
       params['selSide'] = paramEdit.selSide === 'top' ? 'top' : 'bottom';
       params['pinView'] = serializePinView(paramEdit.pinView);
+    } else if (paramEdit.kind === 'timer555') {
+      const timer = paramEdit.timer && parseTimerFields(paramEdit.timer);
+      if (!timer) return flash();
+      Object.assign(params, timer);
+    } else if (paramEdit.kind === 'button' || paramEdit.kind === 'spdt') {
+      params['bounce'] = !!paramEdit.bounce;
+      if (paramEdit.kind === 'button') params['toGround'] = !!paramEdit.toGround;
+      if (paramEdit.kind === 'spdt') params['position'] = paramEdit.position ?? 'a';
     } else if (paramEdit.kind === 'sevenseg') {
       // No width and no pinView: the package is fixed at its real ten pins.
       if (paramEdit.color !== undefined) params['color'] = paramEdit.color;
@@ -5492,6 +5618,22 @@ export function CircuitWorkbench() {
     ]);
     if (ok) setParamEdit(null);
     else flash();
+  };
+
+  // A slider drag patches the running sim before it commits, so a cancel puts
+  // the committed values back into the sim as well as closing the overlay.
+  const cancelParamEdit = () => {
+    if (paramEdit?.kind === 'timer555') {
+      const comp = store
+        .getState()
+        .activeCircuit()
+        .components.find((c) => c.id === paramEdit.id);
+      if (comp) {
+        const { r1, r2, c } = timerValues(comp.params ?? {});
+        store.getState().previewComponentParams(comp.id, { r1, r2, c });
+      }
+    }
+    setParamEdit(null);
   };
 
   // Effect below registers once per open/close, so it calls through this
@@ -5796,8 +5938,12 @@ export function CircuitWorkbench() {
           {
             id: 'waveform',
             label: 'Waveform panel',
-            checked: waveformOpen,
-            run: () => st().setWaveformOpen(!waveformOpen),
+            checked: waveformOpen && dockTab === 'waves',
+            run: () => {
+              if (waveformOpen && dockTab === 'waves') return st().setWaveformOpen(false);
+              st().setDockTab('waves');
+              st().setWaveformOpen(true);
+            },
           },
         ],
       },
@@ -5822,6 +5968,16 @@ export function CircuitWorkbench() {
             shortcut: SHORTCUTS.step,
             disabled: !canStep,
             run: () => st().step(),
+          },
+          {
+            id: 'run-speed',
+            label: 'Run speed',
+            items: RUN_SPEED_PRESETS.map((preset) => ({
+              id: `run-speed-${preset.ps}`,
+              label: preset.label,
+              checked: runSpeed === preset.ps,
+              run: () => st().setRunSpeed(preset.ps),
+            })),
           },
           { separator: true },
           {
@@ -5857,10 +6013,12 @@ export function CircuitWorkbench() {
     chipLib,
     analyzeShown,
     waveformOpen,
+    dockTab,
     powered,
     running,
     canStep,
     timing,
+    runSpeed,
     mode,
     viewOnly,
     showSubExprs,
@@ -6196,10 +6354,65 @@ export function CircuitWorkbench() {
                 <ToolIcon name="step" />
                 <span className="tool-btn__label">Step Δ</span>
               </button>
-              <span className="sim-status">
-                {powered ? (running ? 'running' : 'settled, paused') : 'off'}
+              <span
+                className="sim-status"
+                title={
+                  powered && oscillation?.length
+                    ? `Loop through ${oscillation.join(', ')}`
+                    : undefined
+                }
+              >
+                {powered
+                  ? running
+                    ? oscillation
+                      ? 'running, oscillating'
+                      : runBehind
+                        ? 'running, behind'
+                        : 'running'
+                    : oscillation
+                      ? 'oscillating: press Run'
+                      : 'settled, paused'
+                  : 'off'}
                 {simTime !== null && ` · t = ${formatTimePs(simTime)}`}
               </span>
+              <div className="tool-split" ref={speedMenu.anchorRef}>
+                <ToolBtn
+                  labelled
+                  menu
+                  expanded={speedMenu.open}
+                  title="Run speed: sim time per second of real time"
+                  onClick={() => speedMenu.setOpen((v) => !v)}
+                >
+                  {runSpeedLabel(runSpeed)}
+                </ToolBtn>
+                {speedMenu.open && (
+                  <div
+                    ref={speedMenu.popupRef}
+                    className="menubar__popup tool-split__popup"
+                    role="menu"
+                  >
+                    {RUN_SPEED_PRESETS.map((preset) => (
+                      <button
+                        type="button"
+                        key={preset.ps}
+                        className="menubar__item"
+                        role="menuitemradio"
+                        aria-checked={runSpeed === preset.ps}
+                        onClick={() => {
+                          store.getState().setRunSpeed(preset.ps);
+                          speedMenu.setOpen(false);
+                        }}
+                      >
+                        <span className="menubar__check" aria-hidden="true">
+                          {runSpeed === preset.ps ? '✓' : ''}
+                        </span>
+                        <span className="menubar__label">{preset.label}</span>
+                        <span className="menubar__key">{preset.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="tool-group">
               <ToolBtn
@@ -6216,17 +6429,30 @@ export function CircuitWorkbench() {
                 {timing.mode === 'datasheet' ? `Datasheet (${timing.datasheet})` : 'Ideal'}
               </ToolBtn>
               {timing.mode === 'datasheet' && (
-                <button
-                  type="button"
-                  className="tool-btn"
-                  onClick={() =>
-                    store
-                      .getState()
-                      .setTiming({ datasheet: timing.datasheet === 'typ' ? 'max' : 'typ' })
-                  }
-                >
-                  {timing.datasheet}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="tool-btn"
+                    title="Datasheet column: typ, max, or min (estimated where the sheet prints none)"
+                    onClick={() =>
+                      store.getState().setTiming({ datasheet: NEXT_COLUMN[timing.datasheet] })
+                    }
+                  >
+                    {timing.datasheet}
+                  </button>
+                  <button
+                    type="button"
+                    className="tool-btn"
+                    title="Whose datasheets time this board; a part the vendor lacks uses TI's"
+                    onClick={() =>
+                      store
+                        .getState()
+                        .setTiming({ vendor: timing.vendor === 'ti' ? 'fairchild' : 'ti' })
+                    }
+                  >
+                    {VENDOR_NAME[timing.vendor]}
+                  </button>
+                </>
               )}
               <ToolBtn
                 icon="sta"
@@ -6475,6 +6701,9 @@ export function CircuitWorkbench() {
                   path={data.path}
                   sequential={staReport.report.sequential}
                   directionBreaks={staReport.report.directionBreaks}
+                  parts={staReport.report.parts}
+                  column={timing.datasheet}
+                  vendor={timing.vendor}
                   onClose={() => store.getState().clearSta()}
                 />
               ) : null;
@@ -6658,7 +6887,7 @@ export function CircuitWorkbench() {
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === 'Enter') commitParamEdit();
-                else if (e.key === 'Escape') setParamEdit(null);
+                else if (e.key === 'Escape') cancelParamEdit();
               }}
             >
               {paramEdit.name !== undefined && (
@@ -6832,6 +7061,46 @@ export function CircuitWorkbench() {
               )}
               {paramEdit.kind === 'register' &&
                 paramEditCheckbox(paramEdit, 'outputEnable', 'output enable')}
+              {paramEdit.kind === 'spdt' && paramEditFieldVisible(paramEdit, 'position') && (
+                <label>
+                  starts at
+                  <select
+                    className="select"
+                    value={paramEdit.position ?? 'a'}
+                    onChange={(e) => {
+                      const position = e.target.value === 'b' ? 'b' : 'a';
+                      setParamEdit((cur) => (cur ? { ...cur, position } : cur));
+                    }}
+                    {...paramEditFocusHandlers(setParamEdit, 'position', paramEdit.kind)}
+                  >
+                    <option value="a">A</option>
+                    <option value="b">B</option>
+                  </select>
+                </label>
+              )}
+              {(paramEdit.kind === 'button' || paramEdit.kind === 'spdt') &&
+                paramEditCheckbox(paramEdit, 'bounce', 'contact bounce')}
+              {paramEdit.kind === 'button' &&
+                paramEditCheckbox(paramEdit, 'toGround', 'contact to GND')}
+              {paramEdit.kind === 'timer555' && paramEdit.timer && (
+                <TimerFields
+                  fields={paramEdit.timer}
+                  flash={!!paramEdit.flash}
+                  visible={(key) => paramEditFieldVisible(paramEdit, key)}
+                  focusProps={(key) => paramEditFocusHandlers(setParamEdit, key, paramEdit.kind)}
+                  onChange={(timer) =>
+                    setParamEdit((cur) => (cur ? { ...cur, timer, flash: false } : cur))
+                  }
+                  onSlide={(key, ohms) =>
+                    store.getState().previewComponentParams(paramEdit.id, { [key]: ohms })
+                  }
+                  onSlideEnd={(key, ohms) =>
+                    store
+                      .getState()
+                      .setComponentParamsBatch([{ id: paramEdit.id, params: { [key]: ohms } }])
+                  }
+                />
+              )}
               {paramEdit.kind === 'srlatch' && paramEditFieldVisible(paramEdit, 'form') && (
                 <label>
                   form
@@ -7089,7 +7358,7 @@ export function CircuitWorkbench() {
         </div>
       </div>
 
-      <WaveformPanel rootRef={wavePanelRef} />
+      <WaveformPanel rootRef={wavePanelRef} viewOnly={viewOnly} />
 
       {building && (
         <BuildCircuitDialog

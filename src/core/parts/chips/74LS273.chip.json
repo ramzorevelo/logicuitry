@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS273",
   "name": "74LS273",
   "version": 1,
@@ -491,7 +491,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "1Q"
       }
     },
     {
@@ -514,7 +515,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "2Q"
       }
     },
     {
@@ -537,7 +539,8 @@
         "y": 384
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "3Q"
       }
     },
     {
@@ -560,7 +563,8 @@
         "y": 576
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "4Q"
       }
     },
     {
@@ -583,7 +587,8 @@
         "y": 768
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "5Q"
       }
     },
     {
@@ -606,7 +611,8 @@
         "y": 960
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "6Q"
       }
     },
     {
@@ -629,7 +635,8 @@
         "y": 1152
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "7Q"
       }
     },
     {
@@ -652,7 +659,8 @@
         "y": 1344
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "8Q"
       }
     }
   ],

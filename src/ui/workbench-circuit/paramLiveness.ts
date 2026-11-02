@@ -24,6 +24,9 @@ const RENDER_ONLY_KEYS = new Set(['color', 'shape', 'selSide', 'common']);
  *  the compiled params and waking the primitive is enough to apply them. */
 const STIMULUS_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['constant', new Set(['value'])],
+  ['button', new Set(['bounce'])],
+  ['spdt', new Set(['bounce'])],
+  ['timer555', new Set(['r1', 'r2', 'c'])],
 ]);
 
 /** Classifies one (kind, key) pair for the powered-edit gate. Defaults to

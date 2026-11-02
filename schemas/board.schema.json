@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "format": { "const": "lcir.board" },
-    "formatVersion": { "const": 9 },
+    "formatVersion": { "const": 12 },
     "id": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1 },
     "components": {
@@ -15,6 +15,10 @@
     "groups": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/group" }
+    },
+    "hiddenChecks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     },
     "wires": {
       "type": "array",
@@ -50,12 +54,31 @@
       "type": "object",
       "properties": {
         "mode": { "enum": ["ideal", "datasheet"] },
-        "datasheet": { "enum": ["typ", "max"] }
+        "datasheet": { "enum": ["min", "typ", "max"] },
+        "vendor": { "enum": ["ti", "fairchild"] }
       },
-      "required": ["mode", "datasheet"],
+      "required": ["mode", "datasheet", "vendor"],
       "additionalProperties": false
+    },
+    "runSpeed": {
+      "description": "Sim time per wall second while running, in ps.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000000000
     }
   },
-  "required": ["format", "formatVersion", "id", "name", "components", "wires", "junctions", "probes", "view", "timing"],
+  "required": [
+    "format",
+    "formatVersion",
+    "id",
+    "name",
+    "components",
+    "wires",
+    "junctions",
+    "probes",
+    "view",
+    "timing",
+    "runSpeed"
+  ],
   "additionalProperties": false
 }

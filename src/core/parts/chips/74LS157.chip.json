@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS157",
   "name": "74LS157",
   "version": 1,
@@ -407,7 +407,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "1Y"
       }
     },
     {
@@ -430,7 +431,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "2Y"
       }
     },
     {
@@ -453,7 +455,8 @@
         "y": 384
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "3Y"
       }
     },
     {
@@ -476,7 +479,8 @@
         "y": 576
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "4Y"
       }
     }
   ],

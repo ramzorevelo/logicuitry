@@ -5,17 +5,19 @@
 
 import type { CompiledCircuit, CompiledPrimitive } from '../model/compile';
 import { intParam } from '../sim/primitives/types';
+import { timerIntervals, timerMode } from '../sim/primitives/timer555';
 import { FALLBACK_NS, isStructuralHop, pinNamesOf, type PinNames } from '../sim/delay';
 import { arcFigure } from '../parts/arcs';
 import {
   column,
   contaminationNs,
-  estimatedContaminationNs,
   getPart,
+  minPublished,
   propagationNs,
   setupHoldNs,
   typPublished,
   type DatasheetColumn,
+  type Vendor,
 } from '../parts/partsDb';
 import {
   endpointPin,
@@ -41,7 +43,7 @@ export interface TimingHop {
   part?: string;
   tpdPs: number;
   tcdPs: number;
-  /** t_cd is a documented estimate (0.35 x typ t_pd), never a datasheet minimum. */
+  /** t_cd is the documented estimate (0.35 x typ t_pd), not a printed min. */
   estimated: boolean;
   /** The part publishes no typ column, so its "typ" figures are really its max. */
   typUnpublished?: boolean;
@@ -59,6 +61,7 @@ export interface PathTiming {
   totalTcdPs: number;
   critical: TimingHop[];
   short: TimingHop[];
+  /** Some hop on the short chain has an estimated t_cd, not a printed min. */
   estimated: boolean;
   typUnpublished: boolean;
 }
@@ -85,7 +88,7 @@ export interface SeqPathTiming {
 export interface SequentialTiming {
   paths: SeqPathTiming[];
   minPeriodPs: number | null;
-  /** True when clock components with different periods exist; cross-domain paths are skipped. */
+  /** True when registers sit in more than one clock domain; cross-domain paths are skipped. */
   multiDomain: boolean;
 }
 
@@ -95,9 +98,19 @@ export interface TimingReport {
   sequential: SequentialTiming | null;
   /** Transceivers whose `dir` is not tied to a fixed level: paths end and restart there. */
   directionBreaks: string[];
+  /** Every bound part on the board, registers included, for notes on where its rows came from. */
+  parts: string[];
 }
 
-const SOURCE_KINDS = new Set(['toggle', 'button', 'inport', 'constant', 'clock']);
+const SOURCE_KINDS = new Set([
+  'toggle',
+  'button',
+  'spdt',
+  'inport',
+  'constant',
+  'clock',
+  'timer555',
+]);
 
 const NS_TO_PS = 1000;
 const toPs = (ns: number) => Math.round(ns * NS_TO_PS);
@@ -110,17 +123,21 @@ export interface HopDelay {
 }
 
 /** Slowest-arc t_pd / fastest t_cd for a part, mirroring datasheetDelay's conventions. */
-export function partDelayPs(part: string | undefined, col: DatasheetColumn): HopDelay {
+export function partDelayPs(
+  part: string | undefined,
+  col: DatasheetColumn,
+  vendor: Vendor = 'ti',
+): HopDelay {
   if (!part) return { tpdPs: toPs(FALLBACK_NS), tcdPs: toPs(0.35 * FALLBACK_NS), estimated: true };
-  const lh = propagationNs(part, 'lh', col) ?? FALLBACK_NS;
-  const hl = propagationNs(part, 'hl', col) ?? FALLBACK_NS;
-  const clh = contaminationNs(part, 'lh') ?? Math.round(0.35 * FALLBACK_NS);
-  const chl = contaminationNs(part, 'hl') ?? Math.round(0.35 * FALLBACK_NS);
+  const lh = propagationNs(part, 'lh', col, vendor) ?? FALLBACK_NS;
+  const hl = propagationNs(part, 'hl', col, vendor) ?? FALLBACK_NS;
+  const clh = contaminationNs(part, 'lh', vendor) ?? Math.round(0.35 * FALLBACK_NS);
+  const chl = contaminationNs(part, 'hl', vendor) ?? Math.round(0.35 * FALLBACK_NS);
   return {
     tpdPs: toPs(Math.max(lh, hl)),
     tcdPs: toPs(Math.min(clh, chl)),
-    estimated: true,
-    ...(typPublished(part) ? {} : { typUnpublished: true }),
+    estimated: !minPublished(part, vendor),
+    ...(typPublished(part, vendor) ? {} : { typUnpublished: true }),
   };
 }
 
@@ -133,14 +150,15 @@ export function outputDelayPs(
   ins: readonly string[],
   outPin: string,
   col: DatasheetColumn,
+  vendor: Vendor = 'ti',
 ): HopDelay {
-  const timed = part ? ins.filter((i) => arcFigure(part, i, outPin)) : [];
-  if (!timed.length) return partDelayPs(part, col);
-  const arcs = timed.map((i) => hopDelay(part, i, outPin, col));
+  const timed = part ? ins.filter((i) => arcFigure(part, i, outPin, vendor)) : [];
+  if (!timed.length) return partDelayPs(part, col, vendor);
+  const arcs = timed.map((i) => hopDelay(part, i, outPin, col, vendor));
   return {
     tpdPs: Math.max(...arcs.map((d) => d.tpdPs)),
     tcdPs: Math.min(...arcs.map((d) => d.tcdPs)),
-    estimated: true,
+    estimated: arcs.some((d) => d.estimated),
     ...(arcs.some((d) => d.typUnpublished) ? { typUnpublished: true } : {}),
   };
 }
@@ -150,22 +168,23 @@ function hopDelay(
   inPin: string,
   outPin: string,
   col: DatasheetColumn,
+  vendor: Vendor,
 ): HopDelay {
   if (part) {
-    const fig = arcFigure(part, inPin, outPin);
+    const fig = arcFigure(part, inPin, outPin, vendor);
     if (fig) {
       const edges = [fig.tplh, fig.tphl].filter((e) => e !== undefined);
       const tpd = Math.max(...edges.map((e) => column(e, col)));
-      const tcd = Math.min(...edges.map((e) => estimatedContaminationNs(column(e, 'typ'))));
+      const tcd = Math.min(...edges.map((e) => column(e, 'min')));
       return {
         tpdPs: toPs(tpd),
         tcdPs: toPs(tcd),
-        estimated: true,
-        ...(typPublished(part) ? {} : { typUnpublished: true }),
+        estimated: edges.some((e) => e.min === undefined),
+        ...(typPublished(part, vendor) ? {} : { typUnpublished: true }),
       };
     }
   }
-  return partDelayPs(part, col);
+  return partDelayPs(part, col, vendor);
 }
 
 // 'through' is a structural tristate (data passes at zero delay, no hop);
@@ -326,6 +345,7 @@ function propagate(
   c: CompiledCircuit,
   a: Analysis,
   col: DatasheetColumn,
+  vendor: Vendor,
   seeds: Map<number, Seed>,
 ): Map<number, NetArrival> {
   const arr = new Map<number, NetArrival>();
@@ -357,7 +377,7 @@ function propagate(
       if (names.ins[i] === names.outs[o]) continue;
       const from = arr.get(p.inputs[i]!);
       if (!from) continue;
-      const d = hopDelay(p.part, names.ins[i]!, names.outs[o]!, col);
+      const d = hopDelay(p.part, names.ins[i]!, names.outs[o]!, col, vendor);
       const hop: TimingHop = {
         prim: pi,
         path: p.path,
@@ -422,6 +442,7 @@ interface Ends {
 function pathTiming(
   arr: Map<number, NetArrival>,
   ends: Ends,
+  col: DatasheetColumn,
   endpoint: string,
   capturePin?: string,
 ): PathTiming {
@@ -438,8 +459,12 @@ function pathTiming(
     totalTcdPs: early.minPs,
     critical,
     short,
-    estimated: critical.some((h) => h.estimated) || short.some((h) => h.estimated),
-    typUnpublished: critical.some((h) => h.typUnpublished) || short.some((h) => h.typUnpublished),
+    estimated: short.some((h) => h.estimated),
+    // Max stands in for a missing typ only where a shown figure read the typ:
+    // t_pd in the typ column or as a min estimate, t_cd as an estimate.
+    typUnpublished:
+      critical.some((h) => h.typUnpublished && (col === 'typ' || (col === 'min' && h.estimated))) ||
+      short.some((h) => h.typUnpublished && h.estimated),
   };
 }
 
@@ -492,11 +517,14 @@ function pinNet(
 }
 
 interface ClockInfo {
+  /** Clock parts share the sim's time origin, so equal periods are one domain
+   *  with phase as skew; each 555 runs free, as two real ones drift apart. */
+  domain: string;
   periodPs: number;
   phasePs: number;
 }
 
-// SPEC: only a clock primitive directly driving the clk net is recognized as
+// SPEC: only a clock primitive or an astable 555 directly driving the clk net is recognized as
 // the clock source; a gated or buffered clock reports no domain and its
 // register drops out of sequential analysis.
 function clockOf(c: CompiledCircuit, a: Analysis, reg: number): ClockInfo | null {
@@ -505,11 +533,18 @@ function clockOf(c: CompiledCircuit, a: Analysis, reg: number): ClockInfo | null
   if (net === undefined) return null;
   for (const d of c.drivers[net] ?? []) {
     const p = c.primitives[d.prim]!;
-    if (p.kind === 'clock')
+    if (p.kind === 'clock') {
+      const periodPs = intParam(p.params, 'periodPs', 10_000);
       return {
-        periodPs: intParam(p.params, 'periodPs', 10_000),
+        domain: `clock:${periodPs}`,
+        periodPs,
         phasePs: intParam(p.params, 'phasePs', 0),
       };
+    }
+    if (p.kind === 'timer555' && timerMode(p.params) === 'astable') {
+      const { highPs, lowPs } = timerIntervals(p.params);
+      return { domain: `timer555:${d.prim}`, periodPs: highPs + lowPs, phasePs: 0 };
+    }
   }
   return null;
 }
@@ -519,13 +554,14 @@ function launchSeeds(
   c: CompiledCircuit,
   a: Analysis,
   col: DatasheetColumn,
+  vendor: Vendor,
   launch: number,
 ): Map<number, Seed> {
   const lp = c.primitives[launch]!;
   const clockPin = a.shapes[launch]!.clock!;
   const seeds = new Map<number, Seed>();
   a.pinNames[launch]!.outs.forEach((out, o) => {
-    const d = clockToOutput(lp.part, clockPin, out, col);
+    const d = clockToOutput(lp.part, clockPin, out, col, vendor);
     seeds.set(lp.outputs[o]!, { source: lp.path, maxPs: d.tpcqPs, minPs: d.tccqPs });
   });
   return seeds;
@@ -538,15 +574,16 @@ function clockToOutput(
   clockPin: string,
   out: string,
   col: DatasheetColumn,
+  vendor: Vendor,
 ): { tpcqPs: number; tccqPs: number } {
-  if (part && arcFigure(part, clockPin, out)) {
-    const d = hopDelay(part, clockPin, out, col);
+  if (part && arcFigure(part, clockPin, out, vendor)) {
+    const d = hopDelay(part, clockPin, out, col, vendor);
     return { tpcqPs: d.tpdPs, tccqPs: d.tcdPs };
   }
-  const lh = part ? (propagationNs(part, 'lh', col) ?? FALLBACK_NS) : FALLBACK_NS;
-  const hl = part ? (propagationNs(part, 'hl', col) ?? FALLBACK_NS) : FALLBACK_NS;
-  const clh = part ? contaminationNs(part, 'lh') : undefined;
-  const chl = part ? contaminationNs(part, 'hl') : undefined;
+  const lh = part ? (propagationNs(part, 'lh', col, vendor) ?? FALLBACK_NS) : FALLBACK_NS;
+  const hl = part ? (propagationNs(part, 'hl', col, vendor) ?? FALLBACK_NS) : FALLBACK_NS;
+  const clh = part ? contaminationNs(part, 'lh', vendor) : undefined;
+  const chl = part ? contaminationNs(part, 'hl', vendor) : undefined;
   return {
     tpcqPs: toPs(Math.max(lh, hl)),
     tccqPs: toPs(Math.min(clh ?? 0.35 * FALLBACK_NS, chl ?? 0.35 * FALLBACK_NS)),
@@ -557,26 +594,27 @@ function sequentialTiming(
   c: CompiledCircuit,
   a: Analysis,
   col: DatasheetColumn,
+  vendor: Vendor,
   regs: number[],
 ): SequentialTiming | null {
   if (regs.length === 0) return null;
   const clocks = new Map(regs.map((r) => [r, clockOf(c, a, r)]));
-  const periods = new Set(
-    [...clocks.values()].filter((x): x is ClockInfo => x !== null).map((x) => x.periodPs),
+  const domains = new Set(
+    [...clocks.values()].filter((x): x is ClockInfo => x !== null).map((x) => x.domain),
   );
-  const multiDomain = periods.size > 1;
+  const multiDomain = domains.size > 1;
 
   const paths: SeqPathTiming[] = [];
   for (const launch of regs) {
     const lClk = clocks.get(launch);
     if (!lClk) continue;
-    const arr = propagate(c, a, col, launchSeeds(c, a, col, launch));
+    const arr = propagate(c, a, col, vendor, launchSeeds(c, a, col, vendor, launch));
     for (const capture of regs) {
       const cClk = clocks.get(capture);
-      if (!cClk || cClk.periodPs !== lClk.periodPs) continue;
+      if (!cClk || cClk.domain !== lClk.domain) continue;
       const cap = c.primitives[capture]!;
       // SPEC: unbound capture register contributes zero setup/hold.
-      const capEntry = cap.part ? getPart(cap.part) : undefined;
+      const capEntry = cap.part ? getPart(cap.part, vendor) : undefined;
       for (const g of inputGroups(c, a, capture)) {
         if (typeof g.timing === 'string') continue;
         const ends = endsOf(arr, g.nets);
@@ -619,9 +657,13 @@ function sequentialTiming(
   };
 }
 
-export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColumn }): TimingReport {
+export function analyzeTiming(
+  c: CompiledCircuit,
+  opts: { column: DatasheetColumn; vendor?: Vendor },
+): TimingReport {
   const a = buildAnalysis(c);
   const col = opts.column;
+  const vendor = opts.vendor ?? 'ti';
 
   // Startpoints: source prims, stateful outputs, and undriven nets read by
   // logic (top-level In labels compile to no primitive, only an aliased net).
@@ -642,10 +684,10 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
     return seeds;
   };
 
-  const arr = propagate(c, a, col, seedsFrom(new Set(['source', 'reg', 'break'])));
+  const arr = propagate(c, a, col, vendor, seedsFrom(new Set(['source', 'reg', 'break'])));
   // A broken transceiver's own zero start would mask what arrives at its sides.
   const arrAtBreaks = breaks.length
-    ? propagate(c, a, col, seedsFrom(new Set(['source', 'reg'])))
+    ? propagate(c, a, col, vendor, seedsFrom(new Set(['source', 'reg'])))
     : arr;
 
   const endpoints: PathTiming[] = [];
@@ -659,18 +701,18 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
         if (best === undefined || at.maxPs > arr.get(best)!.maxPs) best = net;
       }
       if (best !== undefined)
-        endpoints.push(pathTiming(arr, { maxNet: best, minNet: best }, p.path));
+        endpoints.push(pathTiming(arr, { maxNet: best, minNet: best }, col, p.path));
     } else if (a.roles[i] === 'reg') {
       for (const g of inputGroups(c, a, i)) {
         const ends = endsOf(arr, g.nets);
-        if (ends) endpoints.push(pathTiming(arr, ends, `${p.path}.${g.pin}`, g.pin));
+        if (ends) endpoints.push(pathTiming(arr, ends, col, `${p.path}.${g.pin}`, g.pin));
       }
     } else if (a.roles[i] === 'break') {
       for (const side of ['a', 'b']) {
         const net = pinNet(c, a, i, side, 'in');
         if (net !== undefined && arrAtBreaks.has(net))
           endpoints.push(
-            pathTiming(arrAtBreaks, { maxNet: net, minNet: net }, `${p.path}.${side}`, side),
+            pathTiming(arrAtBreaks, { maxNet: net, minNet: net }, col, `${p.path}.${side}`, side),
           );
       }
     }
@@ -684,7 +726,8 @@ export function analyzeTiming(c: CompiledCircuit, opts: { column: DatasheetColum
   return {
     endpoints,
     worst,
-    sequential: sequentialTiming(c, a, col, regs),
+    sequential: sequentialTiming(c, a, col, vendor, regs),
+    parts: [...new Set(c.primitives.flatMap((p) => (p.part ? [p.part] : [])))],
     // A built-in DIP's sections answer to the chip, so a '245 is one break, not eight.
     directionBreaks: [
       ...new Set(breaks.map((i) => c.primitives[i]!.packageInstance ?? c.primitives[i]!.path)),

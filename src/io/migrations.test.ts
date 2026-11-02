@@ -197,7 +197,12 @@ describe('board v7 -> v8, chip v5 -> v6 (instance contents, inout pins)', () => 
 
   it('carries a v7 board and a v5 chip through unchanged except the version', () => {
     const board = migrate(structuredClone(boardV7));
-    expect(board).toEqual({ ...boardV7, formatVersion: CURRENT_VERSION['lcir.board'] });
+    expect(board).toEqual({
+      ...boardV7,
+      formatVersion: CURRENT_VERSION['lcir.board'],
+      timing: { ...boardV7.timing, vendor: 'ti' },
+      runSpeed: 25_000,
+    });
     expect(validateDocument(board)).toEqual({ valid: true });
     const chip = migrate(structuredClone(chipV5));
     expect(chip).toEqual({ ...chipV5, formatVersion: CURRENT_VERSION['lcir.chip'] });
@@ -214,11 +219,11 @@ describe('board v7 -> v8, chip v5 -> v6 (instance contents, inout pins)', () => 
   });
 
   it('refuses a file newer than this app, before any validation', () => {
-    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 10 })).toThrow(
-      'file is version 10, app supports up to 9',
+    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 13 })).toThrow(
+      'file is version 13, app supports up to 12',
     );
-    expect(() => migrate({ ...structuredClone(chipV5), formatVersion: 8 })).toThrow(
-      'file is version 8, app supports up to 7',
+    expect(() => migrate({ ...structuredClone(chipV5), formatVersion: 9 })).toThrow(
+      'file is version 9, app supports up to 8',
     );
   });
 });
@@ -235,7 +240,12 @@ describe('board v8 -> v9, chip v6 -> v7 (group and wire colours)', () => {
 
   it('carries a v8 board through unchanged except the version', () => {
     const out = migrate(structuredClone(boardV8));
-    expect(out).toEqual({ ...boardV8, formatVersion: 9 });
+    expect(out).toEqual({
+      ...boardV8,
+      formatVersion: CURRENT_VERSION['lcir.board'],
+      timing: { ...boardV8.timing, vendor: 'ti' },
+      runSpeed: 25_000,
+    });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
@@ -271,5 +281,107 @@ describe('board v8 -> v9, chip v6 -> v7 (group and wire colours)', () => {
       groups: [{ id: 'g', name: 'G', color: '#f00' }],
     });
     expect(validateDocument(bad).valid).toBe(false);
+  });
+});
+
+describe('board v9 -> v10 (timing vendor)', () => {
+  const boardV9 = {
+    ...structuredClone(boardV1),
+    formatVersion: 9,
+    components: [],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'datasheet', datasheet: 'max' },
+  };
+
+  it('times every older board from TI, keeping its mode and column', () => {
+    const out = migrate(structuredClone(boardV9));
+    expect(out).toEqual({
+      ...boardV9,
+      formatVersion: 12,
+      timing: { mode: 'datasheet', datasheet: 'max', vendor: 'ti' },
+      runSpeed: 25_000,
+    });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts the min column and the Fairchild vendor, and no other vendor', () => {
+    const v10 = { ...boardV9, formatVersion: 12, runSpeed: 25_000 };
+    const fairchild = {
+      ...v10,
+      timing: { mode: 'datasheet', datasheet: 'min', vendor: 'fairchild' },
+    };
+    expect(validateDocument(fairchild)).toEqual({ valid: true });
+    const motorola = {
+      ...v10,
+      timing: { mode: 'datasheet', datasheet: 'min', vendor: 'motorola' },
+    };
+    expect(validateDocument(motorola)).not.toEqual({ valid: true });
+  });
+});
+
+describe('board v10 -> v11 (run speed)', () => {
+  const boardV10 = {
+    ...structuredClone(boardV1),
+    formatVersion: 10,
+    components: [],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+  };
+
+  it('runs every older board at the first preset, 25 ns of sim time a second', () => {
+    const out = migrate(structuredClone(boardV10));
+    expect(out).toEqual({ ...boardV10, formatVersion: 12, runSpeed: 25_000 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('refuses a run speed that is not a whole, positive ps count up to real time', () => {
+    const at = (runSpeed: unknown) => ({ ...boardV10, formatVersion: 12, runSpeed });
+    expect(validateDocument(at(1_000_000_000_000))).toEqual({ valid: true });
+    for (const bad of [0, 2.5, 2_000_000_000_000, 'fast'])
+      expect(validateDocument(at(bad)).valid).toBe(false);
+  });
+});
+
+describe('board v11 -> v12, chip v7 -> v8 (silenced checks)', () => {
+  const boardV11 = {
+    ...structuredClone(boardV1),
+    formatVersion: 11,
+    components: [],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
+  };
+
+  it('carries an older board through with no silenced checks', () => {
+    const out = migrate(structuredClone(boardV11));
+    expect(out).toEqual({ ...boardV11, formatVersion: 12 });
+    expect(out['hiddenChecks']).toBeUndefined();
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts a list of check keys on a board and a chip, and nothing else there', () => {
+    const board = { ...boardV11, formatVersion: 12, hiddenChecks: ['unwired:u1.a'] };
+    expect(validateDocument(board)).toEqual({ valid: true });
+    expect(validateDocument({ ...board, hiddenChecks: [3] }).valid).toBe(false);
+    expect(validateDocument({ ...board, hiddenChecks: [''] }).valid).toBe(false);
+    const chip = {
+      format: 'lcir.chip',
+      formatVersion: 7,
+      id: 'c',
+      name: 'c',
+      version: 1,
+      pins: [],
+      components: [],
+      wires: [],
+      junctions: [],
+    };
+    const migrated = migrate(structuredClone(chip));
+    expect(migrated).toEqual({ ...chip, formatVersion: 8 });
+    expect(validateDocument({ ...migrated, hiddenChecks: ['unused:x.y'] })).toEqual({
+      valid: true,
+    });
   });
 });

@@ -9,6 +9,7 @@ import {
 import type { Board, ChipDef, Component, Point, WireEnd } from '../../core/model/types';
 import { builtinChipLibrary, isBuiltinChipDef } from '../../core/parts/packages';
 import { usePrefsStore } from '../prefs';
+import { EXAMPLES } from '../../examples';
 import { pushOutputBackward } from '../../core/gates/transform';
 import { analysisTablesOf } from '../../core/gates/verify';
 import { resolveComponentPins, symbolBounds } from '../../render/glyphs/symbol';
@@ -856,7 +857,7 @@ describe('circuitStore power + pinSignal', () => {
 function bufDef(id: string): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     id,
     name: id,
     version: 1,
@@ -906,7 +907,7 @@ function bufDef(id: string): ChipDef {
 function emptyBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'test',
     name: 'test',
     components: [],
@@ -914,7 +915,8 @@ function emptyBoard(): Board {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
   };
 }
 
@@ -1606,7 +1608,7 @@ describe('id generation never collides with an already-loaded board', () => {
   it('keeps a chip id clear of the board even when its defId ends in digits', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 7,
+      formatVersion: 8,
       id: '74LS00',
       name: '74LS00',
       version: 1,
@@ -2859,7 +2861,7 @@ describe('Task 1b: naming a gate/mux/decoder/chip participates in labelSync', ()
   it('naming a chip instance derives one label per boundary output pin, via renameComponent', () => {
     const def: ChipDef = {
       format: 'lcir.chip',
-      formatVersion: 7,
+      formatVersion: 8,
       id: 'chipdef1',
       name: 'MyChip',
       version: 1,
@@ -4613,7 +4615,7 @@ describe('loadChipDefs (library folder -> chipLib)', () => {
 
   const def = (id: string): ChipDef => ({
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     id,
     name: id,
     version: 1,
@@ -4665,7 +4667,7 @@ describe('loadBoard (session restore / File > Open)', () => {
 
   const loaded = (): Board => ({
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'opened',
     name: 'opened',
     components: [
@@ -4683,7 +4685,8 @@ describe('loadBoard (session restore / File > Open)', () => {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
   });
 
   it('replaces the board and seeds ids past the loaded ones', () => {
@@ -4720,15 +4723,66 @@ describe('loadBoard (session restore / File > Open)', () => {
     expect(after.activeTabId).toBe('board');
   });
 
+  it('re-times an open STA report when the vendor or column changes, and saves the vendor', () => {
+    const example = EXAMPLES.find((e) => e.id === 'full-adder-propagation-delay')!;
+    const st = () => useCircuitStore.getState();
+    st().loadBoard(structuredClone(example.board));
+    st().runSta();
+    expect(st().staReport!.report.worst!.totalTpdPs).toBe(42_000);
+    st().setTiming({ vendor: 'ti' });
+    expect(st().board.timing.vendor).toBe('ti');
+    expect(st().staReport!.report.worst!.totalTpdPs).toBe(72_000);
+    st().setTiming({ datasheet: 'min' });
+    expect(st().staReport!.report.worst!.totalTpdPs).toBeLessThan(72_000);
+    st().setTiming({ mode: 'ideal' });
+    expect(st().staReport).toBeNull();
+  });
+
+  it('drops an open STA report whose re-run fails, rather than relabel old figures', () => {
+    const example = EXAMPLES.find((e) => e.id === 'full-adder-propagation-delay')!;
+    const st = () => useCircuitStore.getState();
+    st().loadBoard(structuredClone(example.board));
+    st().runSta();
+    expect(st().staReport).not.toBeNull();
+    useCircuitStore.setState((s) => ({
+      board: {
+        ...s.board,
+        wires: [
+          ...s.board.wires,
+          {
+            id: 'wbad',
+            a: { kind: 'pin', component: 'nowhere', pin: 'y' },
+            b: { kind: 'pin', component: 'nowhere2', pin: 'a' },
+            points: [],
+          },
+        ],
+      },
+    }));
+    st().setTiming({ vendor: 'ti' });
+    expect(st().error).toMatch(/^timing: /);
+    expect(st().staReport).toBeNull();
+  });
+
   it("runs on the board's saved timing, whatever the new-board pref says", () => {
     usePrefsStore.getState().setPref('timingModel', 'ideal');
-    const saved = { ...loaded(), timing: { mode: 'datasheet', datasheet: 'max' } as const };
+    const saved = {
+      ...loaded(),
+      timing: { mode: 'datasheet', datasheet: 'max', vendor: 'fairchild' } as const,
+    };
     useCircuitStore.getState().loadBoard(saved);
-    expect(useCircuitStore.getState().timing).toEqual({ mode: 'datasheet', datasheet: 'max' });
+    expect(useCircuitStore.getState().timing).toEqual({
+      mode: 'datasheet',
+      datasheet: 'max',
+      vendor: 'fairchild',
+    });
 
     usePrefsStore.getState().setPref('timingModel', 'datasheet');
     useCircuitStore.getState().loadBoard(loaded());
-    expect(useCircuitStore.getState().timing).toEqual({ mode: 'ideal', datasheet: 'typ' });
+    expect(useCircuitStore.getState().timing).toEqual({
+      mode: 'ideal',
+      datasheet: 'typ',
+      vendor: 'ti',
+    });
     useCircuitStore.getState().loadBoard(starterBoard());
     expect(useCircuitStore.getState().timing.mode).toBe('datasheet');
     usePrefsStore.getState().setPref('timingModel', 'ideal');
@@ -5000,7 +5054,7 @@ describe('circuitStore label sharing across a buffer', () => {
 
   const chainBoard = (withBuffer: boolean): Board => ({
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'chain',
     name: 'chain',
     components: [
@@ -5034,7 +5088,8 @@ describe('circuitStore label sharing across a buffer', () => {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
   });
 
   it('lets a switch and the LED it drives share a name', () => {
@@ -5046,7 +5101,7 @@ describe('circuitStore label sharing across a buffer', () => {
   /** sw -> chain of single-input parts -> led. */
   const throughBoard = (kinds: readonly string[]): Board => ({
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'chain',
     name: 'chain',
     components: [
@@ -5075,7 +5130,8 @@ describe('circuitStore label sharing across a buffer', () => {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
   });
 
   const canShare = (kinds: readonly string[]) => {
@@ -5264,6 +5320,140 @@ describe('switch positions across a power cycle (opt-in pref)', () => {
     useCircuitStore.getState().power();
     expect(useCircuitStore.getState().powered).toBe(true);
     expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
+  });
+});
+
+describe('run speed, bounce and the SPDT switch', () => {
+  beforeEach(() => {
+    reset();
+    useCircuitStore.setState({ running: false });
+    usePrefsStore.getState().setPref('keepSwitchesAcrossPower', true);
+  });
+
+  const level = (id: string, pin: string) => useCircuitStore.getState().pinSignal(id, pin);
+  const spdtBoard = (st: { board: Board }): { board: Board } => ({
+    board: {
+      ...st.board,
+      components: [
+        { id: 'sw', kind: 'spdt', pos: { x: 0, y: 0 }, params: { bounce: true } },
+        { id: 'k', kind: 'constant', pos: { x: -100, y: 0 }, params: { value: 1, width: 1 } },
+        { id: 'la', kind: 'led', pos: { x: 100, y: 0 } },
+        { id: 'lb', kind: 'led', pos: { x: 100, y: 100 } },
+      ],
+      wires: [
+        {
+          id: 'w1',
+          a: { kind: 'pin', component: 'k', pin: 'y' },
+          b: { kind: 'pin', component: 'sw', pin: 'c' },
+          points: [],
+        },
+        {
+          id: 'w2',
+          a: { kind: 'pin', component: 'sw', pin: 'a' },
+          b: { kind: 'pin', component: 'la', pin: 'a' },
+          points: [],
+        },
+        {
+          id: 'w3',
+          a: { kind: 'pin', component: 'sw', pin: 'b' },
+          b: { kind: 'pin', component: 'lb', pin: 'a' },
+          points: [],
+        },
+      ],
+    },
+  });
+
+  it('a speed change keeps the board powered and running', () => {
+    useCircuitStore.setState(spdtBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleRun();
+    useCircuitStore.getState().setRunSpeed(1_000_000_000_000);
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().running).toBe(true);
+    expect(useCircuitStore.getState().board.runSpeed).toBe(1_000_000_000_000);
+  });
+
+  it('a timing change while running powers off to a paused board, not a stale running one', () => {
+    useCircuitStore.setState(spdtBoard);
+    const s = useCircuitStore.getState();
+    s.power();
+    s.toggleRun();
+    s.setTiming({ datasheet: 'max' });
+    expect(useCircuitStore.getState().running).toBe(false);
+    useCircuitStore.getState().power();
+    expect(useCircuitStore.getState().powered).toBe(true);
+    expect(useCircuitStore.getState().running).toBe(false);
+  });
+
+  it('a flip while paused plays its bounce out and lands on the other throw', () => {
+    useCircuitStore.setState(spdtBoard);
+    useCircuitStore.getState().power();
+    expect([level('sw', 'a'), level('sw', 'b')]).toEqual(['1', 'Z']);
+    const t0 = useCircuitStore.getState().simTimePs()!;
+    useCircuitStore.getState().flipSpdt('sw');
+    expect(useCircuitStore.getState().spdtThrow('sw')).toBe('b');
+    expect([level('sw', 'a'), level('sw', 'b')]).toEqual(['Z', '1']);
+    expect(useCircuitStore.getState().simTimePs()! - t0).toBeGreaterThanOrEqual(499_000_000);
+  });
+
+  it('a power cycle keeps the lever where it was and does not bounce it again', () => {
+    useCircuitStore.setState(spdtBoard);
+    useCircuitStore.getState().power();
+    useCircuitStore.getState().flipSpdt('sw');
+    useCircuitStore.getState().power(); // off
+    useCircuitStore.getState().power(); // on
+    expect(useCircuitStore.getState().spdtThrow('sw')).toBe('b');
+    expect(level('sw', 'b')).toBe('1');
+    expect(useCircuitStore.getState().simTimePs()!).toBeLessThan(1_000_000);
+  });
+
+  it('pressing a held button again does not restart its bounce', () => {
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: [{ id: 'b', kind: 'button', pos: { x: 0, y: 0 }, params: { bounce: true } }],
+        wires: [],
+      },
+    }));
+    useCircuitStore.getState().power();
+    useCircuitStore.getState().setButtonHeld('b', true);
+    const settled = useCircuitStore.getState().simTimePs();
+    useCircuitStore.getState().setButtonHeld('b', true);
+    expect(useCircuitStore.getState().simTimePs()).toBe(settled);
+  });
+
+  it('reports a contact to GND as held while its net reads LOW', () => {
+    useCircuitStore.setState((st) => ({
+      board: {
+        ...st.board,
+        components: [
+          { id: 'b', kind: 'button', pos: { x: 0, y: 0 }, params: { toGround: true } },
+          { id: 'u', kind: 'pullup', pos: { x: 0, y: -64 } },
+        ],
+        wires: [
+          {
+            id: 'w1',
+            a: { kind: 'pin', component: 'u', pin: 'p' },
+            b: { kind: 'pin', component: 'b', pin: 'y' },
+            points: [],
+          },
+        ],
+      },
+    }));
+    useCircuitStore.getState().power();
+    expect([useCircuitStore.getState().buttonHeld('b'), level('b', 'y')]).toEqual([false, '1']);
+    useCircuitStore.getState().setButtonHeld('b', true);
+    expect([useCircuitStore.getState().buttonHeld('b'), level('b', 'y')]).toEqual([true, '0']);
+  });
+
+  it('a scrub reports no lever, so the glyph reads the throws off the replayed nets', () => {
+    useCircuitStore.setState(spdtBoard);
+    useCircuitStore.getState().power();
+    useCircuitStore.getState().flipSpdt('sw');
+    expect(useCircuitStore.getState().spdtThrow('sw')).toBe('b');
+    useCircuitStore.setState({ replayTimePs: 0 });
+    expect(useCircuitStore.getState().spdtThrow('sw')).toBeUndefined();
   });
 });
 
@@ -5773,5 +5963,67 @@ describe('group and wire colours', () => {
     const wires = useCircuitStore.getState().board.wires;
     expect(wires).toHaveLength(2);
     expect(wires.every((w) => w.color === 'g7')).toBe(true);
+  });
+});
+
+describe('oscillation status', () => {
+  const st = () => useCircuitStore.getState();
+  const ring = () => EXAMPLES.find((e) => e.id.startsWith('ring-oscillator'))!;
+
+  it('names the loop when a paused flip cannot settle, and clears on a quiet settle', () => {
+    st().loadBoard(structuredClone(ring().board));
+    st().power();
+    expect(st().oscillation).toBeNull();
+    st().toggleInput('en');
+    expect(st().oscillation).toEqual(['u2.1Y', 'u1.4B', 'u1.4Y']);
+    st().toggleInput('en');
+    expect(st().oscillation).toBeNull();
+  });
+
+  it('clears on Run, and a ring with real delays runs without reporting', () => {
+    st().loadBoard(structuredClone(ring().board));
+    st().power();
+    st().toggleInput('en');
+    st().toggleRun();
+    expect(st().oscillation).toBeNull();
+    st().pump(1_000_000);
+    expect(st().oscillation).toBeNull();
+    st().toggleRun();
+  });
+
+  it('reports a running loop that holds time still', () => {
+    const board = structuredClone(ring().board);
+    // A gate given a structural hop's zero delay, fed back on itself.
+    board.components = [
+      { id: 'en', kind: 'toggle', label: 'EN', pos: { x: 0, y: 0 } },
+      { id: 'g1', kind: 'nand', params: { delay: 'none' }, pos: { x: 100, y: 0 } },
+    ];
+    board.wires = [
+      {
+        id: 'w1',
+        a: { kind: 'pin', component: 'en', pin: 'y' },
+        b: { kind: 'pin', component: 'g1', pin: 'a' },
+        points: [],
+      },
+      {
+        id: 'w2',
+        a: { kind: 'pin', component: 'g1', pin: 'y' },
+        b: { kind: 'pin', component: 'g1', pin: 'b' },
+        points: [],
+      },
+    ];
+    st().loadBoard(board);
+    st().power();
+    st().toggleRun();
+    st().pump(1_000_000);
+    expect(st().oscillation).toBeNull();
+    st().toggleInput('en');
+    // The first frame moves time on to the loop; the next one stands still in it.
+    st().pump(1_000_000);
+    st().pump(1_000_000);
+    expect(st().runBehind).toBe(true);
+    expect(st().oscillation).toEqual(['g1']);
+    st().toggleRun();
+    expect(st().oscillation).toBeNull();
   });
 });

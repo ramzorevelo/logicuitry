@@ -16,6 +16,7 @@ import type {
   TimingSetting,
   Wire,
 } from '../../core/model/types';
+import { DEFAULT_RUN_SPEED } from '../../core/model/types';
 import {
   compile,
   CompileError,
@@ -23,12 +24,20 @@ import {
   type StaleContentsKey,
 } from '../../core/model/compile';
 import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
+import { pinNet } from '../../core/model/pinNet';
+import { pruneHiddenChecks as pruneHiddenChecksOf } from '../../core/checks/checks';
 import {
   ramAddress,
   ramSize,
   withResizedPreload,
   type RamState,
 } from '../../core/sim/primitives/ram';
+import {
+  settledState,
+  type ButtonState,
+  type SpdtState,
+  type Throw,
+} from '../../core/sim/primitives/stimulus';
 import { printPreload } from '../../core/sim/primitives/ramPreload';
 import { listRams, type RamEntry } from '../../core/model/ramView';
 import {
@@ -37,6 +46,7 @@ import {
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
 import { Simulator } from '../../core/sim/kernel';
+import { loopNetNames, loopOf } from './oscillation';
 import {
   inheritedColor,
   nextGroupColor,
@@ -50,13 +60,7 @@ import { busSignalState, type SignalState } from '../../render/theme';
 import { History, applyToCircuit, diffCircuits, type ApplyFn } from './history';
 import { paramLiveness } from './paramLiveness';
 import type { WireEnd } from '../../core/model/types';
-import {
-  canFloat,
-  inputSlotPins,
-  isOutputSlot,
-  mayShareNet,
-  outputSlotPins,
-} from '../../core/model/pinSlots';
+import { canFloat, isOutputSlot, mayShareNet } from '../../core/model/pinSlots';
 import { cloneCircuit, derivePins, detachRemovedPins, findCycle, renamePinRefs } from './packaging';
 import {
   attachAtHit,
@@ -118,7 +122,7 @@ import {
 import { commitPush, previewPush, type PushMove, type PushPreview } from './bubble/pushController';
 import type { NetChangeRecord } from '../../core/sim/kernel';
 import { buildReplayIndex, replayNetValue, type ReplayIndex } from '../../core/timing/traceView';
-import { analyzeTiming, TimingError, type TimingReport } from '../../core/timing/sta';
+import { analyzeTiming, type TimingReport } from '../../core/timing/sta';
 import { getPrefs } from '../prefs';
 import type { TerminalFocus } from './bubble/focusOrder';
 import { splitDoubleInverter, type TransformGeom } from '../../core/gates/transform';
@@ -182,8 +186,12 @@ const genId = (prefix: string) => {
 };
 // Display-friendly id prefixes where the kind name reads poorly on canvas
 // (starter-board switches are sw1/sw2; a placed toggle should match).
-const ID_PREFIX: Record<string, string> = { toggle: 'sw' };
+const ID_PREFIX: Record<string, string> = { toggle: 'sw', timer555: 'timer' };
 const idPrefix = (kind: string) => ID_PREFIX[kind] ?? kind;
+const sameBody = (a: Circuit, b: Circuit) =>
+  JSON.stringify([a.components, a.wires, a.junctions, a.groups ?? []]) ===
+  JSON.stringify([b.components, b.wires, b.junctions, b.groups ?? []]);
+
 export const seedNextId = (board: Board) => {
   const ids = [
     ...board.components.map((c) => c.id),
@@ -290,7 +298,7 @@ const snapPoint = (p: Point, g: number): Point => ({
 export function starterBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'scratch',
     name: 'Untitled board',
     components: [
@@ -322,7 +330,8 @@ export function starterBoard(): Board {
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: getPrefs().timingModel, datasheet: 'typ' },
+    timing: { mode: getPrefs().timingModel, datasheet: 'typ', vendor: 'ti' },
+    runSpeed: DEFAULT_RUN_SPEED,
   };
 }
 
@@ -349,6 +358,11 @@ interface CircuitState {
   rev: number; // bumped on any board/sim mutation to force a redraw
   powered: boolean;
   running: boolean;
+  /** The last frame could not reach its target at the board's run speed. */
+  runBehind: boolean;
+  /** Named nets of a loop that never goes quiet: the last paused settle hit the
+   *  event limit, or a running frame spent its budget with time standing still. */
+  oscillation: string[] | null;
   error: string | null;
   /** Wires touching the component a width edit made mismatched; warn-colored
    *  in the editor, cleared on the next successful edit. */
@@ -640,6 +654,9 @@ interface CircuitState {
   undo: () => void;
   redo: () => void;
   setTiming: (t: Partial<TimingSetting>) => void;
+  /** Sim ps per wall second while running. Saved with the board, so it
+   *  dirties the document, but pacing alone never powers the sim off. */
+  setRunSpeed: (psPerSecond: number) => void;
   power: () => void;
   step: () => void;
   /** Whether step() can still move time. Read during render off `rev`, not a
@@ -652,6 +669,12 @@ interface CircuitState {
    *  mouse-held button stays on for exactly the duration of the hold even if
    *  the cursor drags off it before release. */
   setButtonHeld: (componentId: string, held: boolean, prefix?: string) => void;
+  /** Throws an SPDT's lever to its other contact. */
+  flipSpdt: (componentId: string, prefix?: string) => void;
+  /** Where a powered SPDT's lever sits; undefined while unpowered or scrubbing. */
+  spdtThrow: (componentId: string, prefix?: string) => Throw | undefined;
+  /** Whether a powered button is held now; undefined while scrubbing, which has no press history. */
+  buttonHeld: (componentId: string, prefix?: string) => boolean | undefined;
   pinSignal: (componentId: string, pinName: string, prefix?: string) => SignalState | undefined;
   /** Raw per-bit value (v/x/z), for glyphs that render more than an
    *  aggregate state (e.g. the DIP-bank switch). */
@@ -693,6 +716,17 @@ interface CircuitState {
   setHoverTrack: (path: string | null) => void;
   /** Live trace snapshot for the panel; null while unpowered. */
   simTrace: () => { compiled: CompiledCircuit; records: NetChangeRecord[] } | null;
+  /** Nets two enabled drivers fight over right now; null while unpowered. */
+  simFights: () => { compiled: CompiledCircuit; nets: number[] } | null;
+  /** Bumped by a Checks row click: the canvas pans these into view, zoom kept. */
+  revealRequest: { seq: number; ids: readonly string[] } | null;
+  /** Select what a Checks row points at and ask the canvas to show it. Ids
+   *  gone from the circuit are dropped; nothing left is a no-op. */
+  revealItems: (ids: readonly string[]) => void;
+  /** Hide or unhide checks on the active tab: one undo step, no recompile. */
+  setChecksHidden: (keys: readonly string[], hide: boolean) => void;
+  /** Drops silenced checks whose part or pin is gone, before a save. */
+  pruneHiddenChecks: () => Board;
   /** Monotonic record count: cheap rebuild trigger (simTrace copies the buffer). */
   simTraceLength: () => number;
   /** Simulator clock. The trace only records changes, so the newest state of a
@@ -704,6 +738,9 @@ interface CircuitState {
    *  renames with `renameComponent`'s validation) in one undo step. Returns
    *  false when the label is rejected; the board is then untouched. */
   setComponentParams: (id: string, params: Record<string, ParamValue>, label?: string) => boolean;
+  /** Patches stimulus params into the running sim alone, no board edit and no
+   *  undo step: a slider retimes while it drags and commits once on release. */
+  previewComponentParams: (id: string, params: Record<string, ParamValue>) => void;
   /** Batch param edit (Task 6): applies each spec's params to its own
    *  component, all in one undo step. `label` is only ever set on the
    *  double-clicked entry (specs[0]) -- name/label is single-component-only
@@ -777,7 +814,7 @@ let sim: SimState | null = null;
 let replayIdx: ReplayIndex | null = null;
 
 const delayFor = (t: TimingSetting) =>
-  t.mode === 'datasheet' ? datasheetDelay(t.datasheet) : idealDelay;
+  t.mode === 'datasheet' ? datasheetDelay(t.datasheet, t.vendor) : idealDelay;
 
 /** Ids among `incoming` that take a built-in part's place for the first time. */
 function shadowedBuiltins(lib: ChipLibrary, incoming: readonly ChipDef[]): string[] {
@@ -830,7 +867,7 @@ function shadowNotice(ids: readonly string[]): { error?: string } {
   return { error: `chips: your ${ids.join(', ')} replaces the built-in part of the same name` };
 }
 
-export type DockTab = 'waves' | 'memory';
+export type DockTab = 'waves' | 'memory' | 'checks';
 
 export interface LastRun {
   board: Board;
@@ -920,6 +957,7 @@ export type SimEffect = 'none' | 'live' | 'topology';
 const GEOMETRY_KEYS = new Set(['pos', 'rot', 'mirror', 'nameOffset']);
 
 export function simEffectOfItem(item: import('./history').PickedItem): SimEffect {
+  if (item.kind === 'checks') return 'none';
   if (isPureMoveItem(item)) return 'none';
   if (item.kind === 'group' && item.before && item.after) {
     // The name prefixes compiled paths; colour and tab are drawing only.
@@ -971,6 +1009,7 @@ function isPureMoveItem(item: import('./history').PickedItem): boolean {
  *  can restore them when the pref asks. Deliberately outside the store: it is
  *  not board content, nothing should undo it, and no file should carry it. */
 const heldSwitchState = new Map<string, unknown>();
+const HELD_KINDS = new Set(['toggle', 'button', 'spdt']);
 
 /** RAM cells a powered edit dropped the sim on, by `componentId`, restored at
  *  the next power-on whatever the switch pref says. Unlike switch positions
@@ -998,6 +1037,20 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
   const activeTab = (): Tab => {
     const s = get();
     return s.tabs.find((t) => t.id === s.activeTabId) ?? s.tabs[0]!;
+  };
+
+  // Silenced checks are not circuit content: no recompile, no power loss, no
+  // def version bump, so a powered demo keeps running through a hide.
+  const setHiddenChecks = (tab: Tab, keys: string[] | undefined) => {
+    if (tab.kind === 'board') {
+      set((s) => ({ board: { ...s.board, hiddenChecks: keys }, rev: s.rev + 1 }));
+      return;
+    }
+    const def = get().chipLib.get(tab.defId);
+    if (!def) return;
+    const chipLib = new Map(get().chipLib);
+    chipLib.set(tab.defId, { ...def, hiddenChecks: keys });
+    set((s) => ({ chipLib, rev: s.rev + 1 }));
   };
 
   const activeCircuit = (): Circuit => {
@@ -1094,6 +1147,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       staleInstances: stale,
       error: collisionError,
       powered: false,
+      running: false,
       rev: s.rev + 1,
     }));
     holdRamCells();
@@ -1117,8 +1171,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     if (!sim) return;
     for (const [componentId, pi] of sim.compiled.componentToPrimitive) {
       const kind = sim.compiled.primitives[pi]?.kind;
-      if (kind !== 'toggle' && kind !== 'button') continue;
-      heldSwitchState.set(componentId, sim.sim.primitiveStateAt(pi));
+      if (!kind || !HELD_KINDS.has(kind)) continue;
+      heldSwitchState.set(componentId, settledState(kind, sim.sim.primitiveStateAt(pi)));
     }
   };
 
@@ -1197,6 +1251,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     set((s) => ({
       board: { ...s.board, ...draft },
       powered: topologyChanged ? false : s.powered,
+      running: topologyChanged ? false : s.running,
       // STA overlay is view-state over a specific compile; a topology edit
       // invalidates it (spec choice: clear, don't auto-recompute).
       staReport: topologyChanged ? null : s.staReport,
@@ -1214,7 +1269,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         sim.sim.setPrimitiveParamsAt(pi, (after.params ?? {}) as never);
       }
       replayIdx = null;
-      if (!get().running) sim.sim.settle();
+      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
       set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
     }
     if (topologyChanged) {
@@ -2380,10 +2435,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     rev: 0,
     powered: false,
     running: false,
+    runBehind: false,
+    oscillation: null,
     error: null,
     mismatchWires: new Set(),
     changedPrims: new Set(),
-    timing: { mode: getPrefs().timingModel, datasheet: 'typ' },
+    timing: { mode: getPrefs().timingModel, datasheet: 'typ', vendor: 'ti' },
     waveformOpen: false,
     dockTab: 'waves',
     lastRun: null,
@@ -2427,7 +2484,11 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
 
     closeTab: (id) => {
       if (id === 'board') return;
-      if (historyByTab.get(id)?.canUndo) {
+      const tab = get().tabs.find((t) => t.id === id);
+      const def = tab?.kind === 'def' ? get().chipLib.get(tab.defId) : undefined;
+      // A hide alone is no edit to save or discard: Discard would cost a powered board.
+      const onlyHides = tab?.kind === 'def' && def !== undefined && sameBody(def, tab.baseline);
+      if (historyByTab.get(id)?.canUndo && !onlyHides) {
         set({ pendingTabClose: id });
         return;
       }
@@ -2464,7 +2525,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       set({ activeTabId: id, tool: { kind: 'select' }, selection: new Set() });
     },
 
-    loadBoard: (board) => {
+    loadBoard: (loaded) => {
+      const board = loaded.hiddenChecks
+        ? { ...loaded, hiddenChecks: pruneHiddenChecksOf(loaded, get().chipLib) }
+        : loaded;
       seedNextId(board);
       historyByTab.clear();
       sim = null;
@@ -2509,6 +2573,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (defs.length === 0) return { ok: true, count: 0 };
       const candidateLib = new Map(get().chipLib);
       for (const def of defs) candidateLib.set(def.id, def);
+      for (const def of defs) {
+        const kept = pruneHiddenChecksOf(def, candidateLib);
+        if (kept !== def.hiddenChecks) candidateLib.set(def.id, { ...def, hiddenChecks: kept });
+      }
       const cycleError = findCycle(candidateLib);
       if (cycleError) return { ok: false, error: cycleError };
       const shadowed = shadowedBuiltins(get().chipLib, defs);
@@ -3551,12 +3619,19 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           dropStaleSelection();
           return;
         }
-        set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
+        set((s) => ({
+          board: { ...s.board, ...draft },
+          powered: false,
+          running: false,
+          rev: s.rev + 1,
+        }));
         holdRamCells();
         sim = null;
         // Re-validate against the now-reverted board: a stale compile-error/
         // mismatch from the edit just undone shouldn't outlive it.
         checkWidthMismatch('');
+      } else if (cmd.items.every((item) => item.kind === 'checks')) {
+        setHiddenChecks(tab, draft.hiddenChecks);
       } else {
         commitDefEdit(tab.defId, draft);
       }
@@ -3576,10 +3651,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           dropStaleSelection();
           return;
         }
-        set((s) => ({ board: { ...s.board, ...draft }, powered: false, rev: s.rev + 1 }));
+        set((s) => ({
+          board: { ...s.board, ...draft },
+          powered: false,
+          running: false,
+          rev: s.rev + 1,
+        }));
         holdRamCells();
         sim = null;
         checkWidthMismatch('');
+      } else if (cmd.items.every((item) => item.kind === 'checks')) {
+        setHiddenChecks(tab, draft.hiddenChecks);
       } else {
         commitDefEdit(tab.defId, draft);
       }
@@ -3593,11 +3675,22 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         timing,
         board: { ...s.board, timing },
         powered: false,
+        running: false,
         replayTimePs: null,
         rev: s.rev + 1,
       }));
       holdRamCells();
       sim = null;
+      // An open report would go on showing the old column's or vendor's figures.
+      if (get().staReport) {
+        if (timing.mode === 'datasheet') get().runSta();
+        else get().clearSta();
+      }
+    },
+
+    setRunSpeed: (psPerSecond) => {
+      if (get().board.runSpeed === psPerSecond) return;
+      set((s) => ({ board: { ...s.board, runSpeed: psPerSecond }, rev: s.rev + 1 }));
     },
 
     power: () => {
@@ -3623,7 +3716,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       try {
         const compiled = compileBoard();
         const s = new Simulator(compiled, delayFor(get().timing));
-        s.powerOn();
+        let report = s.powerOn();
         // Consumed by the power-on that follows the capture, never held past it:
         // a later session (another board, the pref flipped on in between) must
         // not inherit positions from whatever was powered before it.
@@ -3638,10 +3731,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
             const kind = compiled.primitives[pi]?.kind;
             // A component whose kind changed while unpowered is a different
             // part now; its old position means nothing.
-            if (kind !== 'toggle' && kind !== 'button') continue;
+            if (!kind || !HELD_KINDS.has(kind)) continue;
             s.setPrimitiveStateAt(pi, state);
           }
-          if (restoring.size > 0) s.settle();
+          if (restoring.size > 0) report = s.settle();
         }
         let restoredRam = false;
         for (const [componentId, held] of heldRamCells) {
@@ -3654,10 +3747,13 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           restoredRam = true;
         }
         heldRamCells.clear();
-        if (restoredRam) s.settle();
+        if (restoredRam) report = s.settle();
         sim = { sim: s, compiled };
         set((st) => ({
           powered: true,
+          // A fresh sim is parked until Run starts it, whatever the last one was doing.
+          running: false,
+          oscillation: loopOf(compiled, report),
           lastRun: null,
           error: null,
           changedPrims: new Set(),
@@ -3671,7 +3767,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         }));
         noteStaleContents(compiled);
       } catch (e) {
-        set({ error: e instanceof Error ? e.message : String(e), powered: false });
+        set({ error: e instanceof Error ? e.message : String(e), powered: false, running: false });
         sim = null;
       }
     },
@@ -3699,13 +3795,32 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const running = !get().running;
       if (running) sim.sim.start();
       else sim.sim.stop();
-      set((s) => ({ running, replayTimePs: null, rev: s.rev + 1 }));
+      set((s) => ({
+        running,
+        runBehind: false,
+        oscillation: null,
+        replayTimePs: null,
+        rev: s.rev + 1,
+      }));
     },
 
     pump: (ps) => {
       if (!sim || !get().running) return;
-      sim.sim.runUntil(sim.sim.time + ps);
-      set((s) => ({ rev: s.rev + 1 }));
+      const target = sim.sim.time + ps;
+      // Integer ps runs out after about 2.5 hours of real time; stop short of it.
+      if (!Number.isSafeInteger(target)) {
+        get().toggleRun();
+        return;
+      }
+      const from = sim.sim.time;
+      sim.sim.runUntil(target);
+      const runBehind = sim.sim.isBehind(target);
+      // A budget spent with time standing still is a zero-delay loop, not a slow board.
+      const oscillation =
+        runBehind && sim.sim.time === from
+          ? loopNetNames(sim.compiled, sim.sim.oscillationReport().nets)
+          : null;
+      set((s) => ({ runBehind, oscillation, rev: s.rev + 1 }));
     },
 
     // P0.3 (M4.2): 'inport' is deliberately excluded -- it drives X until
@@ -3740,7 +3855,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       // has a future wake queued, so settling here fast-forwarded sim time by
       // thousands of clock edges per switch click. Running mode leaves the
       // queued toggle wake to the next frame's pump instead.
-      if (!get().running) sim.sim.settle();
+      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
       set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
     },
 
@@ -3750,11 +3865,44 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (!comp || comp.kind !== 'button') return;
       const pi = sim.compiled.componentToPrimitive.get(`${prefix}${comp.id}`);
       if (pi === undefined) return;
+      // A repeat of the same position would restart a bounce already under way.
+      if ((sim.sim.primitiveStateAt(pi) as ButtonState).on === held) return;
       replayIdx = null;
       // Button's state shape ({on}) is distinct from toggle's; see the kernel.
-      sim.sim.setPrimitiveStateAt(pi, { on: held });
-      if (!get().running) sim.sim.settle();
+      sim.sim.setPrimitiveStateAt(pi, { on: held } satisfies ButtonState);
+      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
       set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+    },
+
+    flipSpdt: (componentId, prefix = 'main/') => {
+      if (!sim) return;
+      const comp = activeCircuit().components.find((c) => c.id === componentId);
+      if (!comp || comp.kind !== 'spdt') return;
+      const pi = sim.compiled.componentToPrimitive.get(`${prefix}${comp.id}`);
+      if (pi === undefined) return;
+      replayIdx = null;
+      const { position } = sim.sim.primitiveStateAt(pi) as SpdtState;
+      sim.sim.setPrimitiveStateAt(pi, {
+        position: position === 'a' ? 'b' : 'a',
+      } satisfies SpdtState);
+      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
+      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+    },
+
+    spdtThrow: (componentId, prefix = 'main/') => {
+      if (get().replayTimePs !== null) return undefined;
+      const pi = sim?.compiled.componentToPrimitive.get(`${prefix}${componentId}`);
+      if (!sim || pi === undefined || sim.compiled.primitives[pi]?.kind !== 'spdt')
+        return undefined;
+      return (sim.sim.primitiveStateAt(pi) as SpdtState).position;
+    },
+
+    buttonHeld: (componentId, prefix = 'main/') => {
+      if (get().replayTimePs !== null) return undefined;
+      const pi = sim?.compiled.componentToPrimitive.get(`${prefix}${componentId}`);
+      if (!sim || pi === undefined || sim.compiled.primitives[pi]?.kind !== 'button')
+        return undefined;
+      return (sim.sim.primitiveStateAt(pi) as ButtonState).on;
     },
 
     pinSignal: (componentId, pinName, prefix = 'main/') => {
@@ -3793,7 +3941,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     setDockTab: (tab) => {
-      if (tab === 'memory') {
+      // The replay cursor parks the board on an instant only the waveforms can release.
+      if (tab !== 'waves') {
         replayIdx = null;
         set({ dockTab: tab, replayTimePs: null, hoverTrackPath: null });
       } else set({ dockTab: tab });
@@ -3879,6 +4028,50 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
 
     simTrace: () => (sim ? { compiled: sim.compiled, records: sim.sim.traceRecords() } : null),
 
+    revealRequest: null,
+
+    revealItems: (ids) => {
+      const c = activeCircuit();
+      const live = new Set([...c.components.map((x) => x.id), ...c.wires.map((x) => x.id)]);
+      const kept = ids.filter((id) => live.has(id));
+      if (kept.length === 0) return;
+      set((s) => ({
+        selection: new Set(kept),
+        revealRequest: { seq: (s.revealRequest?.seq ?? 0) + 1, ids: kept },
+      }));
+    },
+
+    simFights: () =>
+      sim && get().powered ? { compiled: sim.compiled, nets: sim.sim.fightingNets() } : null,
+
+    setChecksHidden: (keys, hide) => {
+      const tab = activeTab();
+      const circuit = activeCircuit();
+      if (tab.kind === 'def') {
+        const def = get().chipLib.get(tab.defId);
+        if (!def || isBuiltinChipDef(def)) return;
+      }
+      const before = circuit.hiddenChecks ?? [];
+      const next = hide
+        ? [...new Set([...before, ...keys])]
+        : before.filter((k) => !keys.includes(k));
+      const draft = cloneCircuit(circuit);
+      draft.hiddenChecks = next.length > 0 ? next : undefined;
+      const cmd = diffCircuits(cloneCircuit(circuit), draft, hide ? 'hide check' : 'unhide check');
+      if (cmd.items.length === 0) return;
+      historyFor(tab.id).commit(cmd);
+      setHiddenChecks(tab, draft.hiddenChecks);
+    },
+
+    pruneHiddenChecks: () => {
+      const { board, chipLib } = get();
+      const kept = pruneHiddenChecksOf(board, chipLib);
+      if (kept === board.hiddenChecks) return board;
+      const next = { ...board, hiddenChecks: kept };
+      set({ board: next });
+      return next;
+    },
+
     simTraceLength: () => (sim ? sim.sim.traceLength : 0),
 
     simNow: () => (sim ? sim.sim.time : 0),
@@ -3910,6 +4103,19 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (ok && Object.keys(params).some((k) => /width/i.test(k) || k === 'pinView'))
         checkWidthMismatch(id);
       return ok;
+    },
+
+    previewComponentParams: (id, params) => {
+      if (!sim || activeTab().kind !== 'board') return;
+      const comp = get().board.components.find((c) => c.id === id);
+      if (!comp || Object.keys(params).some((k) => paramLiveness(comp.kind, k) !== 'stimulus'))
+        return;
+      const pi = sim.compiled.componentToPrimitive.get(`main/${id}`);
+      if (pi === undefined) return;
+      sim.sim.setPrimitiveParamsAt(pi, params as never);
+      replayIdx = null;
+      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
+      set((st) => ({ replayTimePs: null, rev: st.rev + 1 }));
     },
 
     setComponentParamsBatch: (specs) => {
@@ -3971,11 +4177,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         // Reuse the live sim's compile when powered; otherwise compile fresh
         // (same lowering as power()) so STA works on an unpowered board too.
         const compiled = sim?.compiled ?? compile(lowerCircuit(st.board), lowerLibrary(st.chipLib));
-        const report = analyzeTiming(compiled, { column: st.timing.datasheet });
+        const report = analyzeTiming(compiled, {
+          column: st.timing.datasheet,
+          vendor: st.timing.vendor,
+        });
         set({ staReport: { report, compiled }, error: null });
       } catch (e) {
-        if (e instanceof TimingError) set({ error: `timing: ${e.message}`, staReport: null });
-        else set({ error: `timing: ${e instanceof Error ? e.message : String(e)}` });
+        // A report left up after a failed re-run would show figures for other settings.
+        set({
+          error: `timing: ${e instanceof Error ? e.message : String(e)}`,
+          staReport: null,
+        });
       }
     },
 
@@ -4117,31 +4329,4 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
   };
 });
 
-// Net index feeding a component pin, via the compiled path map. Chip instances
-// and stripped connectivity kinds have no single primitive, so return undefined.
-export function pinNet(
-  compiled: CompiledCircuit,
-  comp: Component,
-  pinName: string,
-  prefix = 'main/',
-): number | undefined {
-  // Chip instances and ports have no primitive of their own; compile.ts
-  // aliases their net as `<path>.<pinName>` instead.
-  if (comp.kind === 'chip' || comp.kind === 'inport' || comp.kind === 'outport')
-    return compiled.pathToNet.get(`${prefix}${comp.label || comp.id}.${pinName}`);
-  if (!hasPrimitive(comp.kind)) return undefined;
-  // Keyed by component, not path: label sharing puts two components on one
-  // path and pathToPrimitive is last-write-wins, which resolved an LED that
-  // had inherited a switch's label to the switch's own pins.
-  const pi = compiled.componentToPrimitive.get(`${prefix}${comp.id}`);
-  if (pi === undefined) return undefined;
-  const prim = compiled.primitives[pi]!;
-  const specPins = getPrimitive(comp.kind).pins(comp.params ?? {});
-  const ins = inputSlotPins(specPins);
-  const outs = outputSlotPins(specPins);
-  const oi = outs.findIndex((p) => p.name === pinName);
-  if (oi >= 0) return prim.outputs[oi];
-  const ii = ins.findIndex((p) => p.name === pinName);
-  if (ii >= 0) return prim.inputs[ii];
-  return undefined;
-}
+export { pinNet };

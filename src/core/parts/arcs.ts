@@ -9,6 +9,7 @@ import {
   type ArcRow,
   type DatasheetColumn,
   type OutputEdge,
+  type Vendor,
 } from './partsDb';
 
 export type ArcFigure = ArcRow;
@@ -108,8 +109,13 @@ export function arcPathKey(part: string, inPin: string, outPin: string): string 
 }
 
 /** The published figure for one arc; undefined when the part times no such arc. */
-export function arcFigure(part: string, inPin: string, outPin: string): ArcFigure | undefined {
-  const paths = getPart(part)?.paths;
+export function arcFigure(
+  part: string,
+  inPin: string,
+  outPin: string,
+  vendor: Vendor = 'ti',
+): ArcFigure | undefined {
+  const paths = getPart(part, vendor)?.paths;
   const key = arcPathKey(part, inPin, outPin);
   const fig = key ? paths?.[key] : undefined;
   // A collapsed 1-bit demux names its pins d and y, exactly as a collapsed mux
@@ -125,10 +131,11 @@ export function arcPropagationNs(
   outPin: string,
   edge: OutputEdge,
   col: DatasheetColumn,
+  vendor: Vendor = 'ti',
 ): number | undefined {
   let slowest = 0;
   for (const inPin of inPins) {
-    const fig = arcFigure(part, inPin, outPin)?.[edge === 'lh' ? 'tplh' : 'tphl'];
+    const fig = arcFigure(part, inPin, outPin, vendor)?.[edge === 'lh' ? 'tplh' : 'tphl'];
     if (fig) slowest = Math.max(slowest, column(fig, col));
   }
   return slowest || undefined;
@@ -144,6 +151,10 @@ export function outputPropagationNs(
   outPin: string,
   edge: OutputEdge,
   col: DatasheetColumn,
+  vendor: Vendor = 'ti',
 ): number | undefined {
-  return arcPropagationNs(part, inPins, outPin, edge, col) ?? propagationNs(part, edge, col);
+  return (
+    arcPropagationNs(part, inPins, outPin, edge, col, vendor) ??
+    propagationNs(part, edge, col, vendor)
+  );
 }

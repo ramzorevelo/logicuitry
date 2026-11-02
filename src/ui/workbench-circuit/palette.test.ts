@@ -7,6 +7,7 @@ import '../../render/glyphs/gates';
 import '../../render/glyphs/chip';
 import '../../render/glyphs/io';
 import '../../render/glyphs/power';
+import '../../render/glyphs/timer';
 import type { Theme } from '../../render/theme';
 import { makeTestTheme } from '../../render/theme.fixture';
 import {
@@ -73,6 +74,7 @@ describe('PALETTE', () => {
       'Combinational',
       'Arithmetic',
       'Sequential',
+      'Timers',
       'Wiring',
     ]);
     expect(PALETTE.filter((i) => i.group === 'Arithmetic').map((i) => i.label)).toEqual([
@@ -94,6 +96,12 @@ describe('PALETTE', () => {
       'Shift reg',
       'RAM',
     ]);
+  });
+
+  it('lists the 555 alone under Timers, placed as an astable with explicit R and C', () => {
+    const timers = PALETTE.filter((i) => i.group === 'Timers');
+    expect(timers.map((i) => i.label)).toEqual(['555 timer']);
+    expect(timers[0]!.params).toEqual({ mode: 'astable', r1: 1000, r2: 1e6, c: 1e-6 });
   });
 
   it('never lists the hidden parity core', () => {

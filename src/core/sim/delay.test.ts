@@ -7,7 +7,7 @@ import * as bv from '../value/busValue';
 import { toString } from '../value/busValue';
 import { BIDIR } from '../model/bidirFixture';
 import { outputPropagationNs } from '../parts/arcs';
-import { datasheetDelay, IDEAL_DELAY_PS, pinNamesOf } from './delay';
+import { datasheetDelay, pinNamesOf } from './delay';
 import { Simulator } from './kernel';
 
 const lib = builtinChipLibrary();
@@ -33,7 +33,7 @@ function nandDipBoard(): Board {
 }
 
 describe('datasheet delay through a DIP', () => {
-  it('a 74LS00 gate measures its own 9 ns and 10 ns, plus the one structural delta', () => {
+  it('a 74LS00 gate measures its own 9 ns and 10 ns, its output buffer adding no time', () => {
     const compiled = compile(nandDipBoard(), lib);
     const sim = new Simulator(compiled, datasheetDelay('typ'));
     sim.powerOn();
@@ -55,8 +55,8 @@ describe('datasheet delay through a DIP', () => {
       return at(yNet) - at(bNet);
     };
 
-    expect(measure(false)).toBe(9_000 + IDEAL_DELAY_PS);
-    expect(measure(true)).toBe(10_000 + IDEAL_DELAY_PS);
+    expect(measure(false)).toBe(9_000);
+    expect(measure(true)).toBe(10_000);
   });
 
   it('still floats the output when the rail drops', () => {
@@ -123,23 +123,20 @@ describe('74LS374 /OC enable and disable times', () => {
     return { disable: measure(true), enable: measure(false) };
   }
 
-  // Two structural deltas (the /OC inverter and the power AND) sit ahead of the buffer.
-  const hops = 2 * IDEAL_DELAY_PS;
-
   it('a high Q floats in tPHZ and returns in tPZH', () => {
     expect(ocToQ('typ', true)).toEqual({
-      disable: { ps: 15_000 + hops, q: 'Z' },
-      enable: { ps: 20_000 + hops, q: '1' },
+      disable: { ps: 15_000, q: 'Z' },
+      enable: { ps: 20_000, q: '1' },
     });
-    expect(ocToQ('max', true).enable.ps).toBe(26_000 + hops);
+    expect(ocToQ('max', true).enable.ps).toBe(26_000);
   });
 
   it('a low Q floats in tPLZ and returns in tPZL', () => {
     expect(ocToQ('typ', false)).toEqual({
-      disable: { ps: 12_000 + hops, q: 'Z' },
-      enable: { ps: 21_000 + hops, q: '0' },
+      disable: { ps: 12_000, q: 'Z' },
+      enable: { ps: 21_000, q: '0' },
     });
-    expect(ocToQ('max', false).disable.ps).toBe(20_000 + hops);
+    expect(ocToQ('max', false).disable.ps).toBe(20_000);
   });
 });
 

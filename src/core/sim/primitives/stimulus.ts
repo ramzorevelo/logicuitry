@@ -1,4 +1,5 @@
 import * as bv from '../../value/busValue';
+import { bounceOn, contactAt, SETTLED } from './bounce';
 import { onePinLane, parsePinView, pinViewOf, splitBus } from './busPins';
 import type { EvalContext, EvalResult, Params, PrimitiveSpec } from './types';
 import { intParam, widthParam } from './types';
@@ -54,16 +55,101 @@ export const toggleSwitch: PrimitiveSpec = {
   },
 };
 
-interface ButtonState {
+export interface ButtonState {
   on: boolean;
+  /** When the current press made contact; absent on a press not yet evaluated. */
+  since?: number;
 }
 
-/** Momentary push button; pressed state comes from setControl, released by default. Width 1. */
+export function contactToGround(params: Params): boolean {
+  return params['toGround'] === true;
+}
+
+/**
+ * Momentary push button, released by default. Width 1. A press written as a
+ * bare `{on: true}` starts its contact at the evaluating time; with `bounce`
+ * the make chatters before it holds, and a release is clean. With `toGround`
+ * it is a bare contact to GND, as wired on a breadboard: a closed contact
+ * drives LOW and an open one floats, so a pull-up supplies the HIGH.
+ */
 export const pushButton: PrimitiveSpec = {
   kind: 'button',
-  pins: () => [{ name: 'y', dir: 'out', width: 1, role: 'data', order: 0 }],
+  pins: (params) => [
+    {
+      name: 'y',
+      dir: 'out',
+      width: 1,
+      role: 'data',
+      order: 0,
+      ...(contactToGround(params) ? { threeState: true } : {}),
+    },
+  ],
   init: () => ({ on: false }) satisfies ButtonState,
-  evaluate: (ctx) => ({ outputs: [bv.known((ctx.state as ButtonState).on ? 1 : 0, 1)] }),
+  evaluate: (ctx) => {
+    const state = ctx.state as ButtonState;
+    const toGround = contactToGround(ctx.params);
+    const open = toGround ? bv.allZ(1) : bv.known(0, 1);
+    const closed = bv.known(toGround ? 0 : 1, 1);
+    if (!state.on) return { outputs: [open] };
+    const since = state.since ?? ctx.time;
+    const contact = contactAt(since, ctx.time, bounceOn(ctx.params));
+    return {
+      outputs: [contact.closed ? closed : open],
+      ...(state.since === undefined ? { state: { on: true, since } satisfies ButtonState } : {}),
+      ...(contact.nextWake === undefined ? {} : { nextWake: contact.nextWake, finite: true }),
+    };
+  },
+};
+
+export type Throw = 'a' | 'b';
+
+/**
+ * An input's position with any bounce already over, for carrying it into a
+ * fresh sim: a contact time from the old run would replay or cut its bounce.
+ */
+export function settledState(kind: string, state: unknown): unknown {
+  if (kind === 'button') return { on: (state as ButtonState).on, since: SETTLED };
+  if (kind === 'spdt') return { position: (state as SpdtState).position, since: SETTLED };
+  return state;
+}
+
+export interface SpdtState {
+  position: Throw;
+  /** When the lever reached `position`; absent on a flip not yet evaluated. */
+  since?: number;
+}
+
+export function spdtPosition(params: Params): Throw {
+  return params['position'] === 'b' ? 'b' : 'a';
+}
+
+/**
+ * Single-pole double-throw switch: the throw the lever touches carries the
+ * common's value, the other floats. Break before make, so the throw left
+ * opens at once; with `bounce` the throw reached chatters before it holds.
+ */
+export const spdtSwitch: PrimitiveSpec = {
+  kind: 'spdt',
+  pins: () => [
+    { name: 'c', dir: 'in', width: 1, role: 'data', order: 0 },
+    { name: 'a', dir: 'out', width: 1, role: 'data', order: 0, threeState: true },
+    { name: 'b', dir: 'out', width: 1, role: 'data', order: 1, threeState: true },
+  ],
+  init: (params) => ({ position: spdtPosition(params), since: SETTLED }) satisfies SpdtState,
+  evaluate: (ctx) => {
+    const state = ctx.state as SpdtState;
+    const since = state.since ?? ctx.time;
+    const contact = contactAt(since, ctx.time, bounceOn(ctx.params));
+    const touched = contact.closed ? ctx.inputs[0]! : bv.allZ(1);
+    const open = bv.allZ(1);
+    return {
+      outputs: state.position === 'a' ? [touched, open] : [open, touched],
+      ...(state.since === undefined
+        ? { state: { position: state.position, since } satisfies SpdtState }
+        : {}),
+      ...(contact.nextWake === undefined ? {} : { nextWake: contact.nextWake, finite: true }),
+    };
+  },
 };
 
 /** Observer only, width-N; render layer reads the connected net's value. */

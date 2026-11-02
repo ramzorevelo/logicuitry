@@ -96,7 +96,7 @@ function wrap189(inner?: Record<string, string>): ChipDef {
   ];
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     id: 'rom',
     name: 'rom',
     version: 1,

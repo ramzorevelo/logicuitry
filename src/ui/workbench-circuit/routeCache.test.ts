@@ -11,6 +11,7 @@ import '../../render/glyphs/gates';
 import '../../render/glyphs/io';
 import '../../render/glyphs/chip';
 import '../../render/glyphs/power';
+import '../../render/glyphs/timer';
 
 const theme = makeTestTheme();
 const g = theme.gridSchematic;

@@ -1,6 +1,6 @@
 {
   "format": "lcir.chip",
-  "formatVersion": 7,
+  "formatVersion": 8,
   "id": "74LS74",
   "name": "74LS74",
   "version": 1,
@@ -365,7 +365,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "1Q"
       }
     },
     {
@@ -376,7 +377,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/1Q"
       }
     },
     {
@@ -399,7 +401,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "/2Q"
       }
     },
     {
@@ -410,7 +413,8 @@
         "y": 192
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "outputStage": "2Q"
       }
     }
   ],

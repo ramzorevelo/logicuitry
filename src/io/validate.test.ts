@@ -3,7 +3,7 @@ import { validateDocument } from './validate';
 
 const chip = {
   format: 'lcir.chip',
-  formatVersion: 7,
+  formatVersion: 8,
   id: 'and-gate',
   name: 'AND gate',
   version: 1,
@@ -15,7 +15,7 @@ const chip = {
 
 const board = {
   format: 'lcir.board',
-  formatVersion: 9,
+  formatVersion: 12,
   id: 'b1',
   name: 'demo',
   components: [],
@@ -23,7 +23,8 @@ const board = {
   junctions: [],
   probes: [{ path: 'main/Q', label: 'Q' }],
   view: { x: 0, y: 0, zoom: 1 },
-  timing: { mode: 'ideal', datasheet: 'typ' },
+  timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+  runSpeed: 25_000,
 };
 
 const lesson = {

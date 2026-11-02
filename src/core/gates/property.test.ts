@@ -89,7 +89,7 @@ function randomBoard(rng: Prng, nIn: number, nGates: number, nOut: number): Boar
 
   return {
     format: 'lcir.board',
-    formatVersion: 9,
+    formatVersion: 12,
     id: 'rand',
     name: 'rand',
     components,
@@ -97,7 +97,8 @@ function randomBoard(rng: Prng, nIn: number, nGates: number, nOut: number): Boar
     junctions: [],
     probes: [],
     view: { x: 0, y: 0, zoom: 1 },
-    timing: { mode: 'ideal', datasheet: 'typ' },
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
   };
 }
 

@@ -19,7 +19,7 @@ function pin(over: Partial<PinDef> & Pick<PinDef, 'name' | 'dir' | 'boundCompone
 function chipDef(over: Partial<ChipDef> & Pick<ChipDef, 'id' | 'name' | 'pins'>): ChipDef {
   return {
     format: 'lcir.chip',
-    formatVersion: 7,
+    formatVersion: 8,
     version: 1,
     components: [],
     wires: [],

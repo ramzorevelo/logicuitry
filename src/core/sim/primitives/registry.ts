@@ -29,7 +29,7 @@ import { dff, dlatch, register, srlatch } from './sequential';
 import { counter } from './counter';
 import { shiftreg } from './shiftreg';
 import { ram } from './ram';
-import { clock, led, probe, pushButton, toggleSwitch } from './stimulus';
+import { clock, led, probe, pushButton, spdtSwitch, toggleSwitch } from './stimulus';
 import { mux } from './mux';
 import { demux } from './demux';
 import { busdisplay, ledmatrix, sevenseg } from './display';
@@ -37,6 +37,7 @@ import { decoder, encoder } from './coder';
 import { bcd7seg } from './bcd7seg';
 import { adder, comparator, parity } from './arith';
 import { transceiver } from './transceiver';
+import { timer555 } from './timer555';
 
 const specs = new Map<string, PrimitiveSpec>();
 
@@ -91,8 +92,10 @@ for (const spec of [
   mux,
   demux,
   clock,
+  timer555,
   toggleSwitch,
   pushButton,
+  spdtSwitch,
   led,
   probe,
   sevenseg,
