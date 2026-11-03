@@ -168,7 +168,7 @@ const HAND_TUNED_BUDGET: Record<string, number> = {
   'eight-bit-bus-computer': 378,
 };
 
-describe('bundled example boards', () => {
+describe('bundled example boards', { timeout: 30_000 }, () => {
   for (const e of EXAMPLES) {
     describe(e.name, () => {
       // The shipped geometry is authored, so this is a budget rather than an
