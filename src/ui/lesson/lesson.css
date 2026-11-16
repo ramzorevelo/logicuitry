@@ -1,0 +1,274 @@
+/* Lesson runner. Sized in rem, so presentation mode's root scaling grows the
+   panel, its type and its step bar together. */
+.lesson-panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 20rem;
+  min-height: 0;
+  background: var(--surface);
+  border-left: var(--chrome-border);
+  color: var(--ink);
+  font: var(--text-body) / 1.45 var(--font-ui);
+}
+
+.lesson-panel__head {
+  display: grid;
+  gap: 2px;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border-bottom: var(--chrome-border);
+}
+
+.lesson-panel__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-unit);
+}
+
+.lesson-panel__title {
+  font-weight: 600;
+}
+
+.lesson-panel__close {
+  flex: none;
+  padding: 0 calc(var(--space-unit) * 1.5);
+}
+
+.lesson-panel__count {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.lesson-panel__board {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.lesson-panel__bar {
+  display: flex;
+  gap: 3px;
+  margin-top: var(--space-unit);
+}
+
+.lesson-panel__seg {
+  flex: 1;
+  height: 0.2rem;
+  background: var(--line);
+}
+
+.lesson-panel__seg--done {
+  background: var(--accent-2);
+}
+
+.lesson-panel__seg--current {
+  background: var(--accent);
+}
+
+.lesson-panel__body {
+  flex: 1 1 auto;
+  display: grid;
+  align-content: start;
+  gap: calc(var(--space-unit) * 2.5);
+  min-height: 0;
+  padding: calc(var(--space-unit) * 2.5) calc(var(--space-unit) * 3);
+  overflow-y: auto;
+}
+
+.lesson-panel__kind {
+  color: var(--accent-2);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lesson-panel__prose p,
+.lesson-panel__answer p {
+  margin: 0 0 calc(var(--space-unit) * 2);
+}
+
+.lesson-panel__prose p:last-child,
+.lesson-panel__answer p:last-child {
+  margin-bottom: 0;
+}
+
+.lesson-panel__prose ul,
+.lesson-panel__answer ul {
+  margin: 0;
+  padding-left: calc(var(--space-unit) * 5);
+}
+
+.lesson-panel__prose code,
+.lesson-panel__answer code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.lesson-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.lesson-panel__chip {
+  font-family: var(--font-mono);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+}
+
+.lesson-panel__chip--right {
+  border-color: var(--ok);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.lesson-panel__answer {
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border-left: 3px solid var(--ok);
+  background: var(--paper);
+}
+
+.lesson-panel__withheld {
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  font-style: italic;
+}
+
+.lesson-panel__acts {
+  display: grid;
+  gap: 2px;
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border: 1px dashed var(--line);
+  color: var(--accent-2);
+  font-size: var(--text-secondary);
+}
+
+.lesson-panel__acts b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.lesson-panel__warning {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.lesson-panel__foot {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+  gap: var(--space-unit);
+  padding: calc(var(--space-unit) * 2);
+  border-top: var(--chrome-border);
+}
+
+.lesson-panel__foot .tool-btn {
+  justify-content: center;
+  padding-inline: calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+}
+
+.lesson-panel kbd {
+  margin-left: 3px;
+  padding: 0 3px;
+  border: var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: var(--chrome-radius);
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+
+/* Phone: a bottom sheet under the board and the dock, Back, Reveal and Next one
+   row at the full touch target, since the class is waiting on every press. */
+.app-shell--compact .lesson-panel {
+  width: auto;
+  max-height: 40dvh;
+  border-left: 0;
+  border-top: var(--chrome-border);
+}
+
+.app-shell--compact .lesson-panel__bar {
+  display: none;
+}
+
+.app-shell--compact .lesson-panel__foot {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.app-shell--compact .lesson-panel__foot .tool-btn,
+.app-shell--compact .lesson-panel__chip,
+.app-shell--compact .lesson-panel__close {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  justify-content: center;
+}
+
+.app-shell--compact .lesson-panel kbd {
+  display: none;
+}
+
+/* Rotated, 40dvh is shorter than the head and the buttons together, so the sheet
+   becomes a right-hand column beside the board and the dock, reserved the way the
+   tool rail reserves the left edge. */
+.app-shell--landscape .circuit-editor {
+  --lesson-w: min(20rem, 42vw);
+}
+
+.app-shell--landscape .circuit-editor:has(> .lesson-panel) {
+  padding-right: var(--lesson-w);
+}
+
+.app-shell--landscape .circuit-editor > .lesson-panel {
+  position: absolute;
+  inset: 0 0 0 auto;
+  box-sizing: border-box;
+}
+
+.app-shell--landscape .circuit-editor > .lesson-panel,
+.app-shell--landscape .circuit-body > .lesson-panel {
+  width: var(--lesson-w);
+  max-height: none;
+  border-top: 0;
+  border-left: var(--chrome-border);
+}
+
+/* View-only mounts the runner inside the body, beside the canvas. */
+.app-shell--landscape .circuit-body:has(> .lesson-panel) {
+  flex-direction: row;
+}
+
+/* Board, dock and sheet share one short screen; the dock gives way first. */
+.app-shell--compact .circuit-editor:has(.lesson-panel) .wave-panel {
+  max-height: 30dvh;
+}
+
+/* The two caps alone left a 579px phone's board 0px tall: the board keeps 30dvh, the dock
+   shrinks to its tab row, then the sheet's prose scrolls. */
+.app-shell--compact .circuit-editor:has(> .lesson-panel) > .circuit-toolbar {
+  flex-shrink: 0;
+}
+
+.app-shell--compact .circuit-editor:has(> .lesson-panel) > .circuit-body {
+  min-height: 30dvh;
+}
+
+.app-shell--compact .circuit-editor:has(> .lesson-panel) > .wave-panel {
+  flex-shrink: 100;
+  min-height: calc(var(--touch-h) + var(--space-unit) * 3);
+  overflow: hidden;
+}
+
+.app-shell--compact .circuit-editor > .lesson-panel {
+  flex-shrink: 1;
+}

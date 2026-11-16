@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCircuitStore } from './circuitStore';
+import { useLessonEditorStore } from '../lesson/lessonEditorStore';
 import { activeChecks, type ChecksView } from './checksView';
 import type { CheckRow, CheckSeverity } from '../../core/checks/checks';
 import { isBuiltinChipDef } from '../../core/parts/packages';
@@ -74,7 +75,8 @@ export function CheckCounts({ counts }: { counts: ChecksView['counts'] }) {
 function useCanHide(viewOnly: boolean): boolean {
   const tab = useCircuitStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const def = useCircuitStore((s) => (tab?.kind === 'def' ? s.chipLib.get(tab.defId) : undefined));
-  return !viewOnly && !(def && isBuiltinChipDef(def));
+  const editingLesson = useLessonEditorStore((s) => s.draft !== null && !s.playing);
+  return !viewOnly && !editingLesson && !(def && isBuiltinChipDef(def));
 }
 
 export function ChecksPanel({

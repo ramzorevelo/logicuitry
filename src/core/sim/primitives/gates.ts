@@ -110,6 +110,9 @@ export const notGate: PrimitiveSpec = {
   defaultPart: '74LS04',
 };
 
+/** An open-collector stage behind the buffer floats when off; a plain buffer reads that Z as X. */
+export const OPEN_COLLECTOR_PARAM = 'openCollector';
+
 // Enable X/Z -> X out: the buffer may or may not be driving, so nothing is known.
 export const tristateBuf: PrimitiveSpec = {
   kind: 'tristate',
@@ -121,6 +124,9 @@ export const tristateBuf: PrimitiveSpec = {
   evaluate(ctx): EvalResult {
     const en = ctx.inputs[1]!;
     if (en.z & 1 || en.x & 1) return { outputs: [bv.allX(1)] };
-    return { outputs: [en.v & 1 ? bv.buf(ctx.inputs[0]!, 1) : bv.allZ(1)] };
+    if (!(en.v & 1)) return { outputs: [bv.allZ(1)] };
+    const a = ctx.inputs[0]!;
+    const passesZ = ctx.params[OPEN_COLLECTOR_PARAM] === true && a.z & 1;
+    return { outputs: [passesZ ? bv.allZ(1) : bv.buf(a, 1)] };
   },
 };

@@ -1,0 +1,139 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 15,
+  "id": "minterms-on-a-74ls138",
+  "name": "Minterms on a 74LS138",
+  "components": [
+    {
+      "id": "c",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 48
+      },
+      "label": "C"
+    },
+    {
+      "id": "b",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 96
+      },
+      "label": "B"
+    },
+    {
+      "id": "a",
+      "kind": "toggle",
+      "pos": {
+        "x": 48,
+        "y": 144
+      },
+      "label": "A"
+    },
+    {
+      "id": "y",
+      "kind": "led",
+      "pos": {
+        "x": 672,
+        "y": 144
+      },
+      "label": "Y"
+    }
+  ],
+  "wires": [],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "typ",
+    "vendor": "ti"
+  },
+  "runSpeed": 25000,
+  "challenge": {
+    "title": "Minterms on a 74LS138",
+    "brief": "Y is 1 for A B C = 000, 011, 100 and 101, the minterms 0, 3, 4 and 5. Use one 74LS138 and one NAND gate on its active-low outputs. Power the chip and enable it.",
+    "allowed": [
+      "74LS138",
+      "nand"
+    ],
+    "ics": {
+      "max": 1
+    },
+    "maxGates": 1,
+    "required": [
+      {
+        "anyOf": [
+          "74LS138"
+        ],
+        "count": 1
+      }
+    ],
+    "truthTable": {
+      "inputs": [
+        "A",
+        "B",
+        "C"
+      ],
+      "outputs": [
+        "Y"
+      ],
+      "rows": [
+        [
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ]
+      ]
+    },
+    "fingerprint": "1014a16fd99c82"
+  }
+}

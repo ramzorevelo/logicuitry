@@ -7,6 +7,7 @@ import { COUNTER_DEFAULT_WIDTH } from '../../core/sim/primitives/counter';
 import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
 import { RAM_DEFAULT_ADDRESS_BITS, RAM_DEFAULT_WIDTH } from '../../core/sim/primitives/ram';
 import { TIMER_DEFAULTS } from '../../core/sim/primitives/timer555';
+import { PATTERN_DEFAULT_STEP_PS, PATTERN_DEFAULT_VALUES } from '../../core/sim/primitives/pattern';
 
 export type PaletteGroup =
   | 'Inputs'
@@ -49,6 +50,12 @@ export const PALETTE: PaletteItem[] = [
   { kind: 'button', label: 'Button', group: 'Inputs' },
   { kind: 'spdt', label: 'SPDT switch', group: 'Inputs' },
   { kind: 'clock', label: 'Clock', group: 'Inputs' },
+  {
+    kind: 'pattern',
+    label: 'Pattern',
+    group: 'Inputs',
+    params: { width: 1, values: PATTERN_DEFAULT_VALUES, stepPs: PATTERN_DEFAULT_STEP_PS },
+  },
   { kind: 'constant', label: 'Const 0', group: 'Inputs', params: { value: 0, width: 1 } },
   { kind: 'constant', label: 'Const 1', group: 'Inputs', params: { value: 1, width: 1 } },
   { kind: 'inport', label: 'In port', group: 'Inputs' },
@@ -174,6 +181,7 @@ const FIND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   MUX: ['multiplexer'],
   DEMUX: ['demultiplexer'],
   Switch: ['toggle'],
+  Pattern: ['word generator', 'sequence'],
 };
 
 export function findAliases(label: string): readonly string[] {

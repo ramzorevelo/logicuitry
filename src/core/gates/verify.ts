@@ -18,6 +18,8 @@ import {
 } from '../boolean/truthTable';
 import { BooleanEvalError } from '../boolean/evaluate';
 import { SEGMENT_NAMES } from '../sim/primitives/display';
+import { ledActiveLow, ledLitValue } from '../sim/primitives/stimulus';
+import type { Params } from '../sim/primitives/types';
 import { lowerCircuit, lowerLibrary } from './lower';
 import { dedupTerminals, reachableInputBits, type TerminalRef } from './reach';
 
@@ -154,7 +156,8 @@ export function terminalRefs(board: Board, kinds: ReadonlySet<string>): Terminal
         }));
       }
       const path = c.kind === 'inport' ? `${base}.y` : c.kind === 'outport' ? `${base}.a` : base;
-      return [{ ...shared, path, name }];
+      const inverted = c.kind === 'led' && ledActiveLow((c.params ?? {}) as Params);
+      return [{ ...shared, path, name, ...(inverted ? { inverted } : {}) }];
     });
 }
 
@@ -240,15 +243,22 @@ export function analysisTablesOf(board: Board, lib: ChipLibrary): OutputAnalysis
         throw new RangeError(
           `${name} reads ${cols.length} inputs; Analyze handles up to ${MAX_ANALYSIS_INPUTS}`,
         );
+      const table = buildTruthTable(compiled, cols, [outCol]);
       return {
         outputPath: outCol,
-        table: buildTruthTable(compiled, cols, [outCol]),
+        table: outRef.inverted ? litTable(table) : table,
         error: null,
       };
     } catch (e) {
       return { outputPath: outCol, table: null, error: plainError(e, name) };
     }
   });
+}
+
+/** A one-output table as its active-low LED shows it: lit where the net is 0. */
+function litTable(table: TruthTable): TruthTable {
+  const lit = { activeLow: true };
+  return { ...table, rows: table.rows.map((row) => row.map((v) => ledLitValue(v, 1, lit))) };
 }
 
 /** What a message calls one bit column of a terminal. */

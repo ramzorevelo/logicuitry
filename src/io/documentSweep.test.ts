@@ -7,11 +7,11 @@ import { isChipInstance } from '../core/model/types';
 
 // Shipped and instructor files stay at the version they were written in; each
 // must still come up through the real load path after every format bump.
-const examples = import.meta.glob('../examples/**/*.{lcirb,lcirc}', {
+const examples = import.meta.glob('../examples/**/*.{lcirb,lcirc,lcirl}', {
   eager: true,
   import: 'default',
 }) as Record<string, unknown>;
-const library = import.meta.glob('../../library/**/*.{lcirb,lcirc,json}', {
+const library = import.meta.glob('../../library/**/*.{lcirb,lcirc,lcirl,json}', {
   eager: true,
   import: 'default',
 }) as Record<string, unknown>;

@@ -29,6 +29,17 @@ const poweredAnd = (extra: Component[] = [], wires: Board['wires'] = []) =>
     wires: [wire('wv', ['v', 'p'], ['u1', 'VCC']), wire('wg', ['g', 'p'], ['u1', 'GND']), ...wires],
   });
 
+/** U1's pins wired to VCC (inputs) or to an LED each (outputs), so those gates are not spare. */
+const used = (pins: string[]) =>
+  poweredAnd(
+    pins.filter((p) => p.endsWith('Y')).map((p) => comp(`led${p}`, 'led')),
+    pins.map((p) =>
+      p.endsWith('Y')
+        ? wire(`w${p}`, ['u1', p], [`led${p}`, 'a'])
+        : wire(`w${p}`, ['v', 'p'], ['u1', p]),
+    ),
+  );
+
 describe('checks: unwired and undriven inputs', () => {
   it('lists every open input of a gate in one row, by pin name', () => {
     const b = board({ components: [comp('g1', 'and')] });
@@ -36,7 +47,7 @@ describe('checks: unwired and undriven inputs', () => {
   });
 
   it('names DIP pins by datasheet number, lowest first, in one row per chip', () => {
-    const r = rows(poweredAnd()).shown.find((x) => x.kind === 'unwired')!;
+    const r = rows(used(['1Y', '2Y', '3Y', '4Y'])).shown.find((x) => x.kind === 'unwired')!;
     expect(r.title).toBe('U1 74LS08: pins 1, 2, 4, 5, 9, 10, 12, 13 not wired');
     expect(r.detail).toBe('Reads X. A real chip drifts high.');
     expect(r.components).toEqual(['u1']);
@@ -140,13 +151,13 @@ describe('checks: unwired and undriven inputs', () => {
 });
 
 describe('checks: DIP power', () => {
-  it('names each open rail with its pin number, and keeps rails out of the input row', () => {
+  it('names each open rail with its pin number, and keeps rails out of the spare row', () => {
     const b = board({ components: [chipComp('u2', '74LS32', 'U2')] });
     const r = rows(b).shown;
     expect(r.find((x) => x.kind === 'power')!.title).toBe(
       'U2 74LS32: GND (pin 7), VCC (pin 14) not wired',
     );
-    expect(r.find((x) => x.kind === 'unwired')!.title).not.toMatch(/\b(7|14)\b/);
+    expect(r.find((x) => x.kind === 'spare')!.title).toBe('U2 74LS32: gates 1, 2, 3, 4 spare');
   });
 
   it('is quiet once both rails are driven', () => {
@@ -203,6 +214,20 @@ describe('checks: nets that can float', () => {
     expect(rows(b).shown.find((x) => x.kind === 'float')!.title).toBe('Net at b pin y can float');
   });
 
+  it("groups one part's floating nets into one row by its pins, keeping a key per net", () => {
+    const b = board({
+      components: [chipComp('u1', '74LS374', 'U1'), comp('n1', 'not'), comp('n2', 'not')],
+      wires: [wire('w1', ['u1', '1Q'], ['n1', 'a']), wire('w2', ['u1', '2Q'], ['n2', 'a'])],
+    });
+    const r = rows(b).shown.filter((x) => x.kind === 'float');
+    expect(r.map((x) => x.title)).toEqual(['U1 74LS374: pins 2, 5 can float']);
+    expect(r[0]!.keys.sort()).toEqual(['float:n1.a', 'float:n2.a']);
+    expect(r[0]!.wires.sort()).toEqual(['w1', 'w2']);
+    const one = rows(b, ['float:n2.a']);
+    expect(one.shown.find((x) => x.kind === 'float')!.title).toBe('Net at n1 pin a can float');
+    expect(one.hidden.map((x) => x.title)).toEqual(['Net at n2 pin a can float']);
+  });
+
   it("treats a '374 output as three-state and an '08 output as plain", () => {
     const ls374 = board({
       components: [chipComp('u1', '74LS374', 'U1'), comp('n', 'not')],
@@ -214,9 +239,63 @@ describe('checks: nets that can float', () => {
   });
 });
 
+describe('checks: spare sections', () => {
+  it('turns untouched gates into one info row, with no open-input or unused rows', () => {
+    const r = rows(used(['1A', '1B', '1Y'])).shown;
+    expect(r.map((x) => x.title)).toEqual(['U1 74LS08: gates 2, 3, 4 spare']);
+    expect(r[0]!.severity).toBe('info');
+    expect(r[0]!.detail).toBe('Inputs open. On a breadboard tie them to VCC or GND.');
+    expect(r[0]!.keys.sort()).toEqual(
+      ['2A', '2B', '3A', '3B', '4A', '4B'].map((p) => `spare:u1.${p}`),
+    );
+  });
+
+  it('keeps the warning on a used gate with an open input', () => {
+    expect(titles(used(['1A', '1Y']))).toEqual([
+      'U1 74LS08: pin 2 not wired',
+      'U1 74LS08: gates 2, 3, 4 spare',
+    ]);
+  });
+
+  it('does not count a gate whose output a probe watches as spare', () => {
+    const b = poweredAnd(
+      [comp('p', 'probe', undefined, 'P')],
+      [wire('wp', ['u1', '4Y'], ['p', 'a'])],
+    );
+    expect(titles(b)).toEqual(
+      expect.arrayContaining([
+        'U1 74LS08: pins 12, 13 not wired',
+        'U1 74LS08: pin 11 drives nothing',
+        'U1 74LS08: gates 1, 2, 3 spare',
+      ]),
+    );
+  });
+
+  it('calls a spare flip-flop a section, and never a single-section part', () => {
+    const b = board({
+      components: [chipComp('u1', '74LS74', 'U1'), chipComp('u2', '74LS138', 'U2')],
+    });
+    const t = titles(b);
+    expect(t).toContain('U1 74LS74: sections 1, 2 spare');
+    expect(t).toContain('U2 74LS138: pins 1, 2, 3, 4, 5, 6 not wired');
+    expect(t.some((x) => x.startsWith('U2') && x.includes('spare'))).toBe(false);
+  });
+
+  it('shows the normal rows once a hidden spare gate gets wired', () => {
+    const hidden = ['2A', '2B', '3A', '3B', '4A', '4B'].map((p) => `spare:u1.${p}`);
+    expect(titles(used(['1A', '1B', '1Y']), hidden)).toEqual([]);
+    expect(titles(used(['1A', '1B', '1Y', '2A']), hidden)).toEqual([
+      'U1 74LS08: pin 5 not wired',
+      'U1 74LS08: pin 6 drives nothing',
+    ]);
+  });
+});
+
 describe('checks: unused outputs', () => {
   it('reports an output nobody reads as info, one row per part', () => {
-    const r = rows(poweredAnd()).shown.find((x) => x.kind === 'unused')!;
+    const r = rows(used(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'])).shown.find(
+      (x) => x.kind === 'unused',
+    )!;
     expect(r.severity).toBe('info');
     expect(r.title).toBe('U1 74LS08: pins 3, 6, 8, 11 drive nothing');
   });
@@ -227,6 +306,15 @@ describe('checks: unused outputs', () => {
       wires: [wire('w', ['s', 'y'], ['p', 'a'])],
     });
     expect(keysOf(b)).toContain('unused:s.y');
+  });
+
+  it('treats a pattern as an ordinary part: open clk warns, unread output is info', () => {
+    const b = board({ components: [comp('p', 'pattern', { clocked: true })] });
+    const shown = rows(b).shown;
+    expect(shown.find((r) => r.kind === 'unwired')?.title).toBe('p: pin clk not wired');
+    expect(shown.find((r) => r.kind === 'unused')?.severity).toBe('info');
+    const timeMode = board({ components: [comp('p', 'pattern')] });
+    expect(keysOf(timeMode)).toEqual(['unused:p.y']);
   });
 
   it('skips rails, pulls, splitters and labels', () => {

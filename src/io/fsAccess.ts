@@ -26,6 +26,7 @@ export const loadChipLibrary: typeof browser.loadChipLibrary = (root) => fs().lo
 export const ensurePermission: typeof browser.ensurePermission = (handle, request) =>
   fs().ensurePermission(handle, request);
 export const listFiles: typeof browser.listFiles = (root, sub) => fs().listFiles(root, sub);
+export const listDocFiles: typeof browser.listDocFiles = (dir, sub) => fs().listDocFiles(dir, sub);
 export const readDoc: typeof browser.readDoc = (root, sub, name) => fs().readDoc(root, sub, name);
 export const writeDoc: typeof browser.writeDoc = (root, sub, name, doc) =>
   fs().writeDoc(root, sub, name, doc);

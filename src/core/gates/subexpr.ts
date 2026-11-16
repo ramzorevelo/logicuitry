@@ -148,7 +148,8 @@ export function gateExpressions(board: Board, lib: ChipLibrary): SubExpressions 
   for (const ref of terminalRefs(board, OUTPUT_TERMINAL_KINDS)) {
     const net = netOr(() => resolveOutputNet(compiled, ref.path));
     const e = net === undefined ? null : exprOf(net);
-    if (e) outputs.set(ref.path, e);
+    // Kept literal, no double bar cancelled: an active-low LED's inversion is part of what was built.
+    if (e) outputs.set(ref.path, ref.inverted ? not(e) : e);
   }
   return { pins, outputs };
 }

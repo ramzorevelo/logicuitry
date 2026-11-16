@@ -56,6 +56,45 @@ describe('analysisTablesOf label dedup (Task 4)', () => {
   });
 });
 
+describe('analysisTablesOf on an active-low LED', () => {
+  // A and B into a NAND, read by a plain probe and an active-low LED on the same net.
+  const nandBoard = () =>
+    board({
+      components: [
+        comp('a', 'toggle', undefined, 'A'),
+        comp('b', 'toggle', undefined, 'B'),
+        comp('g', 'nand'),
+        comp('p', 'probe', undefined, 'Y_N'),
+        comp('l', 'led', { activeLow: true }, 'Y'),
+      ],
+      wires: [
+        wire('w1', ['a', 'y'], ['g', 'a']),
+        wire('w2', ['b', 'y'], ['g', 'b']),
+        wire('w3', ['g', 'y'], ['p', 'a']),
+        wire('w4', ['g', 'y'], ['l', 'a']),
+      ],
+    });
+  const column = (t: { rows: readonly (readonly { v: number }[])[] }) => t.rows.map((r) => r[0]!.v);
+
+  it('gives the lit state, the complement of its net, beside the net it shares', () => {
+    const [probe, led] = analysisTablesOf(nandBoard(), noLib);
+    expect(probe!.outputPath).toBe('main/Y_N');
+    expect(column(probe!.table!)).toEqual([1, 1, 1, 0]);
+    expect(led!.outputPath).toBe('main/Y');
+    expect(column(led!.table!)).toEqual([0, 0, 0, 1]);
+  });
+
+  it('leaves the whole-board check on the raw net', () => {
+    const table = truthTableOf(nandBoard(), noLib);
+    expect(table.rows.map((r) => r.map((v) => v.v))).toEqual([
+      [1, 1],
+      [1, 1],
+      [1, 1],
+      [0, 0],
+    ]);
+  });
+});
+
 describe('truthTableOf stays per-terminal (no net dedup)', () => {
   it('two In labels sharing a net still each get their own column (whole-board defense-in-depth)', () => {
     const b = board({

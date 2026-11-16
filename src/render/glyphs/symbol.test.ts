@@ -18,10 +18,13 @@ import {
   type SymbolGeometry,
 } from './symbol';
 import './io'; // registers probe/busdisplay/etc. geometry builders as a side effect
+import './power';
+import './timer';
 import './chip'; // registers mux/demux/decoder/encoder/dff/dlatch/register/chip box geometry
 import type { ChipDef, ChipInstance, Component } from '../../core/model/types';
 import type { Theme } from '../theme';
 import { makeTestTheme } from '../theme.fixture';
+import { GATE_KINDS } from './gates';
 
 const G = 8;
 
@@ -454,5 +457,37 @@ describe('captionAwareBounds', () => {
     const one = captionAwareBounds(box, 'A', theme);
     const two = captionAwareBounds(box, 'A\nB', theme);
     expect(two.h).toBeGreaterThan(one.h);
+  });
+});
+
+describe('every glyph on the grid', () => {
+  const KINDS = [
+    ...GATE_KINDS,
+    ...['busdisplay', 'button', 'clock', 'constant', 'gnd', 'inport', 'led', 'ledmatrix'],
+    ...['netlabel', 'outport', 'probe', 'pulldown', 'pullup', 'sevenseg', 'spdt', 'timer555'],
+    ...['toggle', 'vcc', 'dff', 'dlatch', 'register', 'srlatch', 'counter', 'shiftreg', 'ram'],
+    ...['mux', 'demux', 'decoder', 'encoder', 'adder', 'comparator', 'parity', 'transceiver'],
+    'pattern',
+  ];
+  const PARAMS = [{}, ...[2, 3, 4, 5, 8, 16].map((width) => ({ width }))];
+  const PARAMS_GATE = [3, 4, 5].map((inputs) => ({ inputs }));
+  const PARAMS_CLOCKED = [1, 8].map((width) => ({ width, clocked: true }));
+  const PARAMS_ACTIVE_LOW = [1, 4, 32].map((width) => ({ width, activeLow: true }));
+
+  // A half-grid outline lands its pins 4 px off once the flip swaps its sides.
+  it('keeps every pin on the grid under every rotation and mirror', () => {
+    const off: string[] = [];
+    for (const kind of KINDS)
+      for (const params of [...PARAMS, ...PARAMS_GATE, ...PARAMS_CLOCKED, ...PARAMS_ACTIVE_LOW])
+        for (const rot of [0, 90, 180, 270] as const)
+          for (const mirror of [false, true]) {
+            const c = { id: 'c', kind, pos: { x: 0, y: 0 }, rot, mirror, params } as Component;
+            for (const [name, p] of symbolBounds(c, theme).pins)
+              if (p.x % G !== 0 || p.y % G !== 0)
+                off.push(
+                  `${kind} ${JSON.stringify(params)} rot ${rot}${mirror ? ' mirror' : ''} ${name}`,
+                );
+          }
+    expect(off).toEqual([]);
   });
 });

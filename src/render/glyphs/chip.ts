@@ -246,7 +246,7 @@ export function drawConstant(
 
 /** Open (stroked, surface-backed, never filled) clock wedge: base 1G on the
  *  box edge, depth 1G pointing inward. */
-function drawClockWedge(
+export function drawClockWedge(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
   edgeX: number,

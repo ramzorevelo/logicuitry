@@ -37,6 +37,27 @@ describe('gateExpressions', () => {
     expect(printExpr(out.get('main/Y')!)).toBe("(AB)' + A");
   });
 
+  it('bars an active-low LED, beside a plain one on the same net', () => {
+    const b = board({
+      components: [
+        sw('a', 'A'),
+        sw('b', 'B'),
+        comp('g1', 'nand'),
+        comp('y', 'led', undefined, 'Y'),
+        comp('lo', 'led', { activeLow: true }, 'LO'),
+      ],
+      wires: [
+        wire('w1', ['a', 'y'], ['g1', 'a']),
+        wire('w2', ['b', 'y'], ['g1', 'b']),
+        wire('w3', ['g1', 'y'], ['y', 'a']),
+        wire('w4', ['g1', 'y'], ['lo', 'a']),
+      ],
+    });
+    const out = gateExpressions(b, noLib).outputs;
+    expect(printExpr(out.get('main/Y')!)).toBe("(AB)'");
+    expect(printExpr(out.get('main/LO')!)).toBe("(AB)''");
+  });
+
   it('names an unlabelled input by its id and folds a bubble into the gate', () => {
     const b = board({
       components: [comp('s1', 'toggle'), sw('b', 'B'), comp('g', 'and', { inputBubbles: 'a' })],

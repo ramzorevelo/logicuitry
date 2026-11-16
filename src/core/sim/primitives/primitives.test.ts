@@ -4,6 +4,7 @@ import * as bv from '../../value/busValue';
 import type { EvalContext, Params, PrimitiveSpec } from './types';
 import { andGate, bufGate, norGate, orGate, xnorGate, xorGate } from './gates';
 import { dlatch, register } from './sequential';
+import { ledLitValue } from './stimulus';
 
 const s = (lit: string) => bv.fromString(lit);
 const show = (value: bv.BusValue, w: number) => bv.toString(value, w);
@@ -124,5 +125,19 @@ describe('active-low pin flag', () => {
   it("marks the DFF's preset and clear, and nothing else on it", () => {
     const pins = getPrimitive('dff').pins({ asyncSet: true, asyncClear: true });
     expect(pins.filter((p) => p.activeLow).map((p) => p.name)).toEqual(['pre', 'clr']);
+  });
+});
+
+describe('ledLitValue', () => {
+  it('passes the pin through on a plain LED', () => {
+    expect(show(ledLitValue(s('01XZ'), 4, {}), 4)).toBe('01XZ');
+  });
+
+  it('lights an active-low LED on each driven 0 and keeps X and Z', () => {
+    expect(show(ledLitValue(s('01XZ'), 4, { activeLow: true }), 4)).toBe('10XZ');
+  });
+
+  it('inverts every lane of a 32-bit bank', () => {
+    expect(ledLitValue(bv.known(0, 32), 32, { activeLow: true })).toEqual(bv.known(0xffffffff, 32));
   });
 });

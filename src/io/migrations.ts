@@ -5,8 +5,8 @@ export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
   'lcir.chip': 8,
-  'lcir.board': 12,
-  'lcir.lesson': 1,
+  'lcir.board': 15,
+  'lcir.lesson': 3,
 };
 
 type Migration = (doc: Record<string, unknown>) => Record<string, unknown>;
@@ -126,6 +126,86 @@ registerMigration('lcir.board', 10, (doc) => ({ ...doc, runSpeed: 25_000 }));
 // Board v11 -> v12, chip v7 -> v8: optional silenced checks, absent before.
 registerMigration('lcir.board', 11, (doc) => doc);
 registerMigration('lcir.chip', 7, (doc) => doc);
+
+// Board v12 -> v13: an optional input sequence, absent before.
+registerMigration('lcir.board', 12, (doc) => doc);
+
+// Lesson v1 -> v2: a step's free-form `type` and `params` become a kind and an
+// ordered action list. `configure` and `highlight` are narrate steps with
+// actions now; a type this app never knew is kept as a widget, never dropped.
+const V1_NARRATED = new Set(['narrate', 'configure', 'highlight']);
+const DOCK_TABS = new Set(['waveform', 'analyze', 'checks', 'sequence']);
+
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+function lessonActionsV1(type: string, params: Record<string, unknown>): unknown[] {
+  const actions: unknown[] = [];
+  const row = params['row'];
+  if (typeof row === 'number' && Number.isInteger(row) && row >= 0)
+    actions.push({ kind: 'row', index: row, when: type === 'predict' ? 'reveal' : 'open' });
+  const power = params['power'];
+  if (typeof power === 'boolean') actions.push({ kind: 'power', on: power });
+  const timing = params['timing'];
+  if (timing === 'ideal' || timing === 'datasheet') actions.push({ kind: 'timing', mode: timing });
+  const highlight = params['highlight'] ?? params['components'];
+  if (isStringArray(highlight)) actions.push({ kind: 'highlight', components: highlight });
+  const tab = params['tab'];
+  if (typeof tab === 'string' && DOCK_TABS.has(tab)) actions.push({ kind: 'tab', tab });
+  return actions;
+}
+
+/** A non-object step passes through untouched, so the schema rejects it by name. */
+function lessonStepV1(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const step = raw as Record<string, unknown>;
+  const type = typeof step['type'] === 'string' ? step['type'] : 'unknown';
+  const params = (step['params'] ?? {}) as Record<string, unknown>;
+  const prose = typeof step['prose'] === 'string' ? step['prose'] : '';
+  if (type !== 'predict' && !V1_NARRATED.has(type)) {
+    const id = type === 'widget' ? params['id'] : type;
+    return {
+      kind: 'widget',
+      prose,
+      actions: [],
+      widget: { id: typeof id === 'string' && id ? id : 'unknown', params },
+    };
+  }
+  const out: Record<string, unknown> = {
+    kind: type === 'predict' ? 'predict' : 'narrate',
+    prose,
+    actions: lessonActionsV1(type, params),
+  };
+  const choices = params['choices'];
+  if (isStringArray(choices)) out['choices'] = choices.map((text) => ({ text }));
+  const answer = params['answer'];
+  if (typeof answer === 'string') out['answer'] = answer;
+  return out;
+}
+
+registerMigration('lcir.lesson', 1, (doc) => {
+  const steps = Array.isArray(doc['steps']) ? doc['steps'] : [];
+  const first = (steps[0] as Record<string, unknown> | undefined)?.['params'] as
+    | Record<string, unknown>
+    | undefined;
+  const board = first?.['board'];
+  return {
+    ...doc,
+    steps: steps.map(lessonStepV1),
+    ...(typeof board === 'string' && board ? { board } : {}),
+  };
+});
+
+// Lesson v2 -> v3: optional notes, headline, narration placement, annotations
+// and revealFreely per step, absent before.
+registerMigration('lcir.lesson', 2, (doc) => doc);
+
+// Board v13 -> v14: an LED may carry `activeLow`, absent before. A bump, not a
+// silent param, so an older app refuses the file instead of lighting it wrong.
+registerMigration('lcir.board', 13, (doc) => doc);
+
+// Board v14 -> v15: an optional challenge, absent before.
+registerMigration('lcir.board', 14, (doc) => doc);
 
 // Files written under an earlier name carry an older format prefix: `logiclab.`
 // from the original name, `lcir.` from the Logic Design Workbench one. Rewriting

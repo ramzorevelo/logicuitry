@@ -1,0 +1,440 @@
+/* Lesson editor. The step list stands where the palette was and the inspector
+   where the runner was; both sized in rem like the runner. */
+.lesson-steps {
+  flex: none;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 17rem;
+  min-height: 0;
+  background: var(--surface);
+  border-right: var(--chrome-border);
+  color: var(--ink);
+  font: var(--text-body) / 1.4 var(--font-ui);
+}
+
+.lesson-steps__head {
+  display: grid;
+  gap: var(--space-unit);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 2.5);
+  border-bottom: var(--chrome-border);
+}
+
+.lesson-steps__title-row {
+  display: flex;
+  gap: var(--space-unit);
+  align-items: center;
+}
+
+.lesson-steps__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.lesson-steps__sub {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 1.5);
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.lesson-steps__sub b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.lesson-steps__dirty {
+  color: var(--warn);
+}
+
+.lesson-steps__list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0;
+  padding: var(--space-unit);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.lesson-steps__row {
+  display: grid;
+  grid-template-columns: 0.9rem 1.4rem minmax(0, 1fr);
+  align-items: start;
+  gap: 2px calc(var(--space-unit) * 1.5);
+  padding: calc(var(--space-unit) * 1.25) calc(var(--space-unit) * 1.5);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.lesson-steps__row:hover {
+  background: var(--paper);
+}
+
+.lesson-steps__row--sel,
+.lesson-steps__row--sel:hover {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+}
+
+.lesson-steps__row--drop-before {
+  box-shadow: 0 -2px 0 var(--accent);
+}
+
+.lesson-steps__row--drop-after {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.lesson-steps__grip {
+  color: var(--muted);
+  cursor: grab;
+  font-size: var(--text-secondary);
+  user-select: none;
+}
+
+.lesson-steps__num {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  text-align: right;
+}
+
+.lesson-steps__body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.lesson-steps__line,
+.lesson-steps__sum {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-steps__line--empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.lesson-steps__tag {
+  margin-right: calc(var(--space-unit) * 1.5);
+  color: var(--accent-2);
+  font-size: 0.7em;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lesson-steps__tag--predict {
+  color: var(--accent);
+}
+
+.lesson-steps__sum {
+  color: var(--accent-2);
+  font-size: var(--text-secondary);
+}
+
+.lesson-steps__warn,
+.lesson-act__warn {
+  color: var(--warn);
+  font-size: var(--text-secondary);
+}
+
+/* Under the text, and only on the selected row, so a step's first line keeps
+   the list's full width. */
+.lesson-steps__ctl {
+  display: none;
+  grid-column: 3;
+  gap: 2px;
+}
+
+.lesson-steps__row--sel .lesson-steps__ctl {
+  display: flex;
+}
+
+/* The board is locked; its toolbar is inert and should look it. */
+.circuit-editor--lesson-edit .circuit-toolbar {
+  opacity: 0.45;
+}
+
+.lesson-steps__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-unit);
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border-top: var(--chrome-border);
+}
+
+.lesson-steps__group {
+  display: inline-flex;
+  gap: var(--space-unit);
+}
+
+.lesson-steps .tool-btn,
+.lesson-inspector .tool-btn,
+.lesson-canvas-bar .tool-btn {
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+}
+
+.lesson-steps .lesson-steps__ctl .tool-btn,
+.lesson-inspector .lesson-act__head .tool-btn,
+.lesson-inspector .lesson-choice .tool-btn,
+.lesson-steps .lesson-steps__title-row .tool-btn {
+  padding: 0 var(--space-unit);
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-2);
+}
+
+.lesson-steps input,
+.lesson-inspector input[type='text'],
+.lesson-inspector textarea,
+.lesson-inspector select {
+  padding: 2px calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.lesson-inspector {
+  width: 22rem;
+}
+
+.lesson-inspector__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-unit);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border-bottom: var(--chrome-border);
+}
+
+.lesson-inspector .lesson-inspector__play {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.lesson-inspector__body {
+  gap: calc(var(--space-unit) * 3.5);
+}
+
+.lesson-field {
+  display: grid;
+  gap: var(--space-unit);
+}
+
+.lesson-field__label {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.lesson-field__label span {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.lesson-field__hint {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.lesson-inspector textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+
+.lesson-preview {
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border: 1px dashed var(--line);
+}
+
+.lesson-seg {
+  display: inline-flex;
+}
+
+.lesson-seg .tool-btn {
+  margin-left: -1px;
+  border-radius: 0;
+}
+
+/* Pressed keeps the app's own face (accent on accent fill); only the edge is ours. */
+.lesson-steps .tool-btn[aria-pressed='true'],
+.lesson-inspector .tool-btn[aria-pressed='true'],
+.lesson-canvas-bar .tool-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
+.lesson-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.lesson-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.lesson-choice input[type='text'] {
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.lesson-act {
+  display: grid;
+  gap: calc(var(--space-unit) * 1.5);
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border: var(--chrome-border);
+  background: var(--paper);
+}
+
+.lesson-act--bad {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+}
+
+.lesson-act__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-unit);
+  font-weight: 500;
+}
+
+.lesson-act__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.lesson-act__fields select {
+  max-width: 100%;
+}
+
+.lesson-act__fix {
+  justify-self: start;
+}
+
+.lesson-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-unit);
+}
+
+.lesson-parts span {
+  padding: 0 calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+}
+
+.lesson-parts .lesson-parts__none,
+.lesson-parts__none {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+}
+
+.lesson-add {
+  position: relative;
+}
+
+.lesson-add__menu {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 2px);
+  left: 0;
+  display: grid;
+  min-width: 14rem;
+  border: var(--chrome-border);
+  background: var(--surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.lesson-add__menu button {
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2.5);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lesson-add__menu button:hover:not(:disabled) {
+  background: var(--accent-fill);
+}
+
+.lesson-add__menu button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.lesson-canvas-bar {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2.5);
+  border-bottom: var(--chrome-border);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--ink);
+  font: var(--text-secondary) / 1.4 var(--font-ui);
+}
+
+.lesson-canvas-bar--picking {
+  border-bottom-color: var(--accent);
+  background: var(--accent-fill);
+}
+
+.lesson-canvas-bar__spacer {
+  flex: 1;
+}
+
+.lesson-canvas-bar__hint {
+  color: var(--muted);
+}
+
+.lesson-canvas-bar kbd,
+.lesson-steps kbd,
+.lesson-inspector kbd {
+  margin-left: 3px;
+  padding: 0 3px;
+  border: var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: var(--chrome-radius);
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}

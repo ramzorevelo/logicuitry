@@ -31,10 +31,16 @@ import { MAX_WIDTH } from '../../core/value/busValue';
 import { clampInt, clampPopupToCanvas, parseConstantValue } from './paramEdit';
 import { useToolPopup } from './toolPopup';
 import { bounceOn } from '../../core/sim/primitives/bounce';
-import { contactToGround, spdtPosition, type Throw } from '../../core/sim/primitives/stimulus';
+import {
+  contactToGround,
+  ledActiveLow,
+  spdtPosition,
+  type Throw,
+} from '../../core/sim/primitives/stimulus';
 import { timerValues } from '../../core/sim/primitives/timer555';
 import { frameAdvance, RUN_SPEED_PRESETS, runSpeedLabel } from './runSpeed';
 import { renderPreviewParams } from './paramPreview';
+import { ledPolarityReanchor } from './ledReanchor';
 import { clampParamValue, clampWidth, isWidthCapable, paramKeysFor } from './paramSpecs';
 import { warnPulse } from '../../render/anim';
 import { liveParamsOnly, paramLiveness } from './paramLiveness';
@@ -45,6 +51,12 @@ import {
   timerFieldText,
   type TimerFieldText,
 } from './timerOverlay';
+import {
+  parsePatternFields,
+  patternFieldText,
+  type PatternFieldText,
+  type PatternTextField,
+} from './patternOverlay';
 import {
   NOTICE_LINGER_MS,
   NoticePolicy,
@@ -64,6 +76,7 @@ import {
   type PinTarget,
 } from './pinTargets';
 import { groupNameBox, groupRects, renderBoard } from './editorScene';
+import { circuitDrawnBounds, fitViewport } from './fitView';
 import { groupContaining, groupHandleAt, groupMemberIds } from './groupHit';
 import { useCompact, useLandscape } from '../compact';
 import { useBackLayer } from '../backStack';
@@ -72,14 +85,18 @@ import { useCoarsePointer } from '../pointerKind';
 import { SelectionActionBar } from './SelectionActionBar';
 import { LONG_PRESS_MS, initialGestureState, reduceGesture, type Intent } from './touchGestures';
 import { WaveformPanel } from './WaveformPanel';
+import { ChallengePill, ViewOnlyChallenge, useLessonOpen } from './ChallengePanel';
+import { ChallengeDialog } from './ChallengeDialog';
+import { useChallengeStore } from './challengeStore';
+import { challengeMenuItems } from './challengeMenu';
 import { buildStaOverlay } from './staOverlay';
 import { activeChecks, checksTabShown, revealViewport } from './checksView';
 import type { RoutablePin } from './autoRoute';
+import { routeInBackground, type BackgroundRoute } from './routeInBackground';
 import { StaCard } from './StaCard';
 import {
   buildLocalGeometry,
   resolveComponentPins,
-  captionAwareBounds,
   oneLine,
   symbolBounds,
   worldToLocal,
@@ -183,6 +200,8 @@ import { SHIFTREG_DEFAULT_WIDTH } from '../../core/sim/primitives/shiftreg';
 import { busLabelHitPoints } from './busBadge';
 import { useContributeMenus, useMenuCommand } from '../menu/MenuProvider';
 import type { Menu } from '../menu/menuModel';
+import { CIRCUIT_COMMANDS } from '../menu/circuitCommands';
+import { GATE_STEP_TIP, SETTLE_TIP, SETTLED_TEXT } from './gateStep';
 import { SHORTCUTS, historyKey } from '../menu/shortcuts';
 import { getPrimitive, hasPrimitive } from '../../core/sim/primitives/registry';
 import { serializePinView, type PinViewState } from '../../core/sim/primitives/busPins';
@@ -232,6 +251,13 @@ import type { Expr } from '../../core/boolean/expr';
 import { PaletteRail } from './PaletteRail';
 import { ToolIcon, type IconName } from '../components/ToolIcon';
 import { modalKeysHeld } from '../modalKeys';
+import { LessonPanel } from '../lesson/LessonPanel';
+import { useLessonStore } from '../lesson/lessonStore';
+import { handleLessonKey } from '../lesson/lessonKeys';
+import { LessonCanvasBar, LessonInspector, LessonStepList } from '../lesson/LessonEditor';
+import { useLessonEditorStore } from '../lesson/lessonEditorStore';
+import { handleLessonEditorKey } from '../lesson/lessonEditorKeys';
+import { lockMenusForLessonEditor } from '../lesson/lessonLock';
 
 interface DragState {
   ids: Set<string>;
@@ -560,6 +586,8 @@ export function CircuitWorkbench() {
   const paramShakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [tidying, setTidying] = useState<BackgroundRoute | null>(null);
+  const tidyingRef = useRef<BackgroundRoute | null>(null);
 
   const [packaging, setPackaging] = useState(false);
   const [building, setBuilding] = useState<{ expression?: string } | null>(null);
@@ -587,6 +615,17 @@ export function CircuitWorkbench() {
     flash?: boolean;
   } | null>(null);
   const clockEditBoxRef = useRef<HTMLDivElement | null>(null);
+  const [patternEdit, setPatternEdit] = useState<
+    | (PatternFieldText & {
+        id: string;
+        screen: Vec2;
+        anchor: PopupAnchor;
+        name: string;
+        flash?: PatternTextField | 'name' | undefined;
+      })
+    | null
+  >(null);
+  const patternEditBoxRef = useRef<HTMLDivElement | null>(null);
   // Group or wire colour overlay. Picks preview on the canvas and commit
   // together, so the whole visit is one undo step.
   const [styleEdit, setStyleEdit] = useState<
@@ -639,6 +678,7 @@ export function CircuitWorkbench() {
     outputEnable?: boolean;
     bounce?: boolean;
     toGround?: boolean;
+    activeLow?: boolean;
     position?: Throw;
     /** 555: R and C as typed, so a half-typed value survives a re-render. */
     timer?: TimerFieldText;
@@ -707,6 +747,21 @@ export function CircuitWorkbench() {
   } | null>(null);
   const viewOnlyRef = useRef(viewOnly);
   viewOnlyRef.current = viewOnly;
+  // The lesson editor locks the board like view-only, and also refuses driving it.
+  const editingLesson = useLessonEditorStore((s) => s.draft !== null && !s.playing);
+  const lessonOpen = useLessonOpen();
+  const challengeChecking = useChallengeStore((s) => s.checking !== null);
+  const challengeEditor = useChallengeStore((s) => s.editor);
+  const lessonLockRef = useRef(editingLesson);
+  lessonLockRef.current = editingLesson;
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (toolbarRef.current) toolbarRef.current.inert = editingLesson;
+    if (!editingLesson) return;
+    // Both have their own layout and keys, which the editor's panes and lock live outside of.
+    setViewOnly(false);
+    if (useCircuitStore.getState().mode === 'bubble') useCircuitStore.getState().exitBubbleMode();
+  }, [editingLesson]);
   // Touch classification (tap / pan / long press / pinch) lives in a pure
   // reducer so it can be tested; this component keeps only the anchor the
   // pinch zooms about.
@@ -739,6 +794,10 @@ export function CircuitWorkbench() {
   // off rev, which every simulation mutation bumps.
   const canStep = useMemo(
     () => powered && !running && store.getState().canStep(),
+    [powered, running, rev, store],
+  );
+  const canSettle = useMemo(
+    () => powered && !running && store.getState().canSettle(),
     [powered, running, rev, store],
   );
   // --- Palette width --------------------------------------------------------
@@ -818,6 +877,10 @@ export function CircuitWorkbench() {
       const file = await pickDocumentFile(boardsDir ?? undefined);
       if (!file) return;
       const doc = await readDocumentFile(file);
+      if (doc.kind === 'lesson') {
+        useCircuitStore.setState({ error: 'import: that file is a lesson, not a circuit' });
+        return;
+      }
       const circuit: Circuit = doc.kind === 'board' ? doc.board : doc.def;
       const ids = new Set([
         ...circuit.components.map((c) => c.id),
@@ -879,6 +942,7 @@ export function CircuitWorkbench() {
       if (noticeTimerRef.current !== null) clearTimeout(noticeTimerRef.current);
       if (paramShakeTimerRef.current !== null) clearTimeout(paramShakeTimerRef.current);
       if (blockedRafRef.current !== null) cancelAnimationFrame(blockedRafRef.current);
+      tidyingRef.current?.cancel();
     },
     [],
   );
@@ -891,9 +955,22 @@ export function CircuitWorkbench() {
   const bubbleFocus = useCircuitStore((s) => s.bubbleFocus);
   const bubblePreview = useCircuitStore((s) => s.bubblePreview);
   const bubblePairMode = useCircuitStore((s) => s.bubblePairMode);
+  const lessonHighlight = useCircuitStore((s) => s.lessonHighlight);
   const activeTab: Tab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]!;
   const prefix = activeTab.kind === 'board' ? 'main/' : activeTab.prefix;
-  const buildBlockReason = buildBlockedReason({ tab: activeTab.kind, viewOnly, mode, powered });
+  // A run's readout carries its own t; the absolute sim time beside it would be a second one.
+  const [gateStatus, gateRunShown] = useMemo(() => {
+    if (!powered || running) return [null, false];
+    const st = store.getState();
+    return [st.gateStatus(prefix), st.gateOverlay(prefix) !== undefined];
+  }, [powered, running, rev, store, prefix]);
+  const buildBlockReason = buildBlockedReason({
+    tab: activeTab.kind,
+    viewOnly,
+    lessonEdit: editingLesson,
+    mode,
+    powered,
+  });
   const buildBlocked = buildBlockReason ? blockedText(buildBlockReason) : undefined;
   // The output a build just made, so Analyze opens on it rather than on whatever came first.
   const [focusOutputPath, setFocusOutputPath] = useState<string | undefined>(undefined);
@@ -956,6 +1033,14 @@ export function CircuitWorkbench() {
     setAnalyzeOpen(true);
     drawerControl.setOpen(true);
   };
+  const tryOpenAnalyzeRef = useRef(tryOpenAnalyze);
+  tryOpenAnalyzeRef.current = tryOpenAnalyze;
+  const lessonWantsAnalyze = useLessonStore((s) => s.analyzePending);
+  useEffect(() => {
+    if (!lessonWantsAnalyze) return;
+    useLessonStore.getState().analyzeServed();
+    tryOpenAnalyzeRef.current();
+  }, [lessonWantsAnalyze]);
 
   // Wires on the hovered waveform track's net (panel -> schematic highlight).
   const trackHighlightWires = (): Set<string> | undefined => {
@@ -1131,6 +1216,7 @@ export function CircuitWorkbench() {
     const bends = wireBendsRef.current;
     const wireTip = hoverPin ?? bends[bends.length - 1];
     const tipBends = hoverPin ? bends : bends.slice(0, -1);
+    const gate = st.gateOverlay(prefix);
     try {
       const glyphsPending = renderBoard(ctx, theme, {
         board,
@@ -1139,7 +1225,8 @@ export function CircuitWorkbench() {
         viewport: viewportRef.current,
         selection: st.selection,
         lifted: liftedRef.current !== null,
-        changed: st.changedComponentIds(prefix),
+        gateRing: gate?.wires,
+        gatePending: gate?.parts,
         stale: st.staleInstances,
         pinSignal: (id, pin) => st.pinSignal(id, pin, prefix),
         highlightWires: combinedHighlightWires(),
@@ -1155,6 +1242,7 @@ export function CircuitWorkbench() {
             ? new Set(paramEdit.ids)
             : undefined,
         peerLabels: netLabelPeers()?.comps,
+        lessonHighlight: activeTab.kind === 'board' ? st.lessonHighlight : undefined,
         pinRawValue: (id, pin) => st.pinRawValue(id, pin, prefix),
         throwOf: (id) => st.spdtThrow(id, prefix),
         heldOf: (id) => st.buttonHeld(id, prefix),
@@ -1306,6 +1394,7 @@ export function CircuitWorkbench() {
     // Check markers show only while the Checks tab is up.
     waveformOpen,
     dockTab,
+    lessonHighlight,
   ]);
 
   // A Checks row click: pan what it points at into view, zoom kept.
@@ -1467,48 +1556,23 @@ export function CircuitWorkbench() {
     // A fit frames the dock height of this moment; a rotation's resize arriving after it must not
     // shift the fitted view again.
     if (wavePanelRef.current) dockHeightRef.current = wavePanelRef.current.offsetHeight;
-    const circuit = st.activeCircuit();
-    if (circuit.components.length === 0) {
+    const bounds = circuitDrawnBounds(st.activeCircuit(), st.chipLib, theme);
+    if (!bounds) {
       setViewport(DEFAULT_VIEW);
       return;
     }
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const c of circuit.components) {
-      const def = c.defId ? st.chipLib.get(c.defId) : undefined;
-      // Labels are drawn outside the symbol box, so fitting the boxes alone
-      // pushed the outermost captions off the edge of the view.
-      const b = captionAwareBounds(symbolBounds(c, theme, def).bounds, c.label, theme);
-      minX = Math.min(minX, b.x);
-      minY = Math.min(minY, b.y);
-      maxX = Math.max(maxX, b.x + b.w);
-      maxY = Math.max(maxY, b.y + b.h);
-    }
-    // A wire can run past every part, as a bus or a loop-back does.
-    const take = (p: Vec2) => {
-      minX = Math.min(minX, p.x);
-      minY = Math.min(minY, p.y);
-      maxX = Math.max(maxX, p.x);
-      maxY = Math.max(maxY, p.y);
-    };
-    for (const j of circuit.junctions) take(j.pos);
-    for (const w of circuit.wires) {
-      w.points.forEach(take);
-      for (const e of [w.a, w.b]) if (e.kind === 'free' || e.kind === 'tap') take(e.pos);
-    }
-    const margin = 2 * theme.gridSchematic;
-    const w = maxX - minX + 2 * margin;
-    const h = maxY - minY + 2 * margin;
     const cw = canvas.clientWidth || canvas.width;
     const ch = canvas.clientHeight || canvas.height;
-    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(cw / w, ch / h, DEFAULT_ZOOM * 2)));
-    setViewport({
-      panX: minX - margin - (cw / zoom - w) / 2,
-      panY: minY - margin - (ch / zoom - h) / 2,
-      zoom,
-    });
+    setViewport(
+      fitViewport(
+        bounds,
+        cw,
+        ch,
+        2 * theme.gridSchematic,
+        MIN_ZOOM,
+        Math.min(MAX_ZOOM, DEFAULT_ZOOM * 2),
+      ),
+    );
   };
 
   useEffect(() => {
@@ -1616,6 +1680,17 @@ export function CircuitWorkbench() {
     fitRef.current();
   }, [fitRequest]);
 
+  // The lesson's panels take the canvas's edges while the camera keeps its top-left, which
+  // pushed a fitted board's right side out of view.
+  const runnerOpen = useLessonStore((s) => s.lesson !== null);
+  const lessonChrome = runnerOpen ? 'runner' : editingLesson ? 'editor' : null;
+  const lastLessonChrome = useRef(lessonChrome);
+  useEffect(() => {
+    if (lastLessonChrome.current === lessonChrome) return;
+    lastLessonChrome.current = lessonChrome;
+    if (lessonChrome) fitRef.current();
+  }, [lessonChrome]);
+
   const updateGhostPose = () => {
     const cur = ghostRef.current.current?.proposal;
     if (!cur) return;
@@ -1628,12 +1703,23 @@ export function CircuitWorkbench() {
     const onKey = (e: KeyboardEvent) => {
       // A dialog is up: it owns the keyboard, buttons and all.
       if (modalKeysHeld()) return;
+      if (handleLessonKey(e)) return;
+      if (handleLessonEditorKey(e)) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (keyBelongsElsewhere(e)) return;
       const s = store.getState();
       s.clearTransientError();
+      // AltGr arrives as Ctrl+Alt, and is how `[` and `]` are typed on many layouts.
+      const plainOrAltGr = !e.metaKey && (!e.ctrlKey || e.altKey);
+      if (plainOrAltGr && (e.key === ']' || e.key === '[') && s.mode !== 'bubble') {
+        if (s.powered && s.board.sequence) {
+          e.preventDefault();
+          s.stepSequence(e.key === ']' ? 1 : -1);
+        }
+        return;
+      }
       // View-only: same strict top-of-handler delegation bubble mode uses. Only
-      // the three keys that drive the board rather than change it survive.
+      // the keys that drive the board rather than change it survive.
       if (viewOnlyRef.current) {
         if (e.key === 'Home') {
           e.preventDefault();
@@ -1642,7 +1728,7 @@ export function CircuitWorkbench() {
           e.preventDefault();
           s.power();
         } else if (e.key === '.') {
-          s.step();
+          s.gateStep();
         }
         return;
       }
@@ -1664,7 +1750,7 @@ export function CircuitWorkbench() {
         e.preventDefault();
         s.power();
       } else if (e.key === '.') {
-        s.step();
+        s.gateStep();
         return;
       }
       // Keys act on the hovered item when one is under the cursor, else the
@@ -2066,7 +2152,11 @@ export function CircuitWorkbench() {
     }
     hapticRef.current();
     if (!noticePolicyRef.current.shouldAnnounce(reason, Date.now())) return;
-    setNotice(blockedText(reason));
+    announce(blockedText(reason));
+  };
+
+  const announce = (text: string) => {
+    setNotice(text);
     if (noticeTimerRef.current !== null) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => {
       setNotice(null);
@@ -3585,6 +3675,7 @@ export function CircuitWorkbench() {
   };
 
   const tidyWiring = (sel: Set<string>) => {
+    if (tidyingRef.current) return;
     const theme = themeRef.current!;
     const st = store.getState();
     const components = st.activeCircuit().components.map((c) => {
@@ -3598,11 +3689,52 @@ export function CircuitWorkbench() {
       }
       return { id: c.id, bounds, pins: routable };
     });
-    st.tidyWiring({
+    const basis = st.tidyBasis();
+    const run = routeInBackground({
       components,
+      wires: basis.wires,
+      junctions: basis.junctions,
       grid: theme.gridSchematic,
       ...(sel.size > 0 ? { only: sel } : {}),
     });
+    tidyingRef.current = run;
+    setTidying(run);
+    const settle = () => {
+      if (tidyingRef.current !== run) return;
+      tidyingRef.current = null;
+      setTidying(null);
+    };
+    const editLocked = () => {
+      const lesson = useLessonEditorStore.getState();
+      return (
+        viewOnlyRef.current ||
+        store.getState().mode === 'bubble' ||
+        (lesson.draft !== null && !lesson.playing)
+      );
+    };
+    const lockedAtStart = editLocked();
+    run.result.then(
+      (result) => {
+        if (tidyingRef.current !== run) return;
+        settle();
+        if (!result) return;
+        const outcome =
+          !lockedAtStart && editLocked() ? 'stale' : store.getState().applyTidy(basis, result);
+        if (outcome === 'stale') announce('Board changed, Tidy wiring cancelled.');
+        // Rerouted wires get new ids, so an open wire-colour popup would edit nothing.
+        if (outcome === 'applied') setStyleEdit(null);
+      },
+      (err: unknown) => {
+        settle();
+        throw err;
+      },
+    );
+  };
+
+  const cancelTidy = () => {
+    tidyingRef.current?.cancel();
+    tidyingRef.current = null;
+    setTidying(null);
   };
 
   // Two-finger pinch: zoom about the midpoint and pan with it, the touch
@@ -3633,7 +3765,7 @@ export function CircuitWorkbench() {
   // Long press = the precise/alternate variant of a tap. Its one job today is
   // the parameter overlay, which the mouse reaches by double-clicking.
   const onLongPress = (clientX: number, clientY: number) => {
-    if (viewOnlyRef.current || mode === 'bubble') return;
+    if (viewOnlyRef.current || lessonLockRef.current || mode === 'bubble') return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const world = screenToWorld(viewportRef.current, {
@@ -3878,8 +4010,8 @@ export function CircuitWorkbench() {
     // View-only: no editing gesture below is reachable. Driving the board is
     // not editing, so a momentary button still presses (and a switch still
     // toggles, via onCanvasClick); anything else pans.
-    if (viewOnlyRef.current) {
-      if (tryButtonPress(e)) return;
+    if (viewOnlyRef.current || lessonLockRef.current) {
+      if (!lessonLockRef.current && tryButtonPress(e)) return;
       if (e.button === 0) beginPan(e);
       return;
     }
@@ -4874,6 +5006,10 @@ export function CircuitWorkbench() {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     });
+    if (lessonLockRef.current) {
+      if (!panMovedRef.current) pickLessonPartsAt(world);
+      return;
+    }
     const c = topComponentAt(world);
     // A tap selects. View-only needs it to name what you are looking at, and
     // touch editing needs it because a bare finger drag now pans rather than
@@ -4893,6 +5029,26 @@ export function CircuitWorkbench() {
     } else if (c && c.kind === 'spdt') {
       store.getState().flipSpdt(c.id, prefix);
     }
+  };
+
+  /** Pick on board: a part, or a group's parts by its border; never a chip's insides. */
+  const pickLessonPartsAt = (world: Vec2) => {
+    const ed = useLessonEditorStore.getState();
+    if (!ed.pick) return;
+    if (activeTab.kind !== 'board') {
+      store.setState({ error: 'lesson: Highlight the chip on the board tab, not its insides' });
+      return;
+    }
+    const c = topComponentAt(world);
+    if (c) {
+      ed.togglePick([c.id]);
+      return;
+    }
+    const group = groupHandleHitAt(world);
+    if (!group) return;
+    const circuit = store.getState().activeCircuit();
+    const members = groupMemberIds(circuit, group.id, group.rect);
+    ed.togglePick(circuit.components.filter((m) => members.has(m.id)).map((m) => m.id));
   };
 
   // The button's click target is its circular cap, not the square housing
@@ -5019,7 +5175,7 @@ export function CircuitWorkbench() {
   // touch this is reached by a long press instead. One body, so the parameter
   // overlay behaves identically whichever way it was opened.
   const openParamsAt = (clientX: number, clientY: number, shift: boolean) => {
-    if (mode === 'bubble' || viewOnlyRef.current) return;
+    if (mode === 'bubble' || viewOnlyRef.current || lessonLockRef.current) return;
     const rect = canvasRef.current!.getBoundingClientRect();
     const world = screenToWorld(viewportRef.current, {
       x: clientX - rect.left,
@@ -5032,10 +5188,21 @@ export function CircuitWorkbench() {
     }
     // Parameter edits are topology-affecting board edits -- never pop up
     // while powered (the live sim would be edited out from under itself).
-    if (c.kind === 'clock' && powered) {
+    if ((c.kind === 'clock' || c.kind === 'pattern') && powered) {
       // Every field the clock overlay offers is timing, which the kernel
       // self-schedules from: retiming mid-cycle is not a live edit.
       reportBlocked('powered-param', [c.id]);
+      return;
+    }
+    if (c.kind === 'pattern') {
+      const bounds = symbolBounds(c, themeRef.current!).bounds;
+      setPatternEdit({
+        id: c.id,
+        screen: worldToScreen(viewportRef.current, { x: bounds.x, y: bounds.y + bounds.h }),
+        anchor: anchorFromBounds(bounds),
+        name: c.label ?? '',
+        ...patternFieldText((c.params ?? {}) as Params),
+      });
       return;
     }
     if (c.kind === 'clock') {
@@ -5160,6 +5327,7 @@ export function CircuitWorkbench() {
               shape: isLedShape(c.params?.['shape'])
                 ? c.params['shape']
                 : getPrefs().defaultLedShape,
+              activeLow: ledActiveLow(c.params ?? {}),
             }
           : {}),
         // A fresh display follows the same colour preference a fresh LED does,
@@ -5287,11 +5455,24 @@ export function CircuitWorkbench() {
   // or when the shared descriptor-key intersection actually contains it.
   // Rendered by BOTH layouts (the view-only branch and the editor), because a
   // refusal has to answer wherever the board is shown.
-  const blockedNotice = notice ? (
-    <div className="circuit-notice" role="status">
-      {notice}
-    </div>
-  ) : null;
+  const blockedNotice =
+    notice || tidying ? (
+      <div className="circuit-notices">
+        {tidying && (
+          <div className="circuit-busy" role="status">
+            <span>Tidying wiring...</span>
+            <button type="button" className="tool-btn" onClick={cancelTidy}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {notice && (
+          <div className="circuit-notice" role="status">
+            {notice}
+          </div>
+        )}
+      </div>
+    ) : null;
 
   const paramEditFieldVisible = (pe: NonNullable<typeof paramEdit>, key: string): boolean =>
     !pe.batchKeys || pe.batchKeys.has(key);
@@ -5320,7 +5501,8 @@ export function CircuitWorkbench() {
       | 'parallelOut'
       | 'outputEnable'
       | 'bounce'
-      | 'toGround',
+      | 'toGround'
+      | 'activeLow',
     label: string,
   ) =>
     paramEditFieldVisible(pe, key) && (
@@ -5377,6 +5559,8 @@ export function CircuitWorkbench() {
         return pe.bounce;
       case 'toGround':
         return pe.toGround;
+      case 'activeLow':
+        return pe.activeLow;
       case 'position':
         return pe.position;
       case 'mode':
@@ -5600,6 +5784,7 @@ export function CircuitWorkbench() {
       if (paramEdit.kind === 'led') {
         if (paramEdit.color !== undefined) params['color'] = paramEdit.color;
         if (paramEdit.shape !== undefined) params['shape'] = paramEdit.shape;
+        params['activeLow'] = !!paramEdit.activeLow;
       }
     }
     const live = liveParamsOnly(paramEdit.kind, params, powered);
@@ -5608,14 +5793,18 @@ export function CircuitWorkbench() {
     // no-op write would still diff (a component with no explicit width gaining
     // `width: 1`) and drop the power the greying exists to protect.
     if (powered && Object.keys(live).length === 0 && specs.length === 0) return setParamEdit(null);
-    const ok = store.getState().setComponentParamsBatch([
-      {
-        id: paramEdit.id,
-        params: live,
-        ...(paramEdit.name !== undefined && !powered ? { label: paramEdit.name } : {}),
-      },
-      ...specs,
-    ]);
+    const theme = themeRef.current;
+    const ok = store.getState().setComponentParamsBatch(
+      [
+        {
+          id: paramEdit.id,
+          params: live,
+          ...(paramEdit.name !== undefined && !powered ? { label: paramEdit.name } : {}),
+        },
+        ...specs,
+      ],
+      theme ? (before, after) => ledPolarityReanchor(before, after, theme) : undefined,
+    );
     if (ok) setParamEdit(null);
     else flash();
   };
@@ -5687,6 +5876,20 @@ export function CircuitWorkbench() {
       setClockEdit((cur) => (cur ? { ...cur, screen: { x, y } } : cur));
     }
   }, [clockEdit?.id]);
+
+  useLayoutEffect(() => {
+    if (!patternEdit || !patternEditBoxRef.current || !canvasRef.current) return;
+    const popupRect = patternEditBoxRef.current.getBoundingClientRect();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const { x, y } = clampPopupToCanvas(
+      patternEdit.anchor,
+      { w: popupRect.width, h: popupRect.height },
+      { w: canvasRect.width, h: canvasRect.height },
+    );
+    if (x !== patternEdit.screen.x || y !== patternEdit.screen.y) {
+      setPatternEdit((cur) => (cur ? { ...cur, screen: { x, y } } : cur));
+    }
+  }, [patternEdit?.id]);
 
   useLayoutEffect(() => {
     if (!styleEdit || !styleEditBoxRef.current || !canvasRef.current) return;
@@ -5900,6 +6103,7 @@ export function CircuitWorkbench() {
           {
             id: 'tidyWiring',
             label: selection.size > 0 ? 'Tidy wiring in selection' : 'Tidy wiring',
+            disabled: tidying !== null,
             run: () => tidyWiring(sel()),
           },
         ],
@@ -5964,10 +6168,16 @@ export function CircuitWorkbench() {
           },
           {
             id: 'step',
-            label: 'Step to next event',
+            label: CIRCUIT_COMMANDS.step,
             shortcut: SHORTCUTS.step,
             disabled: !canStep,
-            run: () => st().step(),
+            run: () => st().gateStep(),
+          },
+          {
+            id: 'settle',
+            label: CIRCUIT_COMMANDS.settle,
+            disabled: !canSettle,
+            run: () => st().settle(),
           },
           {
             id: 'run-speed',
@@ -6002,6 +6212,27 @@ export function CircuitWorkbench() {
           },
         ],
       },
+      {
+        id: 'challenge',
+        items: challengeMenuItems({
+          has: board.challenge !== undefined,
+          hasBehavior: !!(board.challenge?.tests || board.challenge?.truthTable),
+          checking: challengeChecking,
+          // A chip tab has no challenge; a lesson owns the board while it is open.
+          blocked: activeTab.kind !== 'board' || lessonOpen,
+          viewOnly,
+          check: () => void useChallengeStore.getState().check(),
+          show: () => {
+            st().setDockTab('challenge');
+            st().setWaveformOpen(true);
+          },
+          edit: (isNew) => useChallengeStore.getState().openEditor(isNew),
+          remove: () => {
+            st().setChallenge('remove challenge', undefined);
+            announce('Challenge removed. Ctrl+Z restores it.');
+          },
+        }),
+      },
     ];
     // The board and library so the heal test re-runs when the wires around a
     // selected junction change without the selection itself changing. Not
@@ -6017,6 +6248,7 @@ export function CircuitWorkbench() {
     powered,
     running,
     canStep,
+    canSettle,
     timing,
     runSpeed,
     mode,
@@ -6025,8 +6257,15 @@ export function CircuitWorkbench() {
     showWireColors,
     activeTab.kind,
     buildBlocked,
+    tidying,
+    challengeChecking,
+    lessonOpen,
   ]);
-  useContributeMenus('circuit', circuitMenus);
+  const lockedMenus = useMemo(
+    () => (editingLesson ? lockMenusForLessonEditor(circuitMenus) : circuitMenus),
+    [editingLesson, circuitMenus],
+  );
+  useContributeMenus('circuit', lockedMenus);
 
   const selectedComponent =
     viewOnly && selection.size === 1
@@ -6069,6 +6308,7 @@ export function CircuitWorkbench() {
             <ToolBtn icon="fit" title={`Fit the board to the view${key('Home')}`} onClick={fitView}>
               Fit
             </ToolBtn>
+            <ChallengePill />
             {compact && examplesCmd && !examplesCmd.disabled ? (
               <ToolBtn icon="open" title="Open a bundled example board" onClick={examplesCmd.run}>
                 Examples
@@ -6096,7 +6336,9 @@ export function CircuitWorkbench() {
             {error && <div className="circuit-error">{error}</div>}
             {blockedNotice}
           </div>
+          <LessonPanel />
         </div>
+        <ViewOnlyChallenge />
         {selectedComponent && (
           <div className="circuit-inspector">
             <b>{selectedComponent.label ?? selectedComponent.id}</b>
@@ -6108,8 +6350,8 @@ export function CircuitWorkbench() {
     );
 
   return (
-    <div className="circuit-editor">
-      <div className="circuit-toolbar">
+    <div className={`circuit-editor${editingLesson ? ' circuit-editor--lesson-edit' : ''}`}>
+      <div className="circuit-toolbar" ref={toolbarRef}>
         {mode === 'bubble' && (
           <>
             <div className="tool-group">
@@ -6344,16 +6586,26 @@ export function CircuitWorkbench() {
               >
                 {running ? 'Pause ⏸' : 'Run ▸'}
               </ToolBtn>
-              <button
-                type="button"
-                className="tool-btn"
+              <ToolBtn
+                icon="step"
                 disabled={!canStep}
-                title={`Advance to the next scheduled event${key('.')}`}
-                onClick={() => store.getState().step()}
+                title={
+                  canStep || running || !powered ? `${GATE_STEP_TIP}${key('.')}` : SETTLED_TEXT
+                }
+                onClick={() => store.getState().gateStep()}
               >
-                <ToolIcon name="step" />
-                <span className="tool-btn__label">Step Δ</span>
-              </button>
+                Gate step
+              </ToolBtn>
+              <ToolBtn
+                icon="settle"
+                disabled={!canSettle}
+                title={
+                  canSettle || running || !powered ? SETTLE_TIP : 'Settled: nothing is pending'
+                }
+                onClick={() => store.getState().settle()}
+              >
+                Settle
+              </ToolBtn>
               <span
                 className="sim-status"
                 title={
@@ -6369,11 +6621,13 @@ export function CircuitWorkbench() {
                       : runBehind
                         ? 'running, behind'
                         : 'running'
-                    : oscillation
-                      ? 'oscillating: press Run'
-                      : 'settled, paused'
+                    : gateRunShown
+                      ? `${gateStatus}${oscillation ? ', oscillating' : ''}`
+                      : oscillation
+                        ? 'oscillating: press Run'
+                        : (gateStatus ?? 'settled, paused')
                   : 'off'}
-                {simTime !== null && ` · t = ${formatTimePs(simTime)}`}
+                {simTime !== null && !gateRunShown && ` · t = ${formatTimePs(simTime)}`}
               </span>
               <div className="tool-split" ref={speedMenu.anchorRef}>
                 <ToolBtn
@@ -6413,6 +6667,7 @@ export function CircuitWorkbench() {
                   </div>
                 )}
               </div>
+              <ChallengePill />
             </div>
             <div className="tool-group">
               <ToolBtn
@@ -6511,8 +6766,13 @@ export function CircuitWorkbench() {
           cancelPending();
         }}
       >
-        <PaletteRail paletteRef={paletteRef} width={paletteW} />
+        {editingLesson ? (
+          <LessonStepList />
+        ) : (
+          <PaletteRail paletteRef={paletteRef} width={paletteW} />
+        )}
         <div
+          hidden={editingLesson}
           className="circuit-palette__resize"
           title={`Drag to resize the palette; double-${press} to fit the longest name`}
           onPointerDown={(e) => {
@@ -6555,6 +6815,7 @@ export function CircuitWorkbench() {
             onClick={onCanvasClick}
             onDoubleClick={onCanvasDoubleClick}
           />
+          <LessonCanvasBar />
           {blockedNotice}
           {renaming && (
             <input
@@ -6782,6 +7043,92 @@ export function CircuitWorkbench() {
                   }
                 />
                 ns
+              </label>
+              <span className="circuit-clock-edit__hint">Enter saves · Esc cancels</span>
+            </div>
+          )}
+          {patternEdit && (
+            <div
+              ref={patternEditBoxRef}
+              className="circuit-clock-edit"
+              style={{ left: patternEdit.screen.x, top: patternEdit.screen.y }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  const parsed = parsePatternFields(patternEdit);
+                  if (!parsed.ok) {
+                    setPatternEdit({ ...patternEdit, flash: parsed.field });
+                    return;
+                  }
+                  // Name and params commit as one undo step, as on the clock.
+                  const ok = store
+                    .getState()
+                    .setComponentParams(patternEdit.id, parsed.params, patternEdit.name);
+                  if (ok) setPatternEdit(null);
+                  else setPatternEdit({ ...patternEdit, flash: 'name' });
+                } else if (e.key === 'Escape') setPatternEdit(null);
+              }}
+            >
+              {(
+                [
+                  ['name', 'name', 'text', ''],
+                  ['width', 'width', 'number', 'bits'],
+                  ['values', 'values', 'text', 'hex'],
+                  ['stepNs', 'each lasts', 'number', 'ns'],
+                ] as const
+              ).map(([field, caption, type, unit]) => (
+                <label key={field}>
+                  {caption}
+                  <input
+                    type={type}
+                    autoFocus={field === 'values'}
+                    className={
+                      [
+                        field === 'values' ? 'circuit-clock-edit__wide' : '',
+                        patternEdit.flash === field ? 'circuit-pin-rename--warn' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                    value={patternEdit[field]}
+                    placeholder={field === 'name' ? patternEdit.id : undefined}
+                    {...(field === 'width' ? { min: 1, max: MAX_WIDTH, step: 1 } : {})}
+                    {...(field === 'stepNs' ? { min: 0.002, step: 'any' } : {})}
+                    onChange={(e) =>
+                      setPatternEdit({ ...patternEdit, [field]: e.target.value, flash: undefined })
+                    }
+                  />
+                  {unit}
+                </label>
+              ))}
+              <label>
+                after the last
+                <select
+                  className="select"
+                  value={patternEdit.after}
+                  onChange={(e) =>
+                    setPatternEdit({
+                      ...patternEdit,
+                      after: e.target.value === 'hold' ? 'hold' : 'repeat',
+                    })
+                  }
+                >
+                  <option value="repeat">repeat</option>
+                  <option value="hold">hold last</option>
+                </select>
+              </label>
+              <label>
+                advance on
+                <select
+                  className="select"
+                  value={patternEdit.clocked ? 'clk' : 'time'}
+                  onChange={(e) =>
+                    setPatternEdit({ ...patternEdit, clocked: e.target.value === 'clk' })
+                  }
+                >
+                  <option value="time">time only</option>
+                  <option value="clk">rising edge of clk</option>
+                </select>
               </label>
               <span className="circuit-clock-edit__hint">Enter saves · Esc cancels</span>
             </div>
@@ -7238,6 +7585,7 @@ export function CircuitWorkbench() {
                       </select>
                     </label>
                   )}
+                  {paramEditCheckbox(paramEdit, 'activeLow', 'active low (anode to VCC)')}
                 </>
               )}
               {paramEdit.kind === 'sevenseg' && (
@@ -7356,9 +7704,11 @@ export function CircuitWorkbench() {
             </div>
           )}
         </div>
+        {!compact && (editingLesson ? <LessonInspector /> : <LessonPanel />)}
       </div>
 
       <WaveformPanel rootRef={wavePanelRef} viewOnly={viewOnly} />
+      {compact && <LessonPanel />}
 
       {building && (
         <BuildCircuitDialog
@@ -7382,6 +7732,13 @@ export function CircuitWorkbench() {
             setBuilding(null);
           }}
           onClose={() => setBuilding(null)}
+        />
+      )}
+      {challengeEditor && (
+        <ChallengeDialog
+          initial={challengeEditor.initial}
+          isNew={challengeEditor.isNew}
+          onClose={() => useChallengeStore.getState().closeEditor()}
         />
       )}
       {packaging && (

@@ -252,19 +252,6 @@ h3 {
   color: var(--ink);
 }
 
-/* Stub lesson side panel */
-.lesson-overlay {
-  width: calc(var(--space-unit) * 72);
-  padding: calc(var(--space-unit) * 4);
-  background: var(--surface);
-  border-left: var(--stroke-min) solid var(--line);
-}
-
-.lesson-overlay__header {
-  font-weight: 600;
-  margin-bottom: calc(var(--space-unit) * 2);
-}
-
 .theme-proof {
   display: block;
   background: var(--surface);

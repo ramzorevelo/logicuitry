@@ -1,0 +1,2271 @@
+{
+ "format": "lcir.board",
+ "formatVersion": 14,
+ "id": "logic-project-module",
+ "name": "Counter module",
+ "components": [
+  {
+   "id": "vcc",
+   "kind": "vcc",
+   "pos": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "id": "nl1",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 48,
+    "y": 40
+   }
+  },
+  {
+   "id": "gnd",
+   "kind": "gnd",
+   "pos": {
+    "x": 128,
+    "y": 24
+   }
+  },
+  {
+   "id": "nl3",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 176,
+    "y": 0
+   }
+  },
+  {
+   "id": "clk",
+   "kind": "timer555",
+   "label": "CLOCK",
+   "pos": {
+    "x": 0,
+    "y": 120
+   },
+   "params": {
+    "mode": "astable",
+    "r1": 1000,
+    "r2": 68000,
+    "c": 1e-05
+   }
+  },
+  {
+   "id": "nl5",
+   "kind": "netlabel",
+   "label": "CLK",
+   "pos": {
+    "x": 280,
+    "y": 152
+   }
+  },
+  {
+   "id": "nl7",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": -104,
+    "y": 152
+   },
+   "mirror": true
+  },
+  {
+   "id": "reset",
+   "kind": "button",
+   "label": "RESET",
+   "pos": {
+    "x": 0,
+    "y": 240
+   },
+   "params": {
+    "toGround": true,
+    "bounce": true
+   }
+  },
+  {
+   "id": "pu_reset",
+   "kind": "pullup",
+   "pos": {
+    "x": 64,
+    "y": 192
+   }
+  },
+  {
+   "id": "nl11",
+   "kind": "netlabel",
+   "label": "RST_N",
+   "pos": {
+    "x": 112,
+    "y": 248
+   }
+  },
+  {
+   "id": "in_up",
+   "kind": "toggle",
+   "label": "UP",
+   "pos": {
+    "x": 0,
+    "y": 312
+   },
+   "params": {
+    "initial": 0
+   }
+  },
+  {
+   "id": "nl13",
+   "kind": "netlabel",
+   "label": "UP",
+   "pos": {
+    "x": 112,
+    "y": 320
+   }
+  },
+  {
+   "id": "in_dn",
+   "kind": "toggle",
+   "label": "DN",
+   "pos": {
+    "x": 0,
+    "y": 384
+   },
+   "params": {
+    "initial": 0
+   }
+  },
+  {
+   "id": "nl15",
+   "kind": "netlabel",
+   "label": "DN",
+   "pos": {
+    "x": 112,
+    "y": 392
+   }
+  },
+  {
+   "id": "in_load",
+   "kind": "toggle",
+   "label": "LOAD",
+   "pos": {
+    "x": 0,
+    "y": 456
+   },
+   "params": {
+    "initial": 0
+   }
+  },
+  {
+   "id": "nl17",
+   "kind": "netlabel",
+   "label": "LOAD",
+   "pos": {
+    "x": 112,
+    "y": 464
+   }
+  },
+  {
+   "id": "in_clear",
+   "kind": "toggle",
+   "label": "CLEAR",
+   "pos": {
+    "x": 0,
+    "y": 528
+   },
+   "params": {
+    "initial": 0
+   }
+  },
+  {
+   "id": "nl19",
+   "kind": "netlabel",
+   "label": "CLEAR",
+   "pos": {
+    "x": 112,
+    "y": 536
+   }
+  },
+  {
+   "id": "u1",
+   "kind": "chip",
+   "defId": "74LS74",
+   "label": "U1",
+   "pos": {
+    "x": 448,
+    "y": 40
+   }
+  },
+  {
+   "id": "nl21",
+   "kind": "netlabel",
+   "label": "RST_N",
+   "pos": {
+    "x": 328,
+    "y": 48
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl23",
+   "kind": "netlabel",
+   "label": "U4-4",
+   "pos": {
+    "x": 336,
+    "y": 64
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl25",
+   "kind": "netlabel",
+   "label": "CLK",
+   "pos": {
+    "x": 344,
+    "y": 80
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl27",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 344,
+    "y": 96
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl29",
+   "kind": "netlabel",
+   "label": "C0",
+   "pos": {
+    "x": 352,
+    "y": 112
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl31",
+   "kind": "netlabel",
+   "label": "C0'",
+   "pos": {
+    "x": 344,
+    "y": 128
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl33",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 344,
+    "y": 144
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl35",
+   "kind": "netlabel",
+   "label": "C1'",
+   "pos": {
+    "x": 608,
+    "y": 144
+   }
+  },
+  {
+   "id": "nl37",
+   "kind": "netlabel",
+   "label": "C1",
+   "pos": {
+    "x": 608,
+    "y": 128
+   }
+  },
+  {
+   "id": "nl39",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 608,
+    "y": 112
+   }
+  },
+  {
+   "id": "nl41",
+   "kind": "netlabel",
+   "label": "CLK",
+   "pos": {
+    "x": 608,
+    "y": 96
+   }
+  },
+  {
+   "id": "nl43",
+   "kind": "netlabel",
+   "label": "U4-7",
+   "pos": {
+    "x": 608,
+    "y": 80
+   }
+  },
+  {
+   "id": "nl45",
+   "kind": "netlabel",
+   "label": "RST_N",
+   "pos": {
+    "x": 608,
+    "y": 64
+   }
+  },
+  {
+   "id": "nl47",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 608,
+    "y": 48
+   }
+  },
+  {
+   "id": "u2",
+   "kind": "chip",
+   "defId": "74LS74",
+   "label": "U2",
+   "pos": {
+    "x": 800,
+    "y": 40
+   }
+  },
+  {
+   "id": "nl49",
+   "kind": "netlabel",
+   "label": "RST_N",
+   "pos": {
+    "x": 680,
+    "y": 48
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl51",
+   "kind": "netlabel",
+   "label": "U4-9",
+   "pos": {
+    "x": 688,
+    "y": 64
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl53",
+   "kind": "netlabel",
+   "label": "CLK",
+   "pos": {
+    "x": 696,
+    "y": 80
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl55",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 696,
+    "y": 96
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl57",
+   "kind": "netlabel",
+   "label": "C2",
+   "pos": {
+    "x": 704,
+    "y": 112
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl59",
+   "kind": "netlabel",
+   "label": "C2'",
+   "pos": {
+    "x": 696,
+    "y": 128
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl61",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 696,
+    "y": 144
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl63",
+   "kind": "netlabel",
+   "label": "C3'",
+   "pos": {
+    "x": 960,
+    "y": 144
+   }
+  },
+  {
+   "id": "nl65",
+   "kind": "netlabel",
+   "label": "C3",
+   "pos": {
+    "x": 960,
+    "y": 128
+   }
+  },
+  {
+   "id": "nl67",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 960,
+    "y": 112
+   }
+  },
+  {
+   "id": "nl69",
+   "kind": "netlabel",
+   "label": "CLK",
+   "pos": {
+    "x": 960,
+    "y": 96
+   }
+  },
+  {
+   "id": "nl71",
+   "kind": "netlabel",
+   "label": "U4-12",
+   "pos": {
+    "x": 960,
+    "y": 80
+   }
+  },
+  {
+   "id": "nl73",
+   "kind": "netlabel",
+   "label": "RST_N",
+   "pos": {
+    "x": 960,
+    "y": 64
+   }
+  },
+  {
+   "id": "nl75",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 960,
+    "y": 48
+   }
+  },
+  {
+   "id": "u3",
+   "kind": "chip",
+   "defId": "74LS283",
+   "label": "U3",
+   "pos": {
+    "x": 1152,
+    "y": 40
+   }
+  },
+  {
+   "id": "nl77",
+   "kind": "netlabel",
+   "label": "U3-1",
+   "pos": {
+    "x": 1040,
+    "y": 48
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl79",
+   "kind": "netlabel",
+   "label": "DN",
+   "pos": {
+    "x": 1056,
+    "y": 64
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl81",
+   "kind": "netlabel",
+   "label": "C1",
+   "pos": {
+    "x": 1056,
+    "y": 80
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl83",
+   "kind": "netlabel",
+   "label": "U3-4",
+   "pos": {
+    "x": 1040,
+    "y": 96
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl85",
+   "kind": "netlabel",
+   "label": "C0",
+   "pos": {
+    "x": 1056,
+    "y": 112
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl87",
+   "kind": "netlabel",
+   "label": "DN",
+   "pos": {
+    "x": 1056,
+    "y": 128
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl89",
+   "kind": "netlabel",
+   "label": "UP",
+   "pos": {
+    "x": 1056,
+    "y": 144
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl91",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 1048,
+    "y": 160
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl93",
+   "kind": "netlabel",
+   "label": "U3-10",
+   "pos": {
+    "x": 1312,
+    "y": 144
+   }
+  },
+  {
+   "id": "nl95",
+   "kind": "netlabel",
+   "label": "DN",
+   "pos": {
+    "x": 1312,
+    "y": 128
+   }
+  },
+  {
+   "id": "nl97",
+   "kind": "netlabel",
+   "label": "C3",
+   "pos": {
+    "x": 1312,
+    "y": 112
+   }
+  },
+  {
+   "id": "nl99",
+   "kind": "netlabel",
+   "label": "U3-13",
+   "pos": {
+    "x": 1312,
+    "y": 96
+   }
+  },
+  {
+   "id": "nl101",
+   "kind": "netlabel",
+   "label": "C2",
+   "pos": {
+    "x": 1312,
+    "y": 80
+   }
+  },
+  {
+   "id": "nl103",
+   "kind": "netlabel",
+   "label": "DN",
+   "pos": {
+    "x": 1312,
+    "y": 64
+   }
+  },
+  {
+   "id": "nl105",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 1312,
+    "y": 48
+   }
+  },
+  {
+   "id": "u4",
+   "kind": "chip",
+   "defId": "74LS157",
+   "label": "U4",
+   "pos": {
+    "x": 1504,
+    "y": 40
+   }
+  },
+  {
+   "id": "nl107",
+   "kind": "netlabel",
+   "label": "LOAD",
+   "pos": {
+    "x": 1392,
+    "y": 48
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl109",
+   "kind": "netlabel",
+   "label": "U3-4",
+   "pos": {
+    "x": 1392,
+    "y": 64
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl111",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 1400,
+    "y": 80
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl113",
+   "kind": "netlabel",
+   "label": "U4-4",
+   "pos": {
+    "x": 1392,
+    "y": 96
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl115",
+   "kind": "netlabel",
+   "label": "U3-1",
+   "pos": {
+    "x": 1392,
+    "y": 112
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl117",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 1400,
+    "y": 128
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl119",
+   "kind": "netlabel",
+   "label": "U4-7",
+   "pos": {
+    "x": 1392,
+    "y": 144
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl121",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 1400,
+    "y": 160
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl123",
+   "kind": "netlabel",
+   "label": "U4-9",
+   "pos": {
+    "x": 1664,
+    "y": 160
+   }
+  },
+  {
+   "id": "nl125",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 1664,
+    "y": 144
+   }
+  },
+  {
+   "id": "nl127",
+   "kind": "netlabel",
+   "label": "U3-13",
+   "pos": {
+    "x": 1664,
+    "y": 128
+   }
+  },
+  {
+   "id": "nl129",
+   "kind": "netlabel",
+   "label": "U4-12",
+   "pos": {
+    "x": 1664,
+    "y": 112
+   }
+  },
+  {
+   "id": "nl131",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 1664,
+    "y": 96
+   }
+  },
+  {
+   "id": "nl133",
+   "kind": "netlabel",
+   "label": "U3-10",
+   "pos": {
+    "x": 1664,
+    "y": 80
+   }
+  },
+  {
+   "id": "nl135",
+   "kind": "netlabel",
+   "label": "CLEAR",
+   "pos": {
+    "x": 1664,
+    "y": 64
+   }
+  },
+  {
+   "id": "nl137",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 1664,
+    "y": 48
+   }
+  },
+  {
+   "id": "u5",
+   "kind": "chip",
+   "defId": "74LS47",
+   "label": "U5",
+   "pos": {
+    "x": 448,
+    "y": 272
+   }
+  },
+  {
+   "id": "nl139",
+   "kind": "netlabel",
+   "label": "C1",
+   "pos": {
+    "x": 352,
+    "y": 280
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl141",
+   "kind": "netlabel",
+   "label": "C2",
+   "pos": {
+    "x": 352,
+    "y": 296
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl143",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 344,
+    "y": 312
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl145",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 344,
+    "y": 328
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl147",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 344,
+    "y": 344
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl149",
+   "kind": "netlabel",
+   "label": "C3",
+   "pos": {
+    "x": 352,
+    "y": 360
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl151",
+   "kind": "netlabel",
+   "label": "C0",
+   "pos": {
+    "x": 352,
+    "y": 376
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl153",
+   "kind": "netlabel",
+   "label": "GND",
+   "pos": {
+    "x": 344,
+    "y": 392
+   },
+   "mirror": true
+  },
+  {
+   "id": "nl155",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 568,
+    "y": 192
+   }
+  },
+  {
+   "id": "disp",
+   "kind": "sevenseg",
+   "label": "DISPLAY",
+   "pos": {
+    "x": 704,
+    "y": 272
+   },
+   "params": {
+    "common": "anode"
+   }
+  },
+  {
+   "id": "nl164",
+   "kind": "netlabel",
+   "label": "VCC",
+   "pos": {
+    "x": 728,
+    "y": 448
+   }
+  }
+ ],
+ "wires": [
+  {
+   "id": "w2",
+   "a": {
+    "kind": "pin",
+    "component": "vcc",
+    "pin": "p"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl1",
+    "pin": "a"
+   },
+   "points": [
+    {
+     "x": 16,
+     "y": 48
+    }
+   ]
+  },
+  {
+   "id": "w4",
+   "a": {
+    "kind": "pin",
+    "component": "gnd",
+    "pin": "p"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl3",
+    "pin": "a"
+   },
+   "points": [
+    {
+     "x": 144,
+     "y": 8
+    }
+   ]
+  },
+  {
+   "id": "w6",
+   "a": {
+    "kind": "pin",
+    "component": "clk",
+    "pin": "out"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl5",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w8",
+   "a": {
+    "kind": "pin",
+    "component": "clk",
+    "pin": "reset"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl7",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w9",
+   "a": {
+    "kind": "pin",
+    "component": "reset",
+    "pin": "y"
+   },
+   "b": {
+    "kind": "junction",
+    "junction": "j1"
+   },
+   "points": []
+  },
+  {
+   "id": "w10",
+   "a": {
+    "kind": "pin",
+    "component": "pu_reset",
+    "pin": "p"
+   },
+   "b": {
+    "kind": "junction",
+    "junction": "j1"
+   },
+   "points": []
+  },
+  {
+   "id": "w12",
+   "a": {
+    "kind": "junction",
+    "junction": "j1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl11",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w14",
+   "a": {
+    "kind": "pin",
+    "component": "in_up",
+    "pin": "y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl13",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w16",
+   "a": {
+    "kind": "pin",
+    "component": "in_dn",
+    "pin": "y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl15",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w18",
+   "a": {
+    "kind": "pin",
+    "component": "in_load",
+    "pin": "y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl17",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w20",
+   "a": {
+    "kind": "pin",
+    "component": "in_clear",
+    "pin": "y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl19",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w22",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/1CLR"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl21",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w24",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "1D"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl23",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w26",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "1CLK"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl25",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w28",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/1PRE"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl27",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w30",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "1Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl29",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w32",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/1Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl31",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w34",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "GND"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl33",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w36",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/2Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl35",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w38",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "2Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl37",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w40",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/2PRE"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl39",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w42",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "2CLK"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl41",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w44",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "2D"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl43",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w46",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "/2CLR"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl45",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w48",
+   "a": {
+    "kind": "pin",
+    "component": "u1",
+    "pin": "VCC"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl47",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w50",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/1CLR"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl49",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w52",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "1D"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl51",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w54",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "1CLK"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl53",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w56",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/1PRE"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl55",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w58",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "1Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl57",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w60",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/1Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl59",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w62",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "GND"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl61",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w64",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/2Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl63",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w66",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "2Q"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl65",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w68",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/2PRE"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl67",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w70",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "2CLK"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl69",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w72",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "2D"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl71",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w74",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "/2CLR"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl73",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w76",
+   "a": {
+    "kind": "pin",
+    "component": "u2",
+    "pin": "VCC"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl75",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w78",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "S2"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl77",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w80",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "B2"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl79",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w82",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "A2"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl81",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w84",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "S1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl83",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w86",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "A1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl85",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w88",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "B1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl87",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w90",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "C0"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl89",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w92",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "GND"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl91",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w94",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "S4"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl93",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w96",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "B4"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl95",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w98",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "A4"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl97",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w100",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "S3"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl99",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w102",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "A3"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl101",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w104",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "B3"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl103",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w106",
+   "a": {
+    "kind": "pin",
+    "component": "u3",
+    "pin": "VCC"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl105",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w108",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "A/B"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl107",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w110",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "1A"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl109",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w112",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "1B"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl111",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w114",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "1Y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl113",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w116",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "2A"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl115",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w118",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "2B"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl117",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w120",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "2Y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl119",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w122",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "GND"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl121",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w124",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "3Y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl123",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w126",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "3B"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl125",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w128",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "3A"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl127",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w130",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "4Y"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl129",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w132",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "4B"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl131",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w134",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "4A"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl133",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w136",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "/G"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl135",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w138",
+   "a": {
+    "kind": "pin",
+    "component": "u4",
+    "pin": "VCC"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl137",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w140",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "A1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl139",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w142",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "A2"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl141",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w144",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "/LT"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl143",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w146",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "/BI_RBO"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl145",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w148",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "/RBI"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl147",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w150",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "A3"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl149",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w152",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "A0"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl151",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w154",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "GND"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl153",
+    "pin": "a"
+   },
+   "points": []
+  },
+  {
+   "id": "w156",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "VCC"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl155",
+    "pin": "a"
+   },
+   "points": [
+    {
+     "x": 568,
+     "y": 288
+    }
+   ]
+  },
+  {
+   "id": "w157",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "a"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "a"
+   },
+   "points": [
+    {
+     "x": 656,
+     "y": 336
+    },
+    {
+     "x": 656,
+     "y": 232
+    },
+    {
+     "x": 736,
+     "y": 232
+    }
+   ]
+  },
+  {
+   "id": "w158",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "b"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "b"
+   },
+   "points": [
+    {
+     "x": 640,
+     "y": 352
+    },
+    {
+     "x": 640,
+     "y": 216
+    },
+    {
+     "x": 752,
+     "y": 216
+    },
+    {
+     "x": 752,
+     "y": 264
+    },
+    {
+     "x": 744,
+     "y": 264
+    }
+   ]
+  },
+  {
+   "id": "w159",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "c"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "c"
+   },
+   "points": [
+    {
+     "x": 688,
+     "y": 368
+    },
+    {
+     "x": 688,
+     "y": 432
+    },
+    {
+     "x": 744,
+     "y": 432
+    },
+    {
+     "x": 744,
+     "y": 400
+    },
+    {
+     "x": 736,
+     "y": 400
+    }
+   ]
+  },
+  {
+   "id": "w160",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "d"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "d"
+   },
+   "points": [
+    {
+     "x": 560,
+     "y": 384
+    },
+    {
+     "x": 560,
+     "y": 416
+    },
+    {
+     "x": 712,
+     "y": 416
+    },
+    {
+     "x": 712,
+     "y": 400
+    },
+    {
+     "x": 720,
+     "y": 400
+    }
+   ]
+  },
+  {
+   "id": "w161",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "e"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "e"
+   },
+   "points": [
+    {
+     "x": 712,
+     "y": 400
+    }
+   ]
+  },
+  {
+   "id": "w162",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "f"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "f"
+   },
+   "points": [
+    {
+     "x": 688,
+     "y": 304
+    },
+    {
+     "x": 688,
+     "y": 264
+    },
+    {
+     "x": 720,
+     "y": 264
+    }
+   ]
+  },
+  {
+   "id": "w163",
+   "a": {
+    "kind": "pin",
+    "component": "u5",
+    "pin": "g"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "g"
+   },
+   "points": [
+    {
+     "x": 672,
+     "y": 320
+    },
+    {
+     "x": 672,
+     "y": 248
+    },
+    {
+     "x": 712,
+     "y": 248
+    }
+   ]
+  },
+  {
+   "id": "w165",
+   "a": {
+    "kind": "pin",
+    "component": "disp",
+    "pin": "com1"
+   },
+   "b": {
+    "kind": "pin",
+    "component": "nl164",
+    "pin": "a"
+   },
+   "points": []
+  }
+ ],
+ "junctions": [
+  {
+   "id": "j1",
+   "pos": {
+    "x": 80,
+    "y": 256
+   }
+  }
+ ],
+ "probes": [],
+ "view": {
+  "x": 0,
+  "y": 0,
+  "zoom": 0.5
+ },
+ "timing": {
+  "mode": "ideal",
+  "datasheet": "typ",
+  "vendor": "ti"
+ },
+ "runSpeed": 1000000000000
+}

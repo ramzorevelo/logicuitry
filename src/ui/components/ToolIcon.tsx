@@ -23,6 +23,7 @@ export type IconName =
   | 'run'
   | 'pause'
   | 'step'
+  | 'settle'
   | 'timing'
   | 'sta'
   | 'open'
@@ -112,6 +113,8 @@ const PATHS: Record<IconName, JSX.Element> = {
   run: <path d="M7 4 L19 12 L7 20 Z" />,
   pause: <path d="M9 5 V19 M15 5 V19" />,
   step: <path d="M6 5 L15 12 L6 19 Z M18 5 V19" />,
+  // Step's glyph run on: two triangles into the bar.
+  settle: <path d="M3 6 L10 12 L3 18 Z M11 6 L18 12 L11 18 Z M21 6 V18" />,
   // Delay, not a waveform: the square wave this used to be read as "open the
   // waveform panel". Two offset edges would say propagation delay exactly, but
   // they are still edges and muddy at 16px; an hourglass is unmistakable at

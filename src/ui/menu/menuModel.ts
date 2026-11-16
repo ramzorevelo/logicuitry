@@ -9,6 +9,8 @@ export interface MenuCommand {
   shortcut?: string;
   checked?: boolean;
   disabled?: boolean;
+  /** Tooltip: why an item is greyed, where the label cannot say it. */
+  title?: string;
   run: () => void;
 }
 
@@ -34,7 +36,16 @@ export interface Menu {
 /** Bar order, fixed: a menu's place must not depend on which workbench filled
  *  it in. Anything contributed under an unknown id is dropped rather than
  *  silently appended somewhere arbitrary. */
-export const MENU_ORDER = ['file', 'edit', 'view', 'simulate', 'settings', 'help'] as const;
+export const MENU_ORDER = [
+  'file',
+  'edit',
+  'view',
+  'simulate',
+  'challenge',
+  'lesson',
+  'settings',
+  'help',
+] as const;
 export type MenuId = (typeof MENU_ORDER)[number];
 
 export const MENU_LABELS: Record<MenuId, string> = {
@@ -42,6 +53,8 @@ export const MENU_LABELS: Record<MenuId, string> = {
   edit: 'Edit',
   view: 'View',
   simulate: 'Simulate',
+  challenge: 'Challenge',
+  lesson: 'Lesson',
   settings: 'Settings',
   help: 'Help',
 };

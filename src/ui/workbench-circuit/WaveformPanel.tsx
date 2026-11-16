@@ -43,6 +43,14 @@ import { MemoryPanel, useMemoryAvailable } from './MemoryPanel';
 import { clampPopupToCanvas } from './paramEdit';
 import type { DockTab } from './circuitStore';
 import { CheckCounts, ChecksPanel, useChecksView } from './ChecksPanel';
+import { SequencePanel, useSequenceAvailable } from './SequencePanel';
+import {
+  ChallengeMark,
+  ChallengePanel,
+  tallyState,
+  useChallengeApplies,
+  useChallengeView,
+} from './ChallengePanel';
 
 /** Pending Δt measure: first clicked edge, waiting for the second. */
 interface MeasureState {
@@ -62,11 +70,16 @@ export function WaveformPanel({
   const memoryAvailable = useMemoryAvailable();
   const memoryShown = dockOpen && memoryAvailable && dockTab === 'memory';
   const checksShown = dockOpen && dockTab === 'checks';
+  const sequenceAvailable = useSequenceAvailable();
+  const sequenceShown = dockOpen && sequenceAvailable && dockTab === 'sequence';
+  const challengeAvailable = useChallengeApplies();
+  const challengeShown = dockOpen && challengeAvailable && dockTab === 'challenge';
+  const challengeView = useChallengeView();
   const checks = useChecksView();
   const [showHiddenChecks, setShowHiddenChecks] = useState(false);
   // `open` is the waveform view's own: the other tabs hide it but keep this
   // component, and with it the track order, hiding and window, mounted.
-  const open = dockOpen && !memoryShown && !checksShown;
+  const open = dockOpen && !memoryShown && !checksShown && !sequenceShown && !challengeShown;
   // Memory can also appear without a tab click (back on the board tab, a RAM placed).
   useEffect(() => {
     if (memoryShown) store.getState().setDockTab('memory');
@@ -838,6 +851,16 @@ export function WaveformPanel({
 
   const hasEstimatedBands = !!view?.tracks.some((t) => t.bands.some((b) => b.estimated));
 
+  // A 360px phone cuts off the fourth dock tab, and the tally must stay in view.
+  const challengeTab = challengeAvailable && challengeView && (
+    <DockTabButton tab="challenge" label="Challenge" shown={challengeShown}>
+      <ChallengeMark state={tallyState(challengeView.tally)} />
+      <span className="dock-tab__count">
+        {challengeView.tally.met}/{challengeView.tally.total}
+      </span>
+    </DockTabButton>
+  );
+
   return (
     <div ref={rootRef} className={`wave-panel${dockOpen ? ' wave-panel--open' : ''}`}>
       {dockOpen && (
@@ -864,10 +887,15 @@ export function WaveformPanel({
       )}
       <div className="wave-panel__header">
         <span className="dock-tabs" role="tablist">
+          {compact && challengeTab}
           <DockTabButton tab="waves" label="Waveforms" shown={open} />
           <DockTabButton tab="checks" label="Checks" shown={checksShown}>
             <CheckCounts counts={checks.counts} />
           </DockTabButton>
+          {sequenceAvailable && (
+            <DockTabButton tab="sequence" label="Sequence" shown={sequenceShown} />
+          )}
+          {!compact && challengeTab}
           {memoryAvailable && <DockTabButton tab="memory" label="Memory" shown={memoryShown} />}
         </span>
         {checksShown && (
@@ -1046,6 +1074,24 @@ export function WaveformPanel({
           <ChecksPanel view={checks} viewOnly={viewOnly} showHidden={showHiddenChecks} />
         </div>
       )}
+      {sequenceShown && (
+        <div
+          className="wave-panel__body wave-panel__body--sequence"
+          ref={wrapRef}
+          style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
+        >
+          <SequencePanel viewOnly={viewOnly} />
+        </div>
+      )}
+      {challengeShown && (
+        <div
+          className="wave-panel__body wave-panel__body--challenge"
+          ref={wrapRef}
+          style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
+        >
+          <ChallengePanel viewOnly={viewOnly} />
+        </div>
+      )}
       {memoryShown && (
         <div
           className="wave-panel__body wave-panel__body--memory"
@@ -1159,8 +1205,20 @@ function DockTabButton({
     st.setDockTab(tab);
     st.setWaveformOpen(true);
   };
+  const ref = useRef<HTMLButtonElement>(null);
+  // Not scrollIntoView: that also scrolls the page and the canvas host vertically.
+  useEffect(() => {
+    const el = ref.current;
+    const strip = el?.closest('.wave-panel__header');
+    if (!shown || !el || !(strip instanceof HTMLElement)) return;
+    const tab = el.getBoundingClientRect();
+    const box = strip.getBoundingClientRect();
+    if (tab.left < box.left) strip.scrollLeft -= box.left - tab.left;
+    else if (tab.right > box.right) strip.scrollLeft += tab.right - box.right;
+  }, [shown]);
   return (
     <button
+      ref={ref}
       type="button"
       role="tab"
       aria-selected={shown}
@@ -1169,7 +1227,12 @@ function DockTabButton({
       title={shown ? `Fold the ${label.toLowerCase()} panel` : `Show ${label.toLowerCase()}`}
       onClick={pick}
     >
-      {shown ? `▾ ${label}` : `▸ ${label}`}
+      <span>
+        <span className="dock-tab__fold" aria-hidden="true">
+          {shown ? '▾ ' : '▸ '}
+        </span>
+        {label}
+      </span>
       {children}
     </button>
   );

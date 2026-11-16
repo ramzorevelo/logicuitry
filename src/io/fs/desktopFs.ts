@@ -1,4 +1,4 @@
-import { isDocumentName } from '../docExtensions';
+import { BOARD_EXT, CHIP_EXT, LESSON_EXT, isDocumentName } from '../docExtensions';
 // Desktop file backend. Same eleven signatures as the browser one, on native
 // pickers and a real filesystem.
 //
@@ -77,6 +77,16 @@ export async function listFiles(root: LibraryDir, sub: LibrarySubdir): Promise<s
     .sort();
 }
 
+export async function listDocFiles(dir: LibraryDir, sub?: LibrarySubdir): Promise<DocFile[]> {
+  const { readDir } = await fs();
+  const folder = sub ? await join(located(dir).path, sub) : located(dir).path;
+  const files: DocFile[] = [];
+  for (const e of await readDir(folder))
+    if (e.isFile && isDocumentName(e.name))
+      files.push({ name: e.name, path: await join(folder, e.name) } as Located as DocFile);
+  return files;
+}
+
 export async function readDoc(
   root: LibraryDir,
   sub: LibrarySubdir,
@@ -121,16 +131,33 @@ export function exportDoc(doc: LibraryDoc, filename: string): void {
 
 // --- Document files (File > Open / Save As), the boardFile.ts half ---
 
+/** Without the dot, as the native dialog wants; `json` still finds pre-extension saves. */
+const OPEN_EXTENSIONS = [BOARD_EXT, CHIP_EXT, LESSON_EXT, '.json'].map((e) => e.slice(1));
+
 export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | undefined> {
   const { open } = await dialog();
   const path = await open({
     multiple: false,
-    filters: [{ name: 'Logicuitry document', extensions: ['json'] }],
+    filters: [{ name: 'Logicuitry document', extensions: OPEN_EXTENSIONS }],
     ...(startIn ? { defaultPath: located(startIn).path } : {}),
   });
   if (typeof path !== 'string') return undefined;
   const file: Located = { name: await basename(path), path };
   return file;
+}
+
+const SAVE_KINDS: Record<string, string> = {
+  [BOARD_EXT]: 'Logicuitry board',
+  [CHIP_EXT]: 'Logicuitry chip',
+  [LESSON_EXT]: 'Logicuitry lesson',
+};
+
+/** Filtered by the suggested name's own extension, so the dialog never appends another. */
+function saveFilter(suggestedName: string): { name: string; extensions: string[] } {
+  const ext = Object.keys(SAVE_KINDS).find((e) => suggestedName.toLowerCase().endsWith(e));
+  return ext
+    ? { name: SAVE_KINDS[ext]!, extensions: [ext.slice(1)] }
+    : { name: 'Logicuitry document', extensions: OPEN_EXTENSIONS };
 }
 
 export async function pickSavePath(
@@ -140,7 +167,7 @@ export async function pickSavePath(
   const { save } = await dialog();
   const path = await save({
     defaultPath: startIn ? await join(located(startIn).path, suggestedName) : suggestedName,
-    filters: [{ name: 'Logicuitry board', extensions: ['json'] }],
+    filters: [saveFilter(suggestedName)],
   });
   if (!path) return undefined;
   const file: Located = { name: await basename(path), path };

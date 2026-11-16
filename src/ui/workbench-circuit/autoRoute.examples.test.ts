@@ -242,6 +242,58 @@ describe('bundled example boards', { timeout: 30_000 }, () => {
     }
   });
 
+  it('keeps every pin, junction and bend on the grid', () => {
+    const g = theme.gridSchematic;
+    for (const e of EXAMPLES) {
+      const lib = libraryOf(e);
+      const points: [string, Vec2][] = [];
+      for (const c of e.board.components)
+        for (const [name, pin] of routableOf(c, lib).pins)
+          points.push([`${c.id}.${name}`, pin.pos]);
+      for (const j of e.board.junctions) points.push([j.id, j.pos]);
+      for (const w of e.board.wires) {
+        w.points.forEach((p, i) => points.push([`${w.id}[${i}]`, p]));
+        for (const end of [w.a, w.b])
+          if (end.kind === 'tap' || end.kind === 'free') points.push([`${w.id} end`, end.pos]);
+      }
+      const off = points.filter(([, p]) => p.x % g !== 0 || p.y % g !== 0).map(([at]) => at);
+      expect({ board: e.id, off }).toEqual({ board: e.id, off: [] });
+    }
+  });
+
+  // A leg shorter than one grid step draws as a kink beside the pin (owner report).
+  it('never draws a leg shorter than the grid', () => {
+    for (const e of EXAMPLES) {
+      const drawn = drawnRoutes(e);
+      for (const w of e.board.wires) {
+        const pts = drawn.get(w.id);
+        if (!pts) continue;
+        const corners = pts.filter((p, i) => {
+          const prev = pts[i - 1];
+          const next = pts[i + 1];
+          if (!prev || !next) return true;
+          return !((prev.x === p.x && p.x === next.x) || (prev.y === p.y && p.y === next.y));
+        });
+        const shortest = corners.reduce(
+          (min, p, i) =>
+            i === 0
+              ? min
+              : Math.min(
+                  min,
+                  Math.abs(p.x - corners[i - 1]!.x) + Math.abs(p.y - corners[i - 1]!.y),
+                ),
+          Infinity,
+        );
+        const kinked = corners.length > 2 && shortest < theme.gridSchematic;
+        expect({ board: e.id, wire: w.id, kinked }).toEqual({
+          board: e.id,
+          wire: w.id,
+          kinked: false,
+        });
+      }
+    }
+  });
+
   // A wire running over a pin that belongs to a DIFFERENT net reads as a
   // connection: H&H figure 2.24 makes a T or a dot the connect symbol, and a
   // reader cannot tell a passing wire from a joined one. Reported by the owner
@@ -252,6 +304,8 @@ describe('bundled example boards', { timeout: 30_000 }, () => {
       (a.x === b.x && p.x === a.x && p.y >= Math.min(a.y, b.y) && p.y <= Math.max(a.y, b.y)) ||
       (a.y === b.y && p.y === a.y && p.x >= Math.min(a.x, b.x) && p.x <= Math.max(a.x, b.x));
 
+    // One expect per wire x pin pair cost over 30 s on the larger boards.
+    const overPins: { board: string; wire: string; overPin: string }[] = [];
     for (const e of EXAMPLES) {
       const lib = libraryOf(e);
       const netOf = netGrouping(e);
@@ -275,15 +329,12 @@ describe('bundled example boards', { timeout: 30_000 }, () => {
         const mine = netOf(w);
         for (const { pos, net } of owned) {
           if (net === mine) continue;
-          const hit = pts.some((_, i) => i > 0 && touches(pos, pts[i - 1]!, pts[i]!));
-          expect({ board: e.id, wire: w.id, overPin: hit ? `${pos.x},${pos.y}` : 'none' }).toEqual({
-            board: e.id,
-            wire: w.id,
-            overPin: 'none',
-          });
+          if (pts.some((_, i) => i > 0 && touches(pos, pts[i - 1]!, pts[i]!)))
+            overPins.push({ board: e.id, wire: w.id, overPin: `${pos.x},${pos.y}` });
         }
       }
     }
+    expect(overPins).toEqual([]);
   }, 30_000);
 
   // A fan-out branches at a DOT on the trunk, never on a component's pin: a

@@ -4,6 +4,28 @@ import { onePinLane, parsePinView, pinViewOf, splitBus } from './busPins';
 import type { EvalContext, EvalResult, Params, PrimitiveSpec } from './types';
 import { intParam, widthParam } from './types';
 
+export interface ClockShape {
+  period: number;
+  highLen: number;
+  phase: number;
+}
+
+/** A clock's waveform in ps; the one place its HIGH length is rounded. */
+export function clockShape(params: Params): ClockShape {
+  const period = intParam(params, 'periodPs', 10_000);
+  const duty = intParam(params, 'dutyPercent', 50);
+  const phase = intParam(params, 'phasePs', 0);
+  if (period < 2 || duty < 1 || duty > 99) throw new RangeError('bad clock params');
+  return { period, highLen: Math.max(1, Math.round((period * duty) / 100)), phase };
+}
+
+/** The first falling edge strictly after `afterPs`. */
+export function nextClockFall(shape: ClockShape, afterPs: number): number {
+  const first = shape.phase + shape.highLen;
+  if (afterPs < first) return first;
+  return first + (Math.floor((afterPs - first) / shape.period) + 1) * shape.period;
+}
+
 /**
  * Deterministic clock source, a pure function of sim time.
  * params: periodPs (default 10000), dutyPercent (default 50), phasePs (default 0).
@@ -13,11 +35,7 @@ export const clock: PrimitiveSpec = {
   kind: 'clock',
   pins: () => [{ name: 'y', dir: 'out', width: 1, role: 'clock', order: 0 }],
   evaluate(ctx: EvalContext): EvalResult {
-    const period = intParam(ctx.params, 'periodPs', 10_000);
-    const duty = intParam(ctx.params, 'dutyPercent', 50);
-    const phase = intParam(ctx.params, 'phasePs', 0);
-    if (period < 2 || duty < 1 || duty > 99) throw new RangeError('bad clock params');
-    const highLen = Math.max(1, Math.round((period * duty) / 100));
+    const { period, highLen, phase } = clockShape(ctx.params);
     const t = ctx.time - phase;
     if (t < 0) return { outputs: [bv.known(0, 1)], nextWake: phase };
     const pos = t % period;
@@ -151,6 +169,22 @@ export const spdtSwitch: PrimitiveSpec = {
     };
   },
 };
+
+/** Anode to VCC through its resistor, cathode on the pin: the LED a 74LS output sinks. */
+export function ledActiveLow(params: Params): boolean {
+  return params['activeLow'] === true;
+}
+
+/**
+ * Lit (1) or dark (0) per bit, from the pin's value. X and Z pass through as
+ * they are, so a reader still sees an unknown or floating pin as such.
+ */
+export function ledLitValue(pin: bv.BusValue, width: number, params: Params): bv.BusValue {
+  if (!ledActiveLow(params)) return pin;
+  const m = bv.widthMask(width);
+  const unknown = (pin.x | pin.z) & m;
+  return { v: (~pin.v & ~unknown & m) >>> 0, x: pin.x & m, z: pin.z & m };
+}
 
 /** Observer only, width-N; render layer reads the connected net's value. */
 export const led: PrimitiveSpec = {

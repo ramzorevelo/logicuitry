@@ -9,16 +9,18 @@
 
 export const BOARD_EXT = '.lcirb';
 export const CHIP_EXT = '.lcirc';
+export const LESSON_EXT = '.lcirl';
 
 /** Names written before documents had their own extensions. Read, never
  *  written; drop once nothing in the wild still uses them. */
-const LEGACY_EXTS = ['.board.json', '.chip.json'] as const;
+const LEGACY_EXTS = ['.board.json', '.chip.json', '.lesson.json'] as const;
 
 export function isDocumentName(name: string): boolean {
   const lower = name.toLowerCase();
   return (
     lower.endsWith(BOARD_EXT) ||
     lower.endsWith(CHIP_EXT) ||
+    lower.endsWith(LESSON_EXT) ||
     LEGACY_EXTS.some((e) => lower.endsWith(e))
   );
 }

@@ -3,7 +3,7 @@ import { compile } from '../model/compile';
 import type { ChipLibrary } from '../model/types';
 import { board, comp, srLatchDef, wire } from '../model/testFixtures';
 import { toString } from '../value/busValue';
-import { idealDelay, datasheetDelay } from './delay';
+import { IDEAL_DELAY_PS, idealDelay, datasheetDelay } from './delay';
 import { OSC_EVENT_LIMIT, Simulator } from './kernel';
 
 const lib = (...defs: ReturnType<typeof srLatchDef>[]): ChipLibrary =>
@@ -669,5 +669,279 @@ describe('kernel: fightingNets', () => {
     sim.setToggle('main/A2', true);
     settle();
     expect(sim.fightingNets()).toEqual([]);
+  });
+});
+
+describe('kernel: gateStep', () => {
+  function chain(first: 'not' | 'hop') {
+    return board({
+      components: [
+        comp('t', 'toggle', undefined, 'A'),
+        first === 'hop' ? comp('h', 'buf', { delay: 'none' }) : comp('h', 'not'),
+        comp('n', 'not'),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [
+        wire('w1', ['t', 'y'], ['h', 'a']),
+        wire('w2', ['h', 'y'], ['n', 'a']),
+        wire('w3', ['n', 'y'], ['p', 'a']),
+      ],
+    });
+  }
+  const outNet = (compiled: ReturnType<typeof compile>, path: string) =>
+    compiled.primitives[compiled.pathToPrimitive.get(path)!]!.outputs[0]!;
+  const primOf = (compiled: ReturnType<typeof compile>, path: string) =>
+    compiled.pathToPrimitive.get(path)!;
+  function pressAll(sim: Simulator) {
+    const reports = [];
+    for (let i = 0; i < 50; i++) {
+      const r = sim.gateStep();
+      if (!r) break;
+      reports.push(r);
+    }
+    return reports;
+  }
+
+  it('moves one gate delay per press in ideal timing, then reports settled', () => {
+    const compiled = compile(chain('not'), lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    expect(sim.settled).toBe(false);
+    const reports = pressAll(sim);
+    const changed = reports.filter((r) => r.changedNets.length > 0);
+    expect(changed.map((r) => r.changedNets)).toEqual([
+      [outNet(compiled, 'main/A')],
+      [outNet(compiled, 'main/h')],
+      [outNet(compiled, 'main/n')],
+    ]);
+    const times = changed.map((r) => r.time);
+    expect(times.slice(1).map((t, i) => t - times[i]!)).toEqual([1, 1]);
+    expect(reports.at(-1)!.settled).toBe(true);
+    expect(reports.at(-1)!.pendingPrimitives).toEqual([]);
+    expect(sim.gateStep()).toBeNull();
+  });
+
+  it('lists the parts still pending between presses', () => {
+    const compiled = compile(chain('not'), lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    let r = sim.gateStep()!;
+    while (!r.changedNets.includes(outNet(compiled, 'main/h'))) r = sim.gateStep()!;
+    expect(r.pendingPrimitives).toEqual([primOf(compiled, 'main/n')]);
+    expect(sim.pendingPrimitives()).toEqual(r.pendingPrimitives);
+    expect(r.settled).toBe(false);
+  });
+
+  it('takes a zero-delay wiring hop in the same press as the edge feeding it', () => {
+    const compiled = compile(chain('hop'), lib());
+    const sim = new Simulator(compiled, datasheetDelay('typ'));
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    const reports = pressAll(sim).filter((r) => r.changedNets.length > 0);
+    expect(reports[0]!.changedNets).toEqual(
+      [outNet(compiled, 'main/A'), outNet(compiled, 'main/h')].sort((a, b) => a - b),
+    );
+    expect(reports[1]!.changedNets).toEqual([outNet(compiled, 'main/n')]);
+    expect(reports[1]!.time).toBeGreaterThan(reports[0]!.time);
+  });
+
+  it('lands on the next clock edge from a settled paused clocked board', () => {
+    const clocked = board({
+      components: [
+        comp('c', 'clock', { periodPs: 10_000 }, 'CLK'),
+        comp('p', 'probe', undefined, 'Q'),
+      ],
+      wires: [wire('w1', ['c', 'y'], ['p', 'a'])],
+    });
+    const compiled = compile(clocked, lib());
+    const clk = outNet(compiled, 'main/CLK');
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    expect(sim.settled).toBe(true);
+    expect(sim.pendingPrimitives()).toEqual([]);
+    expect(sim.canStep).toBe(true);
+    let r = sim.gateStep()!;
+    for (let i = 0; i < 5 && !r.changedNets.includes(clk); i++) r = sim.gateStep()!;
+    expect(r.changedNets).toEqual([clk]);
+    // The half-period wake, then the unit delay to the output.
+    expect(r.time).toBe(5_000 + IDEAL_DELAY_PS);
+  });
+
+  it('does not count a wake cancelled by stopping a run as pending', () => {
+    const clocked = board({ components: [comp('c', 'clock', { periodPs: 10_000 }, 'CLK')] });
+    const sim = new Simulator(compile(clocked, lib()), idealDelay);
+    sim.powerOn();
+    sim.start();
+    sim.runUntil(2_500);
+    expect(sim.pendingPrimitives()).toEqual([0]);
+    sim.stop();
+    expect(sim.pendingPrimitives()).toEqual([]);
+    expect(sim.settled).toBe(true);
+  });
+
+  it('does not count a drive superseded before it landed', () => {
+    const compiled = compile(chain('not'), lib());
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    sim.setToggle('main/A', false);
+    expect(sim.pendingPrimitives()).toEqual([primOf(compiled, 'main/A')]);
+    const r = sim.gateStep()!;
+    expect(r.changedNets).toEqual([]);
+    expect(r.pendingPrimitives).toEqual([]);
+    expect(r.settled).toBe(true);
+  });
+
+  it('moves one gate delay per press in datasheet timing, at the settled run times', () => {
+    const compiled = compile(chain('not'), lib());
+    const nets = ['main/A', 'main/h', 'main/n'].map((path) => outNet(compiled, path));
+    const run = new Simulator(compiled, datasheetDelay('typ'));
+    run.powerOn();
+    const t0 = run.time;
+    run.setToggle('main/A', true);
+    run.settle();
+    const expected = nets.map(
+      (net) => run.traceRecords().find((r) => r.net === net && r.time > t0)!.time,
+    );
+    const sim = new Simulator(compiled, datasheetDelay('typ'));
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    const presses = pressAll(sim).filter((r) => r.changedNets.length > 0);
+    expect(presses.map((r) => r.changedNets)).toEqual(nets.map((net) => [net]));
+    expect(presses.map((r) => r.time)).toEqual(expected);
+    expect(expected[2]! - expected[1]!).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it('returns null on a settled combinational board', () => {
+    const sim = new Simulator(compile(chain('not'), lib()), idealDelay);
+    sim.powerOn();
+    expect(sim.settled).toBe(true);
+    expect(sim.gateStep()).toBeNull();
+  });
+
+  it('stops a zero-delay loop at the event budget with an oscillation report', () => {
+    // NAND of A and its own output, wired with no delay: A high makes it ring in zero time.
+    const loop = board({
+      components: [
+        comp('t', 'toggle', undefined, 'A'),
+        comp('h', 'nand', { delay: 'none' }),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [
+        wire('w1', ['t', 'y'], ['h', 'a']),
+        wire('w2', ['h', 'y'], ['h', 'b']),
+        wire('w3', ['h', 'y'], ['p', 'a']),
+      ],
+    });
+    const sim = new Simulator(compile(loop, lib()), datasheetDelay('typ'));
+    expect(sim.powerOn().settled).toBe(true);
+    sim.setToggle('main/A', true);
+    let r = sim.gateStep(200)!;
+    for (let i = 0; i < 5 && !r.oscillation; i++) r = sim.gateStep(200)!;
+    expect(r.settled).toBe(false);
+    expect(r.oscillation?.nets.length).toBeGreaterThan(0);
+  });
+});
+
+describe('kernel: nextSlice', () => {
+  const hopChain = () =>
+    board({
+      components: [
+        comp('t', 'toggle', undefined, 'A'),
+        comp('n', 'not'),
+        comp('h', 'buf', { delay: 'none' }),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [
+        wire('w1', ['t', 'y'], ['n', 'a']),
+        wire('w2', ['n', 'y'], ['h', 'a']),
+        wire('w3', ['h', 'y'], ['p', 'a']),
+      ],
+    });
+
+  it('is null on a settled board', () => {
+    const sim = new Simulator(compile(hopChain(), lib()), idealDelay);
+    sim.powerOn();
+    expect(sim.nextSlice()).toBeNull();
+  });
+
+  it('names the wake of a flipped input, then each primitive whose drive lands next', () => {
+    const compiled = compile(hopChain(), lib());
+    const prim = (path: string) => compiled.pathToPrimitive.get(path)!;
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    expect(sim.nextSlice()).toEqual({ time: sim.time, primitives: [prim('main/A')], wakes: true });
+    const seen: number[][] = [];
+    for (let i = 0; i < 10; i++) {
+      const next = sim.nextSlice();
+      if (!next) break;
+      if (!next.wakes) seen.push(next.primitives);
+      sim.gateStep();
+    }
+    expect(seen).toEqual([[prim('main/A')], [prim('main/n')], [prim('main/h')]]);
+  });
+
+  it('leaves the queue as it was', () => {
+    const sim = new Simulator(compile(hopChain(), lib()), idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    const before = sim.pendingEvents;
+    sim.nextSlice();
+    expect(sim.pendingEvents).toBe(before);
+  });
+});
+
+describe('kernel: logicSettled', () => {
+  const clockedInverter = () =>
+    board({
+      components: [
+        comp('c', 'clock', { periodPs: 1000 }, 'CLK'),
+        comp('n', 'not'),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [wire('w1', ['c', 'y'], ['n', 'a']), wire('w2', ['n', 'y'], ['p', 'a'])],
+    });
+
+  it('waits out the drives a clock edge sets off, ignoring the clock wake itself', () => {
+    const compiled = compile(clockedInverter(), lib());
+    const clock = compiled.primitives[compiled.pathToPrimitive.get('main/CLK')!]!.outputs[0]!;
+    const sim = new Simulator(compiled, idealDelay);
+    sim.powerOn();
+    sim.start();
+    let level = toString(sim.netValue(clock), 1);
+    while (toString(sim.netValue(clock), 1) === level) {
+      level = toString(sim.netValue(clock), 1);
+      sim.deltaStep();
+    }
+    expect(sim.logicSettled).toBe(false);
+    while (!sim.logicSettled) sim.deltaStep();
+    expect(toString(sim.netValueByPath('main/Y'), 1)).not.toBe(toString(sim.netValue(clock), 1));
+    expect(sim.settled).toBe(false);
+  });
+
+  it('waits for the plain wake an input flip queues', () => {
+    const b = board({
+      components: [
+        comp('t', 'toggle', undefined, 'A'),
+        comp('n', 'not'),
+        comp('p', 'probe', undefined, 'Y'),
+      ],
+      wires: [wire('w1', ['t', 'y'], ['n', 'a']), wire('w2', ['n', 'y'], ['p', 'a'])],
+    });
+    const sim = new Simulator(compile(b, lib()), idealDelay);
+    sim.powerOn();
+    sim.setToggle('main/A', true);
+    expect(sim.logicSettled).toBe(false);
+    sim.settle();
+    expect(sim.logicSettled).toBe(true);
+  });
+
+  it('holds on a paused board with nothing queued', () => {
+    const sim = new Simulator(compile(clockedInverter(), lib()), idealDelay);
+    sim.powerOn();
+    expect(sim.logicSettled).toBe(true);
   });
 });

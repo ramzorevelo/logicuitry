@@ -17,6 +17,7 @@ import { hasPrimitive, getPrimitive } from '../sim/primitives/registry';
 const TRACK_KINDS = new Set([
   'clock',
   'timer555',
+  'pattern',
   'toggle',
   'button',
   'inport',
@@ -314,7 +315,15 @@ function buildBands(
 }
 
 /** Kinds whose track is a signal source, not a circuit response. */
-const INPUT_TRACK_KINDS = new Set(['clock', 'timer555', 'toggle', 'button', 'spdt', 'inport']);
+const INPUT_TRACK_KINDS = new Set([
+  'clock',
+  'timer555',
+  'pattern',
+  'toggle',
+  'button',
+  'spdt',
+  'inport',
+]);
 
 /** True when this track's own primitive is one of the net's drivers (as
  *  opposed to merely observing it, like an LED or a same-net probe). */

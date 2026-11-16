@@ -1,5 +1,5 @@
 // I/O component glyphs: switch, LED, button,
-// clock source, 7-segment (raw + decoded-hex), bit probe, bus value display.
+// clock and pattern sources, 7-segment (raw + decoded-hex), bit probe, bus value display.
 // Same rule as gates.ts/chip.ts: body proportions are literal to the shared
 // constants, only each pin's wire-attach tip is snapped onto the grid via
 // symbol.ts's snap() -- several of these housings (switch/button at 1.5G x
@@ -17,13 +17,15 @@ import {
   type SignalState,
   type Theme,
 } from '../theme';
-import { contactToGround } from '../../core/sim/primitives/stimulus';
+import { contactToGround, ledActiveLow } from '../../core/sim/primitives/stimulus';
+import { drawClockWedge } from './chip';
 import type { Params } from '../../core/sim/primitives/types';
 import {
   bitState,
   drawStub,
   drawUprightText,
   measureMonoText,
+  namePlacement,
   registerGlyphGeometry,
   snap,
   textRowCenter,
@@ -209,8 +211,16 @@ export function dipBankLayout(g: number, width: number, names: readonly string[]
   return bitBankLayout(g, width, names, 'right', 2 * g, 3 * g); // 2G row pitch, same 3G width as the 1-bit housing
 }
 
-export function ledBankLayout(g: number, width: number, names: readonly string[]): DipBankLayout {
-  return bitBankLayout(g, width, names, 'left', 3 * g, 3.5 * g); // taller/wider: room for each cell's own diode arrows
+export function ledBankLayout(
+  g: number,
+  width: number,
+  names: readonly string[],
+  activeLow = false,
+): DipBankLayout {
+  // Whole-grid width: a half-grid one puts the pins 4 px off once mirrored or turned 180/270.
+  const l = bitBankLayout(g, width, names, 'left', 3 * g, 4 * g); // taller/wider: room for each cell's own diode arrows
+  if (!activeLow) return l;
+  return { ...l, bounds: { ...l.bounds, w: l.bounds.w + VCC_LEAD * g } };
 }
 
 /** Bit index (MSB topmost) hit by a local Y in a DIP-bank's housing, or
@@ -513,6 +523,11 @@ export function ledShapeOf(params: Params | undefined): LedShape {
   return isLedShape(shape) ? shape : 'symbol';
 }
 
+/** Room right of an active-low LED for its anode lead and the VCC bar on it. */
+const VCC_LEAD = 2; // * G
+/** Half the VCC bar's width. */
+const VCC_BAR = 0.75; // * G
+
 export interface LedLayout {
   g: number;
   H: number;
@@ -524,7 +539,8 @@ export interface LedLayout {
   pins: Map<string, Vec2>;
 }
 
-export function ledLayout(g: number, inName: string): LedLayout {
+/** An active-low LED keeps its local pin and widens on the right, away from it. */
+export function ledLayout(g: number, inName: string, activeLow = false): LedLayout {
   const H = 4 * g; // same single-input height convention as NOT/BUF (H = 2G*2)
   const topPad = g; // arrows (shaft 1.5G + head, 0.5G clear of the edge) live here
   const apexRaw = 2 * g + 0.9 * H;
@@ -534,7 +550,7 @@ export function ledLayout(g: number, inName: string): LedLayout {
   // every device label does.
   const tipX = snap(apexRaw, g);
   const pinY = topPad + snap(H / 2, g);
-  const bounds: Rect = { x: 0, y: 0, w: tipX, h: topPad + H };
+  const bounds: Rect = { x: 0, y: 0, w: tipX + (activeLow ? VCC_LEAD * g : 0), h: topPad + H };
   const pins = new Map<string, Vec2>([[inName, { x: anodeTipX, y: pinY }]]);
   return { g, H, topPad, tipX, pinY, anodeTipX, bounds, pins };
 }
@@ -542,17 +558,75 @@ export function ledLayout(g: number, inName: string): LedLayout {
 registerGlyphGeometry('led', (input, theme) => {
   const ins = insSorted(input);
   const width = ins.length > 1 ? ins.length : ins[0]!.width;
+  const activeLow = ledActiveLow(input.params);
   if (width > 1) {
     const l = ledBankLayout(
       theme.gridSchematic,
       width,
       ins.map((p) => p.name),
+      activeLow,
     );
     return { bounds: l.bounds, pins: l.pins };
   }
-  const l = ledLayout(theme.gridSchematic, ins[0]!.name);
+  const l = ledLayout(theme.gridSchematic, ins[0]!.name, activeLow);
   return { bounds: l.bounds, pins: l.pins };
 });
+
+/** Lit on a 1, or on a 0 for an active-low LED; X and Z stay dark either way. */
+function ledOn(state: SignalState, activeLow: boolean): boolean {
+  return state === (activeLow ? '0' : '1');
+}
+
+/** Draws `draw` flipped left to right about `centerX`, so an active-low diode faces its pin. */
+function mirroredAbout(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  on: boolean,
+  draw: () => void,
+) {
+  if (!on) return draw();
+  ctx.save();
+  ctx.translate(2 * centerX, 0);
+  ctx.scale(-1, 1);
+  draw();
+  ctx.restore();
+}
+
+/**
+ * The anode side of an active-low LED: a lead from each `fromY` at `fromX`
+ * across to `leadX`, up to the VCC bar on the top edge, captioned like a rail.
+ */
+function drawVccLead(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  placement: Placement,
+  g: number,
+  fromX: number,
+  leadX: number,
+  fromYs: readonly number[],
+): void {
+  ctx.strokeStyle = theme.colors.ink;
+  ctx.lineWidth = theme.strokes.wire;
+  ctx.beginPath();
+  for (const y of fromYs) {
+    ctx.moveTo(fromX, y);
+    ctx.lineTo(leadX, y);
+  }
+  ctx.moveTo(leadX, Math.max(...fromYs));
+  ctx.lineTo(leadX, 0);
+  ctx.moveTo(leadX - VCC_BAR * g, 0);
+  ctx.lineTo(leadX + VCC_BAR * g, 0);
+  ctx.stroke();
+  ctx.font = `${theme.glyphText}px ${theme.fonts.mono}`;
+  ctx.fillStyle = theme.colors.ink;
+  drawUprightText(
+    ctx,
+    placement,
+    'VCC',
+    { x: leadX, y: -0.25 * g - theme.glyphText / 2 },
+    { x: 0, y: 0 },
+  );
+}
 
 /** width>1 draws a vertical bank of per-bit cells, MSB topmost, reusing the
  *  DIP-bank's shared geometry, whether collapsed (one wide pin) or
@@ -575,8 +649,10 @@ export function drawLed(
     return;
   }
   const a = ins[0]!;
-  const on = bitState(rawOf(a.name)) === '1';
-  const l = ledLayout(theme.gridSchematic, a.name);
+  const activeLow = ledActiveLow(input.params);
+  const pinState = bitState(rawOf(a.name));
+  const on = ledOn(pinState, activeLow);
+  const l = ledLayout(theme.gridSchematic, a.name, activeLow);
   const g = l.g;
   const bodyX0 = 2 * g; // one pitch of stub reserved on the input side
   const top = l.topPad;
@@ -587,6 +663,9 @@ export function drawLed(
   const round = ledShapeOf(input.params) === 'round';
   const radius = l.H / 2;
   const centerX = bodyX0 + radius;
+  // The anode: the flat side of the diode mark, or the bulb's far edge.
+  const anodeX = round ? centerX + radius : apexX;
+  const markCenterX = round ? centerX : (bodyX0 + apexX) / 2;
   withPlacement(ctx, l.bounds, placement, () => {
     const body = () => {
       if (round) {
@@ -598,61 +677,61 @@ export function drawLed(
       ctx.lineTo(apexX, midY);
       ctx.closePath();
     };
-    ctx.lineWidth = theme.strokes.wire;
-    if (on) paintEmission(ctx, theme, glow, body);
-    paintLens(ctx, theme, lit, on, body);
-    ctx.strokeStyle = theme.colors.ink;
-    ctx.stroke();
-
-    if (!round) {
-      // Cathode bar, perpendicular to the apex, same height as the triangle's base.
-      ctx.beginPath();
-      ctx.moveTo(apexX, top);
-      ctx.lineTo(apexX, top + l.H);
+    mirroredAbout(ctx, markCenterX, activeLow, () => {
+      ctx.lineWidth = theme.strokes.wire;
+      if (on) paintEmission(ctx, theme, glow, body);
+      paintLens(ctx, theme, lit, on, body);
+      ctx.strokeStyle = theme.colors.ink;
       ctx.stroke();
-    }
 
-    // Two parallel arrows radiating 45 degrees up-right, away from the body
-    // (light leaves an LED): shaft ~1.5G plus an open head at the far end,
-    // near end >= 0.5G clear of the body edge. They decorate the ANSI diode
-    // mark, so the round bulb goes without.
-    if (!round) {
-      const u = Math.SQRT1_2; // unit 45-degree components
-      const shaft = 1.5 * g;
-      const head = 0.5 * g;
-      const starts: Vec2[] = [0.25 * l.H, 0.5 * l.H].map((along) => {
-        // Point on the upper edge at this x, then back off 0.5G perpendicular.
-        const edgeY = top + (along / (0.9 * l.H)) * (l.H / 2);
-        return { x: bodyX0 + along + 0.5 * g * u, y: edgeY - 0.5 * g * u };
-      });
-      for (const s of starts) {
-        const fx = s.x + shaft * u;
-        const fy = s.y - shaft * u;
+      if (!round) {
+        // Cathode bar, perpendicular to the apex, same height as the triangle's base.
         ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(fx, fy);
-        // Open arrowhead: two strokes back from the far end.
-        ctx.moveTo(fx - head, fy);
-        ctx.lineTo(fx, fy);
-        ctx.lineTo(fx, fy + head);
+        ctx.moveTo(apexX, top);
+        ctx.lineTo(apexX, top + l.H);
         ctx.stroke();
       }
-    }
+
+      // Arrows point away from the body, since light leaves an LED; the round bulb goes without.
+      if (!round) {
+        const u = Math.SQRT1_2; // unit 45-degree components
+        const shaft = 1.5 * g;
+        const head = 0.5 * g;
+        const starts: Vec2[] = [0.25 * l.H, 0.5 * l.H].map((along) => {
+          // Point on the upper edge at this x, then back off 0.5G perpendicular.
+          const edgeY = top + (along / (0.9 * l.H)) * (l.H / 2);
+          return { x: bodyX0 + along + 0.5 * g * u, y: edgeY - 0.5 * g * u };
+        });
+        for (const s of starts) {
+          const fx = s.x + shaft * u;
+          const fy = s.y - shaft * u;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(fx, fy);
+          // Open arrowhead: two strokes back from the far end.
+          ctx.moveTo(fx - head, fy);
+          ctx.lineTo(fx, fy);
+          ctx.lineTo(fx, fy + head);
+          ctx.stroke();
+        }
+      }
+    });
+    if (activeLow) drawVccLead(ctx, theme, placement, g, anodeX, l.tipX + g, [midY]);
 
     drawStub(
       ctx,
       theme,
       { x: l.anodeTipX, y: l.pinY },
       { x: bodyX0, y: l.pinY },
-      live ? (on ? '1' : '0') : undefined,
+      live ? (activeLow ? pinState : on ? '1' : '0') : undefined,
     );
-    // Pin stub enters on the left, so the label sits right of the cathode bar.
+    // Pin stub enters on the left, so the label sits right of the cathode bar, or of the VCC lead.
     drawDeviceLabel(
       ctx,
       theme,
       placement,
       label,
-      { x: apexX + 0.5 * g, y: l.pinY },
+      { x: (activeLow ? l.tipX + g : apexX) + 0.5 * g, y: l.pinY },
       { x: 1, y: 0 },
     );
   });
@@ -676,7 +755,8 @@ function drawLedBank(
   const expanded = ins.length > 1;
   const width = expanded ? ins.length : ins[0]!.width;
   const names = expanded ? ins.map((p) => p.name) : [ins[0]!.name];
-  const l = ledBankLayout(theme.gridSchematic, width, names);
+  const activeLow = ledActiveLow(input.params);
+  const l = ledBankLayout(theme.gridSchematic, width, names, activeLow);
   const g = l.g;
   const lit = ledColorOf(theme, input.params);
   const glow = ledEmissionOf(theme, input.params);
@@ -692,13 +772,17 @@ function drawLedBank(
         : bitState(
             (({ v, x, z }) => ({ v: v >>> bit, x: x >>> bit, z: z >>> bit }))(rawOf(names[0]!)),
           );
-      const on = state === '1';
-      // The base (left edge) stays put; depth = halfH * sqrt(3) keeps the
-      // single LED's own ~equilateral proportions at this smaller scale.
+      const on = ledOn(state, activeLow);
+      // depth = halfH * sqrt(3) keeps the single LED's own ~equilateral
+      // proportions at this smaller scale; the whole mark centres in the cell.
       const symMidY = cellY + l.cellH / 2;
-      const triLeftX = l.housing.x + 0.5 * g;
       const triHalfH = 0.75 * g;
-      const triRightX = triLeftX + triHalfH * Math.sqrt(3);
+      const triDepth = triHalfH * Math.sqrt(3);
+      const shaft = 0.8 * g;
+      const arrowReach = 0.45 * g + shaft * Math.SQRT1_2;
+      const markW = round ? triDepth : triDepth + arrowReach;
+      const triLeftX = l.housing.x + (l.housing.w - markW) / 2;
+      const triRightX = triLeftX + triDepth;
       const triTopY = symMidY - triHalfH;
       // Diode triangle+bar (the ANSI LED mark, scaled to the cell) --
       // distinguishes each cell as an LED, not a switch lever's plain rect.
@@ -712,40 +796,41 @@ function drawLedBank(
         ctx.lineTo(triRightX, symMidY);
         ctx.closePath();
       };
-      ctx.lineWidth = theme.strokes.min;
-      if (on) paintEmission(ctx, theme, glow, cellBody);
-      paintLens(ctx, theme, lit, on, cellBody);
-      ctx.strokeStyle = theme.colors.ink;
-      ctx.stroke();
-      if (!round) {
-        ctx.beginPath();
-        ctx.moveTo(triRightX, symMidY - triHalfH);
-        ctx.lineTo(triRightX, symMidY + triHalfH);
+      mirroredAbout(ctx, l.housing.x + l.housing.w / 2, activeLow, () => {
+        ctx.lineWidth = theme.strokes.min;
+        if (on) paintEmission(ctx, theme, glow, cellBody);
+        paintLens(ctx, theme, lit, on, cellBody);
+        ctx.strokeStyle = theme.colors.ink;
         ctx.stroke();
-      }
-
-      // Two short arrows radiating up-right, staggered starting points to
-      // the right of the cathode bar (never crossing its vertical line).
-      if (!round) {
-        const u = Math.SQRT1_2;
-        const shaft = 0.8 * g;
-        const head = 0.3 * g;
-        const starts: Vec2[] = [
-          { x: triRightX + 0.15 * g, y: symMidY - 0.55 * g },
-          { x: triRightX + 0.45 * g, y: symMidY - 0.25 * g },
-        ];
-        for (const s of starts) {
-          const fx = s.x + shaft * u;
-          const fy = s.y - shaft * u;
+        if (!round) {
           ctx.beginPath();
-          ctx.moveTo(s.x, s.y);
-          ctx.lineTo(fx, fy);
-          ctx.moveTo(fx - head, fy);
-          ctx.lineTo(fx, fy);
-          ctx.lineTo(fx, fy + head);
+          ctx.moveTo(triRightX, symMidY - triHalfH);
+          ctx.lineTo(triRightX, symMidY + triHalfH);
           ctx.stroke();
         }
-      }
+
+        // Two short arrows radiating up-right, staggered starting points to
+        // the right of the cathode bar (never crossing its vertical line).
+        if (!round) {
+          const u = Math.SQRT1_2;
+          const head = 0.3 * g;
+          const starts: Vec2[] = [
+            { x: triRightX + 0.15 * g, y: symMidY - 0.55 * g },
+            { x: triRightX + 0.45 * g, y: symMidY - 0.25 * g },
+          ];
+          for (const s of starts) {
+            const fx = s.x + shaft * u;
+            const fy = s.y - shaft * u;
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(fx, fy);
+            ctx.moveTo(fx - head, fy);
+            ctx.lineTo(fx, fy);
+            ctx.lineTo(fx, fy + head);
+            ctx.stroke();
+          }
+        }
+      });
       if (row > 0) {
         // Divider between cells.
         ctx.beginPath();
@@ -774,13 +859,18 @@ function drawLedBank(
       // stub uncolored the same way); each cell already shows its own bit.
       drawStub(ctx, theme, { x: 0, y: l.pinY }, { x: l.housing.x, y: l.pinY });
     }
-    // Pin stub enters on the left, so the label sits right of the housing.
+    const housingRight = l.housing.x + l.housing.w;
+    if (activeLow) {
+      const cellMids = Array.from({ length: l.width }, (_, row) => (row + 0.5) * l.cellH);
+      drawVccLead(ctx, theme, placement, g, housingRight, housingRight + g, cellMids);
+    }
+    // Pin stub enters on the left, so the label sits right of the housing, or of the VCC lead.
     drawDeviceLabel(
       ctx,
       theme,
       placement,
       label,
-      { x: l.housing.x + l.housing.w + 0.5 * g, y: l.pinY },
+      { x: (activeLow ? l.bounds.w : housingRight) + 0.5 * g, y: l.pinY },
       { x: 1, y: 0 },
     );
   });
@@ -956,6 +1046,147 @@ export function drawClock(
     drawStub(ctx, theme, { x: l.boxW, y: l.pinY }, { x: l.tipX, y: l.pinY });
     // Pin stub exits right, so the label sits left of the box.
     drawDeviceLabel(ctx, theme, placement, label, { x: -0.5 * l.g, y: l.pinY }, { x: -1, y: 0 });
+  });
+}
+
+// --- Pattern source ---
+
+const PATTERN_TITLE = 'PAT';
+/** Height of the band the value strip sits in, below the title. */
+const PATTERN_MARK_BAND = 4; // * G
+/** The strip is a waveform viewer's bus segment: arbitrary values in turn, not a ramp. */
+const PATTERN_STRIP_LEN = 4; // * G
+const PATTERN_STRIP_H = 1.5; // * G
+const PATTERN_CELLS = 3;
+
+export interface PatternLayout {
+  g: number;
+  clocked: boolean;
+  nameFontPx: number;
+  headerH: number;
+  boxLeft: number;
+  boxRight: number;
+  boxH: number;
+  pinY: number;
+  tipX: number;
+  /** The value strip, level with the output and right-aligned clear of the clk wedge. */
+  strip: Rect;
+  bounds: Rect;
+  pins: Map<string, Vec2>;
+}
+
+/** Clocked mode adds a left stub for `clk` and one grid of body for its wedge. */
+export function patternLayout(input: GeometryInput, theme: Theme): PatternLayout {
+  const g = theme.gridSchematic;
+  const out = input.pins.find((p) => p.dir === 'out')!;
+  const clk = input.pins.find((p) => p.dir === 'in');
+  const clocked = clk !== undefined;
+  const nameFontPx = theme.glyphText * 1.15;
+  const headerH = Math.max(g, Math.ceil((nameFontPx + 0.5 * g) / g) * g);
+  const boxH = headerH + PATTERN_MARK_BAND * g;
+  const pinY = headerH + (PATTERN_MARK_BAND / 2) * g;
+  const markW = (PATTERN_STRIP_LEN + 2 + (clocked ? 1 : 0)) * g;
+  const titleW = Math.ceil((measureMonoText(PATTERN_TITLE, nameFontPx) + 2 * g) / g) * g;
+  const boxLeft = clocked ? 2 * g : 0;
+  const boxRight = boxLeft + Math.max(markW, titleW);
+  const tipX = boxRight + 2 * g;
+  const pins = new Map<string, Vec2>([[out.name, { x: tipX, y: pinY }]]);
+  if (clk) pins.set(clk.name, { x: 0, y: pinY });
+  const stripH = PATTERN_STRIP_H * g;
+  const strip = {
+    x: boxRight - (PATTERN_STRIP_LEN + 1) * g,
+    y: pinY - stripH / 2,
+    w: PATTERN_STRIP_LEN * g,
+    h: stripH,
+  };
+  return {
+    g,
+    clocked,
+    nameFontPx,
+    headerH,
+    boxLeft,
+    boxRight,
+    boxH,
+    pinY,
+    tipX,
+    strip,
+    bounds: { x: 0, y: 0, w: tipX, h: boxH },
+    pins,
+  };
+}
+
+registerGlyphGeometry('pattern', (input, theme) => {
+  const l = patternLayout(input, theme);
+  return { bounds: l.bounds, pins: l.pins };
+});
+
+export function drawPattern(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  input: GeometryInput,
+  placement: Placement,
+  stateOf: (pin: string) => SignalState | undefined,
+  instanceName?: string,
+): void {
+  const l = patternLayout(input, theme);
+  const g = l.g;
+  const out = input.pins.find((p) => p.dir === 'out')!;
+  const clk = input.pins.find((p) => p.dir === 'in');
+  withPlacement(ctx, l.bounds, placement, () => {
+    const box = { x: l.boxLeft, y: 0, w: l.boxRight - l.boxLeft, h: l.boxH };
+    paintBody(ctx, theme, () => bodyRectPath(ctx, theme, box), { rect: box });
+    ctx.font = `${l.nameFontPx}px ${theme.fonts.mono}`;
+    ctx.fillStyle = theme.colors.ink;
+    drawUprightText(
+      ctx,
+      placement,
+      PATTERN_TITLE,
+      { x: (l.boxLeft + l.boxRight) / 2, y: l.headerH / 2 },
+      { x: 0, y: 0 },
+    );
+
+    // Neighbouring cells share their pointed ends, which draws the crossing between values.
+    const { x, y, w, h } = l.strip;
+    const cellW = w / PATTERN_CELLS;
+    // Shallow enough that each cell keeps a flat top and reads as a bus value, not a link.
+    const slant = Math.min(0.25 * g, cellW / 4);
+    const midY = y + h / 2;
+    ctx.beginPath();
+    for (let i = 0; i < PATTERN_CELLS; i++) {
+      const a = x + i * cellW;
+      const b = a + cellW;
+      ctx.moveTo(a, midY);
+      ctx.lineTo(a + slant, y);
+      ctx.lineTo(b - slant, y);
+      ctx.lineTo(b, midY);
+      ctx.lineTo(b - slant, y + h);
+      ctx.lineTo(a + slant, y + h);
+      ctx.closePath();
+    }
+    ctx.strokeStyle = theme.colors.ink;
+    ctx.lineWidth = theme.strokes.wire;
+    ctx.lineJoin = 'miter';
+    ctx.stroke();
+
+    drawStub(ctx, theme, { x: l.boxRight, y: l.pinY }, { x: l.tipX, y: l.pinY }, stateOf(out.name));
+    if (clk) {
+      drawStub(ctx, theme, { x: l.boxLeft, y: l.pinY }, { x: 0, y: l.pinY }, stateOf(clk.name));
+      drawClockWedge(ctx, theme, l.boxLeft, l.pinY, true);
+    }
+
+    if (instanceName) {
+      const { anchor, inward } = namePlacement(
+        l.bounds,
+        { top: false, bottom: false, left: l.clocked, right: true },
+        g,
+        instanceName,
+        l.nameFontPx,
+        input.nameOffset,
+      );
+      ctx.font = `${l.nameFontPx}px ${theme.fonts.mono}`;
+      ctx.fillStyle = theme.colors.ink;
+      drawUprightText(ctx, placement, instanceName, anchor, inward);
+    }
   });
 }
 

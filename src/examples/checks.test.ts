@@ -53,16 +53,23 @@ const EXPECTED: Record<string, [number, number]> = {
   'divide-by-two': [0, 0],
   'enabled-register-on-a-74ls157-and-two-74ls74s': [0, 2],
   'shift-register': [0, 1],
-  'ring-oscillator-on-a-74ls00-and-a-74ls04': [2, 2],
+  'ring-oscillator-on-a-74ls00-and-a-74ls04': [0, 2],
   'register-to-register-path': [0, 2],
-  'three-bit-counter-on-two-74ls74s': [2, 4],
+  'three-bit-counter-on-two-74ls74s': [0, 4],
   'mod-10-counter': [0, 1],
-  'clock-module': [3, 3],
+  'logic-project-module': [0, 3],
+  'clock-module': [0, 4],
   'bus-and-registers': [0, 0],
-  'alu-and-flags': [1, 2],
-  'registers-and-alu': [1, 2],
-  'program-counter-mar-and-ram': [12, 5],
-  'eight-bit-bus-computer': [13, 7],
+  'alu-and-flags': [0, 2],
+  'registers-and-alu': [0, 2],
+  'program-counter-mar-and-ram': [0, 5],
+  'eight-bit-bus-computer': [0, 7],
+  'four-bank-interleaved-memory': [0, 1],
+  'cache-tag-lookup': [0, 2],
+  // Starters: the student wires them, so every input is unused and every output unwired.
+  'majority-vote-nand-only': [1, 3],
+  'minterms-on-a-74ls138': [1, 3],
+  'three-bit-counter-from-74ls-parts': [3, 2],
 };
 
 describe('checks over the bundled examples', () => {
@@ -71,7 +78,8 @@ describe('checks over the bundled examples', () => {
       ...builtinChipLibrary(),
       ...(e.chips ?? []).map((c) => [c.id, c] as const),
     ]);
-    const rows = checkRows(staticFindings(e.board, lib), new Set(), e.board, lib).shown;
+    const hidden = new Set(e.board.hiddenChecks);
+    const rows = checkRows(staticFindings(e.board, lib), hidden, e.board, lib).shown;
     const n = (severity: string) => rows.filter((r) => r.severity === severity).length;
     expect(rows.some((r) => r.severity === 'error')).toBe(false);
     expect([n('warning'), n('info')]).toEqual(EXPECTED[id]);

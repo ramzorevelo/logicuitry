@@ -8,6 +8,8 @@ import { useCompact } from '../compact';
 import { useBackLayer } from '../backStack';
 import { useCoarsePointer } from '../pointerKind';
 import { isBuiltinChipDef } from '../../core/parts/packages';
+import { allowedOf, chipDefAllowed } from '../../core/challenge/allowed';
+import { useLessonOpen } from './ChallengePanel';
 import { LONG_PRESS_MS } from './touchGestures';
 import {
   PALETTE,
@@ -40,6 +42,15 @@ export function PaletteRail({ paletteRef, width }: Props) {
   const tool = useCircuitStore((s) => s.tool);
   const mode = useCircuitStore((s) => s.mode);
   const chipLib = useCircuitStore((s) => s.chipLib);
+  const lessonOpen = useLessonOpen();
+  const allowed = useCircuitStore((s) => s.board.challenge?.allowed);
+  // A hint, never a lock: a dimmed part still places, and the live rows flag it.
+  const offList = (e: Entry): boolean => {
+    if (!allowed || allowed.length === 0 || lessonOpen) return false;
+    if (e.kind !== 'chip') return !allowedOf(allowed, e.kind);
+    const def = chipLib.get(e.defId ?? '');
+    return def !== undefined && !chipDefAllowed(allowed, def, chipLib);
+  };
   // On a phone the rail is a strip, and every group open at once is one long
   // scroll with no sense of where you are. Tabs instead: one group open, the
   // rest collapsed to their headings. Desktop keeps every group expandable
@@ -194,6 +205,7 @@ export function PaletteRail({ paletteRef, width }: Props) {
       tool.componentKind === e.kind &&
       tool.params === e.params &&
       tool.defId === e.defId;
+    const off = offList(e);
     return (
       <button
         key={e.key}
@@ -201,9 +213,11 @@ export function PaletteRail({ paletteRef, width }: Props) {
         hidden={hidden}
         className={`palette-item${
           active ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}` : ''
-        }`}
+        }${off ? ' palette-item--off' : ''}`}
         disabled={mode === 'bubble'}
-        title={`${e.caption ? `${e.label}, ${e.caption}` : e.label} (${keepPlacing})`}
+        title={`${e.caption ? `${e.label}, ${e.caption}` : e.label} (${keepPlacing})${
+          off ? '. Not allowed in this challenge' : ''
+        }`}
         {...holdProps(
           () => place(false),
           () => place(true),

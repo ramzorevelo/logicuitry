@@ -40,13 +40,15 @@ describe('checksView', () => {
         chipComp('u1', '74LS32', 'U1'),
         comp('btn', 'button', { toGround: true }),
         comp('n', 'not'),
+        comp('n2', 'not'),
       ],
-      wires: [wire('w1', ['btn', 'y'], ['n', 'a'])],
+      wires: [wire('w1', ['btn', 'y'], ['n', 'a']), wire('w2', ['u1', '1Y'], ['n2', 'a'])],
     });
     const m = view(b).markers;
     expect(m.badges).toEqual(new Set(['u1']));
     expect(m.dashedWires).toEqual(new Set(['w1']));
     expect(m.pins.some((p) => p.component === 'u1' && p.pin === '1A')).toBe(true);
+    expect(m.pins.some((p) => p.component === 'u1' && p.pin === '2A')).toBe(false);
     const hidden = view({ ...b, hiddenChecks: ['power:u1.VCC', 'power:u1.GND'] }).markers;
     expect(hidden.badges.size).toBe(0);
   });

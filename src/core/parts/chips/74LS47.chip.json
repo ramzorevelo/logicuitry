@@ -406,7 +406,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -417,7 +418,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -428,7 +430,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -439,7 +442,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -450,7 +454,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -461,7 +466,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     },
     {
@@ -472,7 +478,8 @@
         "y": 0
       },
       "params": {
-        "delay": "none"
+        "delay": "none",
+        "openCollector": true
       }
     }
   ],

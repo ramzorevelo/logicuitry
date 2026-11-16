@@ -2,8 +2,8 @@
 // (labelSync via a wire commit or a rename touching several output nets at
 // once, e.g. naming a decoder): one radio group per net, picked locally and
 // committed together via Apply (one undo step for the whole dialog). Esc or
-// a click outside the dialog instead undoes the edit that raised the
-// conflict -- the attempted rename itself reverts, not just the label pick.
+// a click outside the dialog instead reverts the wire or rename that raised
+// the conflict, not just the label pick.
 
 import { useEffect, useState } from 'react';
 import { oneLine } from '../../render/glyphs/symbol';
@@ -40,7 +40,7 @@ export function LabelConflictDialog() {
       <div className="package-dialog label-conflict-dialog" onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         <p className="label-conflict-hint">
-          Pick a label for each net, then Apply. Esc or clicking outside cancels the rename.
+          Pick a label for each net, then Apply. Esc or clicking outside cancels the change.
         </p>
         {conflicts.map((row, i) => (
           <fieldset className="label-conflict-row" key={`${i}-${row.heading}`}>

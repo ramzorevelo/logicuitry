@@ -10,3 +10,8 @@ declare module '*.lcirc' {
   const value: unknown;
   export default value;
 }
+
+declare module '*.lcirl' {
+  const value: unknown;
+  export default value;
+}

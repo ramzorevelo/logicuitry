@@ -17,6 +17,11 @@ export class EventQueue<T extends Timestamped> {
     return this.heap[0];
   }
 
+  /** Every queued item, in heap order, not time order. */
+  forEach(visit: (item: T) => void): void {
+    for (const item of this.heap) visit(item);
+  }
+
   push(item: T): void {
     const h = this.heap;
     h.push(item);

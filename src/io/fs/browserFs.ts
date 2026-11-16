@@ -1,4 +1,4 @@
-import { BOARD_EXT, CHIP_EXT, isDocumentName } from '../docExtensions';
+import { BOARD_EXT, CHIP_EXT, LESSON_EXT, isDocumentName } from '../docExtensions';
 // Browser file backend: the library lives as JSON files in a user-picked
 // directory (the git-tracked library folder). Chromium gets the
 // real picker with a persisted handle; other browsers fall back to manual
@@ -88,6 +88,18 @@ export async function listFiles(root: LibraryDir, sub: LibrarySubdir): Promise<s
   return names.sort();
 }
 
+/** Document files in `dir`, or in its `sub` folder, as openable files; throws on a missing folder. */
+export async function listDocFiles(dir: LibraryDir, sub?: LibrarySubdir): Promise<DocFile[]> {
+  const folder = sub ? await subdirHandle(dir, sub, false) : asHandle(dir);
+  const files: DocFile[] = [];
+  for await (const [name, entry] of folder as unknown as AsyncIterable<
+    [string, FileSystemHandle]
+  >) {
+    if (entry.kind === 'file' && isDocumentName(name)) files.push(entry as unknown as DocFile);
+  }
+  return files;
+}
+
 export async function readDoc(
   root: LibraryDir,
   sub: LibrarySubdir,
@@ -146,6 +158,10 @@ const DOC_TYPES = [
     description: 'Logicuitry chip',
     accept: { 'application/json': [CHIP_EXT] },
   },
+  {
+    description: 'Logicuitry lesson',
+    accept: { 'application/json': [LESSON_EXT] },
+  },
 ];
 
 /** Chromium-only, like the directory picker; other browsers fall back to an
@@ -171,7 +187,7 @@ function chooseUploadedFile(): Promise<DocFile | undefined> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = `${BOARD_EXT},${CHIP_EXT}`;
+    input.accept = `${BOARD_EXT},${CHIP_EXT},${LESSON_EXT}`;
     input.hidden = true;
     const done = (file?: File) => {
       input.remove();

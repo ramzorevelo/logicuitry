@@ -45,7 +45,7 @@ export function tapWire(
 export function board(over: Partial<Board>): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'test-board',
     name: 'test',
     components: [],

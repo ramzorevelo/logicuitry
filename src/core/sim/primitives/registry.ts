@@ -30,6 +30,7 @@ import { counter } from './counter';
 import { shiftreg } from './shiftreg';
 import { ram } from './ram';
 import { clock, led, probe, pushButton, spdtSwitch, toggleSwitch } from './stimulus';
+import { pattern } from './pattern';
 import { mux } from './mux';
 import { demux } from './demux';
 import { busdisplay, ledmatrix, sevenseg } from './display';
@@ -92,6 +93,7 @@ for (const spec of [
   mux,
   demux,
   clock,
+  pattern,
   timer555,
   toggleSwitch,
   pushButton,

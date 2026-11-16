@@ -328,8 +328,19 @@
   cursor: default;
 }
 
+/* Not on the challenge's allowed list: dimmed and struck, not by colour alone. Still placeable. */
+.palette-item--off .palette-item__glyph {
+  opacity: 0.4;
+}
+
+.palette-item--off .palette-item__label {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Rem-sized, so presentation mode scales it: the gate step readout is read from the back row. */
 .sim-status {
-  font: 12px var(--font-mono);
+  font: var(--text-secondary) var(--font-mono);
   color: var(--muted);
   align-self: center;
   white-space: nowrap;
@@ -1131,6 +1142,357 @@
   min-height: var(--touch-h);
 }
 
+/* --- Challenge tab: brief left, requirement rows right --- */
+
+.wave-panel__body--challenge {
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.challenge-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  min-height: 100%;
+}
+
+.challenge-panel__brief {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border-right: 1px solid var(--line);
+}
+
+/* Stacked only where the dock is narrow: a landscape phone keeps the two columns. */
+@media (max-width: 640px) {
+  .challenge-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .challenge-panel__brief {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.challenge-panel__title {
+  font-weight: 600;
+}
+
+.challenge-panel__changed {
+  color: var(--warn);
+  font-size: var(--text-secondary);
+}
+
+.challenge-panel__from {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.challenge-panel__text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.challenge-panel__stale {
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
+  border-left: 3px solid var(--warn);
+  background: var(--accent-fill);
+  font-size: var(--text-secondary);
+}
+
+.challenge-panel__summary {
+  color: var(--accent-2);
+  font-size: var(--text-secondary);
+}
+
+.challenge-panel__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.challenge-panel__busy {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.challenge-panel__rows {
+  min-width: 0;
+}
+
+.challenge-panel__group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+  margin: 0;
+  padding: 4px var(--space-unit) 2px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.challenge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 5px calc(var(--space-unit) * 2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.challenge-row:disabled {
+  cursor: default;
+}
+
+.challenge-row--picked {
+  background: var(--accent-fill);
+}
+
+.challenge-row--dim {
+  opacity: 0.55;
+}
+
+.app-shell--compact .challenge-row {
+  min-height: var(--touch-h);
+}
+
+.challenge-row__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.challenge-row__title {
+  overflow-wrap: anywhere;
+}
+
+.challenge-row__detail {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.challenge-mark {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  margin-top: 0.2em;
+}
+
+.challenge-mark__ring {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 1.6;
+}
+
+.challenge-mark__tick {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.challenge-mark__fill {
+  fill: var(--warn);
+}
+
+.challenge-mark__cut {
+  fill: var(--surface);
+}
+
+.challenge-mark__dash {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 2.2 2;
+}
+
+.challenge-tt {
+  overflow-x: auto;
+  padding: 2px calc(var(--space-unit) * 2) calc(var(--space-unit) * 2) calc(var(--space-unit) * 9);
+  border-bottom: 1px solid var(--line);
+}
+
+.challenge-tt table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.challenge-tt th {
+  padding: 1px 7px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.challenge-tt td {
+  padding: 1px 7px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.challenge-tt .challenge-tt__sep {
+  border-left: 2px solid var(--line);
+}
+
+.challenge-tt__bad td {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+.challenge-tt .challenge-tt__got {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.challenge-pill .challenge-mark {
+  margin-top: 0;
+}
+
+.challenge-pill__text,
+.dock-tab__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.dock-tab__count {
+  display: none;
+}
+
+/* Four dock tabs overflowed a 412px phone: the selected tab shows by its fill, and the tab
+   carries the tally the toolbar pill would. View only has no dock, so it keeps its pill. */
+.app-shell--compact .dock-tab__fold,
+.app-shell--compact .circuit-editor:not(.circuit-editor--view-only) .challenge-pill {
+  display: none;
+}
+
+.app-shell--compact .dock-tab__count {
+  display: inline;
+}
+
+.app-shell--compact .dock-tabs .tool-btn {
+  padding-left: var(--space-unit);
+  padding-right: var(--space-unit);
+  gap: var(--space-unit);
+}
+
+.challenge-dialog {
+  width: min(720px, 100%);
+}
+
+.app-shell--compact .challenge-dialog {
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+
+.challenge-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+}
+
+.challenge-dialog__body section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding-bottom: calc(var(--space-unit) * 3);
+  border-bottom: 1px solid var(--line);
+}
+
+.challenge-dialog__body h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.challenge-dialog__body textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.challenge-dialog__body input[type='number'] {
+  width: 5em;
+}
+
+.challenge-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.25);
+}
+
+.challenge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--chrome-radius);
+  background: var(--paper);
+  font: var(--text-secondary) / 1 var(--font-mono);
+}
+
+.challenge-chip button {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.challenge-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  font-size: var(--text-secondary);
+}
+
+.challenge-hint {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.challenge-cell {
+  min-width: 2em;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--chrome-radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-shell--compact .challenge-chip button,
+.app-shell--compact .challenge-cell {
+  min-height: var(--touch-h);
+  min-width: var(--touch-h);
+}
+
 /* --- Memory tab: one card per RAM --- */
 
 .wave-panel__body--memory {
@@ -1250,6 +1612,11 @@
   border: 1px solid var(--line);
   border-radius: 2px;
   padding: 1px 3px;
+}
+
+/* A pattern's value list runs longer than one number. */
+.circuit-clock-edit input.circuit-clock-edit__wide {
+  width: 16ch;
 }
 
 .circuit-clock-edit__hint,
@@ -1462,48 +1829,6 @@
   min-height: var(--touch-h);
 }
 
-/* Examples list. Also the first thing reached on a phone, so the rows are
-   touch-sized. Sizing and scrolling come from the shared dialog primitive;
-   this only narrows the desktop cap, since a list of names does not need the
-   full width a form does. */
-.examples-dialog {
-  max-width: min(560px, 92vw);
-  max-height: 80vh;
-}
-
-.examples-list {
-  list-style: none;
-  margin: calc(var(--space-unit) * 2) 0;
-  padding: 0;
-}
-
-.examples-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  min-height: var(--touch-h);
-  padding: var(--space-unit) calc(var(--space-unit) * 2);
-  text-align: left;
-  font: inherit;
-  color: var(--ink);
-  background: transparent;
-  border: var(--stroke-min) solid transparent;
-  border-radius: var(--radius);
-  cursor: pointer;
-}
-
-.examples-item:hover,
-.examples-item:focus-visible {
-  background: var(--accent-fill);
-  border-color: var(--accent);
-}
-
-.examples-item__desc {
-  color: var(--muted);
-  font-size: var(--text-secondary);
-}
-
 /* The name field holds a caption ("OR of inverses"), not a number, so it does
    not inherit the numeric fields' 8ch. Captions may also be multi-line, in
    which case the field grows with them rather than scrolling. */
@@ -1513,16 +1838,6 @@
   min-height: 1.4em;
   font: inherit;
   line-height: 1.25;
-}
-
-/* Heading over a run of examples that share a group, so the algebra boards
-   read as a set rather than as more entries on one long list. */
-.examples-group {
-  margin: var(--space-unit) 0 calc(var(--space-unit) / 2);
-  color: var(--muted);
-  font: var(--text-secondary) / 1 var(--font-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 /* Selection action bar: the touch stand-in for Ctrl/Alt and the hover-scoped
@@ -1878,6 +2193,12 @@
   text-align: center;
 }
 
+/* The gate step readout is longer than any word fits in a 72px rail. */
+.app-shell--landscape .sim-status {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 /* The pending smart-connect proposal's controls. Bottom-centre over the board:
    the proposal itself is drawn on the canvas, so the chrome sits clear of it
    rather than beside the parts being wired. */
@@ -1968,14 +2289,24 @@
 
 /* Blocked-gesture feedback. The toast sits over the canvas rather than in the
    layout, so it cannot reflow the board mid-lecture; it is a singleton by
-   construction (one `notice` string), so repeats can never stack. */
-.circuit-notice {
+   construction (one `notice` string), so repeats can never stack. The Tidy
+   wiring busy pill shares the slot, above it, so neither hides the other. */
+.circuit-notices {
   position: absolute;
   left: 50%;
   bottom: calc(var(--space-unit) * 3);
   transform: translateX(-50%);
   z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-unit);
+  width: max-content;
   max-width: min(90%, 42ch);
+  pointer-events: none;
+}
+
+.circuit-notice {
   padding: calc(var(--space-unit) * 0.75) calc(var(--space-unit) * 1.5);
   border: 1px solid var(--warn);
   border-radius: 4px;
@@ -1983,14 +2314,35 @@
   color: var(--warn);
   font: var(--text-secondary) / 1.3 var(--font-sans, inherit);
   text-align: center;
-  pointer-events: none;
   animation: circuit-notice-in 120ms ease-out;
+}
+
+.circuit-busy {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  padding: calc(var(--space-unit) * 0.5) calc(var(--space-unit) * 0.5) calc(var(--space-unit) * 0.5)
+    calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--text-secondary) / 1.3 var(--font-sans, inherit);
+  pointer-events: auto;
+}
+
+.circuit-busy .tool-btn {
+  justify-content: center;
+  padding-inline: calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
 }
 
 @keyframes circuit-notice-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(4px);
+    transform: translateY(4px);
   }
 }
 
@@ -2027,4 +2379,220 @@
   .circuit-param-edit--shake {
     animation: none;
   }
+}
+
+/* Only the table scrolls, so Previous / Apply next stay in reach on a long sequence; a dock too
+   short for even the table's floor (landscape phone) scrolls as a whole instead. */
+.wave-panel__body--sequence {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden auto;
+  padding: 0;
+}
+
+.sequence-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--space-unit);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  min-width: 0;
+  min-height: 0;
+}
+
+.sequence-panel--empty {
+  overflow-y: auto;
+}
+
+.sequence-panel--empty p {
+  margin: 0;
+  max-width: 70ch;
+}
+
+.sequence-panel__bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit) calc(var(--space-unit) * 3);
+}
+
+.sequence-panel__group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit);
+}
+
+.sequence-panel__label {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sequence-panel__bar kbd {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: var(--chrome-radius);
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+
+.sequence-panel__picker {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+}
+
+.sequence-panel__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.sequence-panel__scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-width: 0;
+  min-height: calc(var(--touch-h) * 3);
+}
+
+/* Not collapse: collapsed borders belong to the table, so a sticky header's rule scrolls away. */
+.sequence-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.sequence-table th,
+.sequence-table td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sequence-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+}
+
+.sequence-table .sequence-table__head--in {
+  color: var(--accent-2);
+}
+
+.sequence-table .sequence-table__sep {
+  border-left: 2px solid var(--line);
+}
+
+.sequence-table__index {
+  color: var(--muted);
+  font-weight: 400;
+  text-align: right;
+}
+
+.sequence-table__current > * {
+  background: var(--accent-fill);
+}
+
+.sequence-table__current .sequence-table__index {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sequence-table .sequence-table__note {
+  font-family: var(--font-ui);
+  text-align: left;
+  color: var(--accent-2);
+}
+
+.sequence-table__withheld {
+  color: var(--muted);
+}
+
+.sequence-pass {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.sequence-fail {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.sequence-table__remove {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sequence-table__remove:hover,
+.sequence-table__remove:focus-visible {
+  color: var(--ink);
+}
+
+.sequence-table__delete {
+  padding: 0 6px;
+}
+
+.sequence-cell {
+  font: inherit;
+  text-align: center;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid transparent;
+  border-radius: var(--chrome-radius);
+  padding: 1px 2px;
+}
+
+.sequence-cell:hover {
+  border-color: var(--line);
+}
+
+.sequence-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.sequence-cell--wide {
+  font-family: var(--font-ui);
+  text-align: left;
+}
+
+.sequence-cell--bad,
+.sequence-cell--bad:hover {
+  border-color: var(--warn);
+}
+
+.sequence-cell--bad:focus-visible {
+  outline-color: var(--warn);
+}
+
+.app-shell--compact .sequence-panel .tool-btn,
+.app-shell--compact .sequence-panel__picker,
+.app-shell--compact .sequence-cell {
+  min-height: var(--touch-h);
+}
+
+.app-shell--compact .sequence-table__remove,
+.app-shell--compact .sequence-table__delete {
+  min-width: var(--touch-h);
+  min-height: var(--touch-h);
 }

@@ -101,4 +101,10 @@ describe('buildBlockedReason', () => {
     expect(buildBlockedReason({ ...free, viewOnly: true })).toBe('view-only');
     expect(buildBlockedReason({ ...free, tab: 'chip' })).toBe('board-tab');
   });
+
+  it('refuses while the lesson editor holds the board', () => {
+    expect(blockedText(buildBlockedReason({ ...free, lessonEdit: true, viewOnly: true })!)).toBe(
+      'Close the lesson editor to edit the board.',
+    );
+  });
 });

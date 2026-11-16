@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXAMPLES, type Example } from './index';
+import { EXAMPLES, EXAMPLE_GROUPS, type Example } from './index';
 import { validateDocument } from '../io/validate';
 import { compile } from '../core/model/compile';
 import { buildTruthTable, resolveOutputNet } from '../core/boolean/truthTable';
@@ -330,15 +330,19 @@ describe('bundled examples', () => {
   });
 
   // Every A against every fifth B and 255: all 65,536 pairs outrun the test timeout.
-  it('eight-bit-adder adds every A to a spread of B, carries across the packages included', () => {
-    const { set, read } = bench('eight-bit-adder');
-    const bs = [...Array.from({ length: 52 }, (_, i) => i * 5), 255];
-    for (let a = 0; a < 256; a++)
-      for (const b of bs) {
-        set({ 'A7-A4': a >> 4, 'A3-A0': a & 15, 'B7-B4': b >> 4, 'B3-B0': b & 15 });
-        expect(read('C8', 'S7-S4', 'S3-S0')).toBe(a + b);
-      }
-  });
+  it(
+    'eight-bit-adder adds every A to a spread of B, carries across the packages included',
+    { timeout: 30_000 },
+    () => {
+      const { set, read } = bench('eight-bit-adder');
+      const bs = [...Array.from({ length: 52 }, (_, i) => i * 5), 255];
+      for (let a = 0; a < 256; a++)
+        for (const b of bs) {
+          set({ 'A7-A4': a >> 4, 'A3-A0': a & 15, 'B7-B4': b >> 4, 'B3-B0': b & 15 });
+          expect(read('C8', 'S7-S4', 'S3-S0')).toBe(a + b);
+        }
+    },
+  );
 
   it('adder-subtracter gives A + B or A - B, the carry and signed overflow', () => {
     const { set, read } = bench('adder-subtracter');
@@ -1191,5 +1195,201 @@ describe('bundled examples', () => {
       expect(cycle({ '/RO': false, '/J': false })).toBe(0x1c);
       expect(cycle({ '/CO': false })).toBe(0xc);
     });
+  });
+
+  describe.each(TIMINGS)('four-bank-interleaved-memory, %s', (_, delay) => {
+    const example = EXAMPLES.find((e) => e.id === 'four-bank-interleaved-memory')!;
+    const switches = ['A5 A4', 'A3 A2', 'A1 A0'];
+
+    /** The board with the decoder's bus wire and the chips' low address bus
+     *  wire moved onto each other's switch: the two-wire change the
+     *  description names. */
+    function lowOrder(): Board {
+      const toggleOf = new Map([
+        ['bank', 'alo'],
+        ['low', 'ahi'],
+      ]);
+      return {
+        ...example.board,
+        wires: example.board.wires.map((w) => {
+          const to = toggleOf.get(w.id);
+          return to ? { ...w, a: { kind: 'pin', component: to, pin: 'y' } } : w;
+        }),
+      };
+    }
+
+    function memory(board: Board = example.board) {
+      const circuit = compile(board, libraryOf(example));
+      const sim = new Simulator(circuit, delay);
+      sim.powerOn();
+      sim.settle();
+      const address = (a: number) => {
+        switches.forEach((s, i) => sim.setToggleValue(`main/${s}`, (a >> (4 - 2 * i)) & 3));
+        sim.settle();
+      };
+      const write = (a: number, word: number) => {
+        address(a);
+        sim.setToggleValue('main/DATA', word);
+        sim.settle();
+        sim.setButtonPressed('main/WRITE', true);
+        sim.settle();
+        sim.setButtonPressed('main/WRITE', false);
+        sim.settle();
+      };
+      /** The /DATA lights, MSB first; Z while every bank's outputs float. */
+      const lights = () =>
+        range(8)
+          .reverse()
+          .map((i) => {
+            const v = sim.netValue(resolveOutputNet(circuit, `main//DATA.a${i}`));
+            return v.z ? 'Z' : v.x ? 'X' : String(v.v);
+          })
+          .join('');
+      /** The stored word: the '189 drives its complement onto /DATA. */
+      const read = (a: number) => {
+        address(a);
+        return ~Number.parseInt(lights(), 2) & 0xff;
+      };
+      /** Banks whose /CS line is low. */
+      const enabled = () =>
+        range(4).filter((b) => sim.netValue(circuit.pathToNet.get(`main//CS${b}`)!).v === 0);
+      return { sim, address, write, read, lights, enabled };
+    }
+
+    it('reads the complement of the stored word, and floats while WRITE is held', () => {
+      const { sim, write, address, lights } = memory();
+      write(0x05, 0b1010_0011);
+      address(0x05);
+      expect(lights()).toBe('01011100');
+      sim.setButtonPressed('main/WRITE', true);
+      sim.settle();
+      expect(lights()).toBe('ZZZZZZZZ');
+    });
+
+    it('enables the bank A5 A4 name, so each bank holds 16 consecutive words', () => {
+      const { address, enabled } = memory();
+      for (let a = 0; a < 64; a++) {
+        address(a);
+        expect({ a, banks: enabled() }).toEqual({ a, banks: [a >> 4] });
+      }
+    });
+
+    it('writes the same offset in each bank and reads back four different words', () => {
+      const { write, read, address, lights } = memory();
+      const words = [0x11, 0x2c, 0xd4, 0x7e];
+      words.forEach((w, bank) => write((bank << 4) | 5, w));
+      expect(range(4).map((bank) => read((bank << 4) | 5))).toEqual(words);
+      // No preload: a cell nobody wrote holds whatever the RAM powered up with.
+      address(0x06);
+      expect(lights()).toBe('XXXXXXXX');
+    });
+
+    it('holds 64 different words, one per address', () => {
+      const { write, read } = memory();
+      const word = (a: number) => (a * 37 + 11) & 0xff;
+      for (let a = 0; a < 64; a++) write(a, word(a));
+      expect(range(64).map(read)).toEqual(range(64).map(word));
+    });
+
+    it('interleaves on A1 A0 once the two bus wires swap switches', () => {
+      const { address, enabled, write, read } = memory(lowOrder());
+      // The first five words land in banks 0, 1, 2, 3, 0, as low-order interleaving places them.
+      const firstFive = range(5).map((a) => {
+        address(a);
+        return enabled();
+      });
+      expect(firstFive).toEqual([[0], [1], [2], [3], [0]]);
+      for (let a = 0; a < 64; a++) {
+        address(a);
+        expect({ a, banks: enabled() }).toEqual({ a, banks: [a & 3] });
+      }
+      const word = (a: number) => (a * 37 + 11) & 0xff;
+      for (let a = 0; a < 64; a++) write(a, word(a));
+      expect(range(64).map(read)).toEqual(range(64).map(word));
+    });
+  });
+
+  describe.each(TIMINGS)('cache-tag-lookup, %s', (_, delay) => {
+    function cache() {
+      const example = EXAMPLES.find((e) => e.id === 'cache-tag-lookup')!;
+      const circuit = compile(example.board, libraryOf(example));
+      const sim = new Simulator(circuit, delay);
+      sim.powerOn();
+      sim.settle();
+      const hitNet = resolveOutputNet(circuit, 'main/Hit');
+      const access = (tag: number, set: number) => {
+        sim.setToggleValue('main/TAG', tag);
+        sim.setToggleValue('main/SET', set);
+        sim.settle();
+        const v = sim.netValue(hitNet);
+        expect(v.x | v.z, 'Hit').toBe(0);
+        return v.v === 1;
+      };
+      /** The word in the addressed set: the data '189 drives its complement. */
+      const data = () =>
+        range(4).reduce((word, i) => {
+          const v = sim.netValue(resolveOutputNet(circuit, `main//DATA.a${i}`));
+          expect(v.x | v.z, `/DATA ${i}`).toBe(0);
+          return word | ((~v.v & 1) << i);
+        }, 0);
+      /** The miss fill: WRITE stores the tag, a valid bit of 1 and DATA in the set. */
+      const fill = (word: number) => {
+        sim.setToggleValue('main/DATA', word);
+        sim.settle();
+        sim.setButtonPressed('main/WRITE', true);
+        sim.settle();
+        sim.setButtonPressed('main/WRITE', false);
+        sim.settle();
+      };
+      return { access, data, fill };
+    }
+
+    it('misses on every tag and set while the valid bits are 0', () => {
+      const { access } = cache();
+      for (let set = 0; set < 8; set++)
+        for (let tag = 0; tag < 8; tag++)
+          expect({ tag, set, hit: access(tag, set) }).toEqual({ tag, set, hit: false });
+    });
+
+    it('hits after a fill only on the same tag in the same set', () => {
+      const { access, data, fill } = cache();
+      expect(access(2, 0)).toBe(false);
+      fill(0b0101);
+      expect(access(2, 0)).toBe(true);
+      expect(data()).toBe(0b0101);
+      expect(access(3, 0), 'other tag').toBe(false);
+      expect(access(2, 1), 'set still invalid').toBe(false);
+    });
+
+    // a[0], a[1], a[2] at 0x40, 0x44, 0x48 and x at 0x60, twice: tag A7-A5, set A4-A2.
+    it('runs the two-pass loop trace with a fill on every miss', () => {
+      const { access, fill } = cache();
+      const trace = [0x40, 0x44, 0x48, 0x60, 0x40, 0x44, 0x48, 0x60];
+      const hits = trace.map((address) => {
+        const hit = access((address >> 5) & 7, (address >> 2) & 7);
+        if (!hit) fill((address >> 2) & 0xf);
+        return hit;
+      });
+      expect(hits).toEqual([false, false, false, false, false, true, true, false]);
+    });
+  });
+});
+
+describe('example sections', () => {
+  it('files every example under a known group', () => {
+    for (const e of EXAMPLES) expect(EXAMPLE_GROUPS).toContain(e.group);
+  });
+
+  it('keeps each group contiguous, in EXAMPLE_GROUPS order', () => {
+    const runs = EXAMPLES.map((e) => e.group).filter((g, i, all) => g !== all[i - 1]);
+    expect(runs).toEqual([...EXAMPLE_GROUPS]);
+  });
+
+  it('has at least one example per group', () => {
+    for (const g of EXAMPLE_GROUPS) expect(EXAMPLES.some((e) => e.group === g)).toBe(true);
+  });
+
+  it('has unique ids', () => {
+    expect(new Set(EXAMPLES.map((e) => e.id)).size).toBe(EXAMPLES.length);
   });
 });

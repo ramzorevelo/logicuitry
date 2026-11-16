@@ -89,6 +89,12 @@ export interface Theme {
     warn: string;
     ok: string;
     signalMixed: string;
+    /** Outline around the parts the open lesson step points at. */
+    lessonHighlight: string;
+    /** Ring on the nets the last gate step changed. */
+    gateRipple: string;
+    /** Outline on the parts a gate step still has pending. */
+    gatePending: string;
     /** 8 categorical K-map group strokes (--kmap-g1..8). */
     kmapGroups: string[];
   };
@@ -194,6 +200,9 @@ export function readTheme(root: HTMLElement = document.documentElement): Theme {
       warn: token('--warn'),
       ok: token('--ok'),
       signalMixed: token('--signal-mixed'),
+      lessonHighlight: token('--lesson-highlight'),
+      gateRipple: token('--gate-ripple'),
+      gatePending: token('--gate-pending'),
       kmapGroups: Array.from({ length: 8 }, (_, i) => token(`--kmap-g${i + 1}`)),
     },
     ledColors: Object.fromEntries(LED_COLORS.map((c) => [c, token(`--led-${c}`)])) as Record<

@@ -199,6 +199,43 @@ describe('analyzeTiming sequential', () => {
     expect(r.endpoints.some((e) => e.critical.some((h) => h.path === 'main/u'))).toBe(false);
   });
 
+  it('starts a path at a pattern, clocked or not, and never times through it', () => {
+    for (const clocked of [false, true]) {
+      const b = board({
+        components: [
+          comp('ck', 'clock'),
+          comp('p', 'pattern', { values: '0 1', clocked }),
+          comp('n1', 'not'),
+          comp('ff', 'dff'),
+        ],
+        wires: [
+          wire('w1', ['ck', 'y'], ['ff', 'clk']),
+          ...(clocked ? [wire('w2', ['ck', 'y'], ['p', 'clk'])] : []),
+          wire('w3', ['p', 'y'], ['n1', 'a']),
+          wire('w4', ['n1', 'y'], ['ff', 'd']),
+        ],
+      });
+      const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+      const ep = r.endpoints.find((e) => e.endpoint === 'main/ff.d')!;
+      expect(ep.startpoint, `clocked ${clocked}`).toBe('main/p');
+      expect(ep.critical.map((h) => h.path)).toEqual(['main/n1']);
+      expect(r.sequential?.paths.some((x) => x.launch === 'main/p')).toBe(false);
+    }
+  });
+
+  it('gives a register clocked by a pattern no domain', () => {
+    const b = board({
+      components: [comp('p', 'pattern', { values: '0 1' }), comp('ff', 'dff'), comp('n1', 'not')],
+      wires: [
+        wire('w1', ['p', 'y'], ['ff', 'clk']),
+        wire('w2', ['ff', 'q'], ['n1', 'a']),
+        wire('w3', ['n1', 'y'], ['ff', 'd']),
+      ],
+    });
+    const r = analyzeTiming(compile(b, noLib), { column: 'typ' });
+    expect(r.sequential?.paths ?? []).toEqual([]);
+  });
+
   // Two 555s with equal R and C are two oscillators that drift, never one clock.
   it.each([
     ['two astable 555s with equal values', 'timer555'],

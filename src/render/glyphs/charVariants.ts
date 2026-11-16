@@ -26,7 +26,7 @@ import {
 import { paintEmphasis } from './relief';
 import type { Theme } from '../theme';
 import { registerGlyphVariant, type VariantState } from './variants';
-import { contactToGround } from '../../core/sim/primitives/stimulus';
+import { contactToGround, ledActiveLow } from '../../core/sim/primitives/stimulus';
 
 /** Draws an indicator body centred on (cx, cy) with radius r. */
 type Shape = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void;
@@ -469,7 +469,8 @@ function ledVariant(motif: Motif) {
   ): boolean => {
     const ins = sortedPins(input, 'in');
     const first = ins[0];
-    if (!first) return false;
+    // Not drawn here: the motif has no anode lead, so an active-low LED keeps the plain glyph.
+    if (!first || ledActiveLow(input.params)) return false;
     const width = ins.length > 1 ? ins.length : first.width;
     if (width > 1) return ledBankVariant(ctx, theme, placement, state, motif, ins, width);
 

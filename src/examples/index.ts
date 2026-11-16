@@ -62,10 +62,16 @@ import segmentADontCare from './boards/seven-segment-segment-a-unused-codes-dont
 import ls47Display from './boards/seven-segment-display-on-a-74ls47.lcirb';
 import ls48Display from './boards/seven-segment-display-on-a-74ls48.lcirb';
 import clockModule from './boards/clock-module.lcirb';
+import counterModule from './boards/counter-module.lcirb';
 import busAndRegisters from './boards/bus-and-registers.lcirb';
 import aluAndFlags from './boards/alu-and-flags.lcirb';
 import registersAndAlu from './boards/registers-and-alu.lcirb';
 import eightBitBusComputer from './boards/eight-bit-bus-computer.lcirb';
+import interleavedMemory from './boards/four-bank-interleaved-memory.lcirb';
+import cacheTagLookup from './boards/cache-tag-lookup.lcirb';
+import majorityNandOnly from './boards/majority-vote-nand-only.lcirb';
+import mintermsOn138 from './boards/minterms-on-a-74ls138.lcirb';
+import counterFrom74ls from './boards/three-bit-counter-from-74ls-parts.lcirb';
 
 export interface Example {
   id: string;
@@ -73,9 +79,8 @@ export interface Example {
   /** One line, shown beside the name. Says what the circuit is, nothing else. */
   description: string;
   board: Board;
-  /** Heading the menu files it under. Absent means the ungrouped run at the
-   *  top, which is how every example shipped before the algebra set. */
-  group?: string;
+  /** Heading the menu files it under; one of EXAMPLE_GROUPS. */
+  group: string;
   /** Chip definitions the board's instances refer to; loaded with it. */
   chips?: ChipDef[];
 }
@@ -84,7 +89,7 @@ export interface Example {
 // never rewrites them; they come up to the current version here, as a file would.
 const current = (doc: unknown): unknown => migrate(doc as Record<string, unknown>);
 
-const ex = (board: unknown, description: string, chips?: unknown[]): Example => {
+const ex = (board: unknown, description: string, chips?: unknown[]): Omit<Example, 'group'> => {
   const b = current(board) as Board;
   return {
     id: b.id,
@@ -95,55 +100,88 @@ const ex = (board: unknown, description: string, chips?: unknown[]): Example => 
   };
 };
 
+const inGroup =
+  (group: string) =>
+  (board: unknown, description: string, chips?: unknown[]): Example => ({
+    ...ex(board, description, chips),
+    group,
+  });
+
+const GATES = 'Gates and logic';
 /** Every board on one identity from Roth Unit 2 section 2.6, drawn as two
  *  circuits over shared inputs: the LEDs agree for every input combination,
  *  which is the proof the algebra claims. */
 const ALGEBRA = 'Boolean algebra';
-const law = (board: unknown, description: string): Example => ({
-  ...ex(board, description),
-  group: ALGEBRA,
-});
+const ARITHMETIC = 'Arithmetic';
+const BLOCKS = 'Multiplexers and decoders';
+const DISPLAYS = 'Seven-segment displays';
+const FLIP_FLOPS = 'Flip-flops and registers';
+const BUS_COMPUTER = 'Bus computer';
+const MEMORY = 'Memory and caches';
+/** Starter boards carrying a challenge: the parts are on the board, the circuit is not. */
+export const CHALLENGES = 'Challenges';
 
-const inGroup =
-  (group: string) =>
-  (board: unknown, description: string): Example => ({ ...ex(board, description), group });
-const block = inGroup('Multiplexers and decoders');
-const display = inGroup('Seven-segment displays');
-const flipFlops = inGroup('Flip-flops and registers');
-const busComputer = inGroup('Bus computer');
+/** Every section heading, in the order the menu shows them. */
+export const EXAMPLE_GROUPS: readonly string[] = [
+  GATES,
+  ALGEBRA,
+  ARITHMETIC,
+  BLOCKS,
+  DISPLAYS,
+  FLIP_FLOPS,
+  BUS_COMPUTER,
+  MEMORY,
+  CHALLENGES,
+];
+
+const gates = inGroup(GATES);
+const algebra = inGroup(ALGEBRA);
+const arithmetic = inGroup(ARITHMETIC);
+const block = inGroup(BLOCKS);
+const display = inGroup(DISPLAYS);
+const flipFlops = inGroup(FLIP_FLOPS);
+const busComputer = inGroup(BUS_COMPUTER);
+const memory = inGroup(MEMORY);
+const challenge = inGroup(CHALLENGES);
 
 /** One flat list, in the order the menu shows it. */
 export const EXAMPLES: readonly Example[] = [
-  ex(basicGates, 'Two switches into AND, OR, XOR, NAND, NOR, XNOR and NOT.'),
-  ex(deMorganPair, 'A NAND beside an OR of two inverted inputs.'),
-  ex(sumOfProducts, 'Three inputs, three product terms, one OR.'),
-  ex(staticHazard, 'Two paths of unequal delay reconverge, so the output glitches.'),
-  ex(halfAdderBoard, 'An XOR gate for the sum and an AND gate for the carry.'),
-  ex(fullAdder, 'Two half-adder chips and an OR gate.', [halfAdder]),
-  ex(
+  gates(basicGates, 'Two switches into AND, OR, XOR, NAND, NOR, XNOR and NOT.'),
+  gates(deMorganPair, 'A NAND beside an OR of two inverted inputs.'),
+  gates(sumOfProducts, 'Three inputs, three product terms, one OR.'),
+  gates(staticHazard, 'Two paths of unequal delay reconverge, so the output glitches.'),
+  algebra(absorption, 'A + AB and A, which are the same circuit.'),
+  algebra(elimination, "A(A' + B) reduced to AB."),
+  algebra(consensus, "AB + A'C + BC beside the same sum without its consensus term."),
+  algebra(distributiveLaw, 'A(B + C) beside AB + AC.'),
+  algebra(complementCovering, "A + A' held at 1, and A(A + B) following A."),
+  arithmetic(halfAdderBoard, 'An XOR gate for the sum and an AND gate for the carry.'),
+  arithmetic(fullAdder, 'Two half-adder chips and an OR gate.', [halfAdder]),
+  arithmetic(
     fullAdderOn153,
     'A dual 4-to-1 multiplexer with A and B on the selects and Cin on the data inputs.',
   ),
-  ex(rippleCarryAdder, 'Four full adders with each carry feeding the next stage.'),
-  ex(fourBitAdder283, 'A 74LS283 wired pin by pin, with bits numbered from 0 and pins from 1.'),
-  ex(
+  arithmetic(rippleCarryAdder, 'Four full adders with each carry feeding the next stage.'),
+  arithmetic(
+    fourBitAdder283,
+    'A 74LS283 wired pin by pin, with bits numbered from 0 and pins from 1.',
+  ),
+  arithmetic(
     eightBitAdder,
     'Two 4-bit adders with the low carry out feeding the high carry in, on datasheet timing.',
   ),
-  ex(
+  arithmetic(
     adderSubtracter,
     'XOR gates invert B and SUB sets the carry in, so S is A + B or A - B, with an overflow flag.',
   ),
-  ex(
+  arithmetic(
     fourOperationAlu,
     'Add, subtract, AND and OR on two 4-bit buses, chosen by F1 F0, with N, Z, C and V flags.',
   ),
-  ex(fullAdderDelay, 'A full adder from five gates on datasheet timing, slowest from A to Cout.'),
-  law(absorption, 'A + AB and A, which are the same circuit.'),
-  law(elimination, "A(A' + B) reduced to AB."),
-  law(consensus, "AB + A'C + BC beside the same sum without its consensus term."),
-  law(distributiveLaw, 'A(B + C) beside AB + AC.'),
-  law(complementCovering, "A + A' held at 1, and A(A + B) following A."),
+  arithmetic(
+    fullAdderDelay,
+    'A full adder from five gates on datasheet timing, slowest from A to Cout.',
+  ),
   block(mux2, "S' D0 + S D1 from an inverter, two AND gates and an OR gate."),
   block(mux4, 'Four data inputs, two select lines, one output.'),
   block(muxTree, 'Two 2:1 multiplexers on S0 feeding a third on S1.'),
@@ -219,6 +257,10 @@ export const EXAMPLES: readonly Example[] = [
     mod10Counter,
     'A 74LS163 cleared at the clock edge after 9. Hold /RST low for one clock edge, then release it to count 0 to 9.',
   ),
+  flipFlops(
+    counterModule,
+    'A 4-bit count on two 74LS74s that a 74LS283 steps up on UP or down on DN each 555 clock, with a 74LS157 loading 1001 on LOAD, CLEAR zeroing it and a 74LS47 driving the display.',
+  ),
   busComputer(
     clockModule,
     'Three 555 timers: an astable clock, a monostable that debounces the STEP button and a bistable MODE select, with HLT holding CLK low.',
@@ -243,4 +285,26 @@ export const EXAMPLES: readonly Example[] = [
     eightBitBusComputer,
     'Registers A and B, a switch input, an adder-subtracter with flags, a program counter, a memory address register and a RAM on one 8-bit bus.',
   ),
+  memory(
+    interleavedMemory,
+    'Eight 74LS189s in four banks of two, the 74LS139 enabling one bank from A5 A4. For low-order interleaving, swap the bus wires leaving the A5 A4 and A1 A0 switches. /DATA shows the complement of the stored word.',
+  ),
+  memory(
+    cacheTagLookup,
+    'Eight sets of a direct-mapped cache: a 74LS189 holds the valid bits and 3-bit tags, a 74LS04 undoes its inverted outputs, a 74LS85 compares the tag, and Hit is equal AND valid. A second 74LS189 holds the data, shown as its complement on /DATA. WRITE fills the set on a miss.',
+  ),
+  challenge(
+    majorityNandOnly,
+    'A, B and C into Y: build the majority from four NAND gates at most.',
+  ),
+  challenge(mintermsOn138, 'A, B and C into Y: minterms 0, 3, 4 and 5 from a 74LS138 and a NAND.'),
+  challenge(
+    counterFrom74ls,
+    'CLK and /CLR into Q2 Q1 Q0: count 0 to 7 on two 74LS74s and at most two gate packages.',
+  ),
 ];
+
+/** An opened example keeps its board id, so a saved copy of an algebra board still matches. */
+export const ALGEBRA_BOARD_IDS: ReadonlySet<string> = new Set(
+  EXAMPLES.filter((e) => e.group === ALGEBRA).map((e) => e.id),
+);

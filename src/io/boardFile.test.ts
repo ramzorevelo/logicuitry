@@ -2,13 +2,19 @@
 // board, and what a Save As is pre-filled with.
 
 import { describe, expect, it } from 'vitest';
-import { boardFileName, BoardFileError, parseBoard, parseDocumentFile } from './boardFile';
+import {
+  boardFileName,
+  BoardFileError,
+  lessonFileName,
+  parseBoard,
+  parseDocumentFile,
+} from './boardFile';
 import { serializeDocument } from './library';
-import type { Board, ChipDef } from '../core/model/types';
+import type { Board, ChipDef, Lesson } from '../core/model/types';
 
 const board = (name: string): Board => ({
   format: 'lcir.board',
-  formatVersion: 12,
+  formatVersion: 15,
   id: 'b1',
   name,
   components: [],
@@ -32,7 +38,7 @@ describe('parseBoard', () => {
       components: [{ id: 'i', kind: 'input', pos: { x: 0, y: 0 } }],
     };
     const out = parseBoard(JSON.stringify(v2));
-    expect(out.formatVersion).toBe(12);
+    expect(out.formatVersion).toBe(15);
     expect(out.components[0]!.kind).toBe('inport');
   });
 
@@ -43,7 +49,7 @@ describe('parseBoard', () => {
       components: [{ id: 'u', kind: 'timer555' as const, pos: { x: 0, y: 0 }, params }],
     };
     const out = parseBoard(serializeDocument(b));
-    expect(out.formatVersion).toBe(12);
+    expect(out.formatVersion).toBe(15);
     expect(out.components[0]!.params).toEqual(params);
   });
 
@@ -61,6 +67,28 @@ describe('parseBoard', () => {
     };
     expect(() => parseBoard(serializeDocument(chip))).toThrow(BoardFileError);
     expect(() => parseBoard(serializeDocument(chip))).toThrow(/chip, not a board/);
+  });
+});
+
+const lesson = (title: string): Lesson => ({
+  format: 'lcir.lesson',
+  formatVersion: 3,
+  id: 'l1',
+  title,
+  workbench: 'circuit',
+  board: 'b1',
+  steps: [{ kind: 'narrate', prose: 'Hello', actions: [] }],
+});
+
+describe('lessonFileName', () => {
+  it('slugs the lesson title like a board name', () => {
+    expect(lessonFileName(lesson('ALU flags: when is V set?'))).toBe(
+      'alu-flags-when-is-v-set.lcirl',
+    );
+  });
+
+  it('falls back when the title has nothing usable in it', () => {
+    expect(lessonFileName(lesson('?!'))).toBe('lesson.lcirl');
   });
 });
 
@@ -98,10 +126,13 @@ describe('parseDocumentFile', () => {
     if (out.kind === 'chip') expect(out.def.name).toBe('buf1');
   });
 
-  it('still refuses a document that is neither', () => {
-    // parseDocument validates first, so a lesson is rejected either by the
-    // schema or by the format check -- both are a loud, correct refusal.
-    const lesson = { format: 'lcir.lesson', formatVersion: 1, id: 'l', name: 'l', steps: [] };
-    expect(() => parseDocumentFile(JSON.stringify(lesson))).toThrow();
+  it('reports a lesson as a lesson', () => {
+    const out = parseDocumentFile(serializeDocument(lesson('Flags')));
+    expect(out).toEqual({ kind: 'lesson', lesson: lesson('Flags') });
+  });
+
+  it('still refuses a malformed lesson loudly', () => {
+    const bad = { format: 'lcir.lesson', formatVersion: 1, id: 'l', name: 'l', steps: [] };
+    expect(() => parseDocumentFile(JSON.stringify(bad))).toThrow();
   });
 });

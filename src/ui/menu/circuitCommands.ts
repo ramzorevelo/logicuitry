@@ -19,7 +19,8 @@ export const CIRCUIT_COMMANDS = {
   deleteHeal: 'Delete and reconnect',
   fit: 'Zoom to fit',
   power: 'Power on',
-  step: 'Step one delta',
+  step: 'Gate step',
+  settle: 'Settle',
   bubble: 'Bubble-push mode',
 } as const;
 
@@ -63,6 +64,7 @@ export function inactiveCircuitMenus(): Menu[] {
       items: [
         stub('power', CIRCUIT_COMMANDS.power, SHORTCUTS.power),
         stub('step', CIRCUIT_COMMANDS.step, SHORTCUTS.step),
+        stub('settle', CIRCUIT_COMMANDS.settle),
         stub('bubble', CIRCUIT_COMMANDS.bubble, SHORTCUTS.bubbleMode),
       ],
     },

@@ -26,7 +26,7 @@ import {
   segmentsIntersect,
 } from './wireGeom';
 import '../../render/glyphs/chip';
-import type { RoutablePin } from './autoRoute';
+import { autoRoute, type RoutablePin } from './autoRoute';
 
 // Real geometry-backed resolver, matching CircuitWorkbench.tsx's own
 // resolveWireEnd exactly (component pin -> symbolBounds, junction -> pos,
@@ -907,7 +907,7 @@ function bufDef(id: string): ChipDef {
 function emptyBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'test',
     name: 'test',
     components: [],
@@ -2738,6 +2738,173 @@ describe('label sharing (labelSync store hooks)', () => {
       { kind: 'pin', component: 'led1', pin: 'a' },
     );
     expect(useCircuitStore.getState().renameComponent('led1', 'S')).toBe(true);
+  });
+});
+
+describe('overlay save on a labelled terminal', () => {
+  const led = () => useCircuitStore.getState().board.components.find((c) => c.id === 'led1')!;
+  const labelOf = (id: string) =>
+    useCircuitStore.getState().board.components.find((c) => c.id === id)!.label;
+  // led1 'D1' on a net with sw1 (named `swLabel`, or unnamed): a net left on "keep both".
+  const setBoard = (swLabel?: string) =>
+    useCircuitStore.setState((st) => ({
+      selection: new Set(),
+      powered: false,
+      labelConflict: null,
+      board: {
+        ...st.board,
+        components: [
+          {
+            id: 'sw1',
+            kind: 'toggle',
+            pos: { x: 0, y: 0 },
+            ...(swLabel ? { label: swLabel } : {}),
+          },
+          {
+            id: 'led1',
+            kind: 'led',
+            pos: { x: 16, y: 0 },
+            label: 'D1',
+            params: { color: 'red', activeLow: false },
+          },
+          { id: 'in1', kind: 'inport', pos: { x: 0, y: 16 }, label: 'Q' },
+        ],
+        wires: [
+          {
+            id: 'w1',
+            a: { kind: 'pin', component: 'sw1', pin: 'y' },
+            b: { kind: 'pin', component: 'led1', pin: 'a' },
+            points: [],
+          },
+        ],
+        junctions: [],
+      },
+    }));
+
+  it('an unchanged name raises no dialog on a two-label net', () => {
+    setBoard('S1');
+    const s = useCircuitStore.getState();
+    expect(
+      s.setComponentParamsBatch([
+        { id: 'led1', params: { color: 'green', activeLow: true }, label: 'D1' },
+      ]),
+    ).toBe(true);
+    expect(useCircuitStore.getState().labelConflict).toBeNull();
+    expect(led().params?.['color']).toBe('green');
+    expect(led().params?.['activeLow']).toBe(true);
+    expect(s.setComponentParams('led1', { color: 'blue' }, 'D1')).toBe(true);
+    expect(useCircuitStore.getState().labelConflict).toBeNull();
+    expect(s.renameComponent('led1', 'D1')).toBe(true);
+    expect(useCircuitStore.getState().labelConflict).toBeNull();
+  });
+
+  it('an unchanged name does not copy itself onto an unnamed net partner', () => {
+    setBoard();
+    const s = useCircuitStore.getState();
+    s.setComponentParamsBatch([{ id: 'led1', params: { color: 'green' }, label: 'D1' }]);
+    expect(labelOf('sw1')).toBeUndefined();
+    s.setComponentParams('led1', { color: 'blue' }, 'D1');
+    expect(labelOf('sw1')).toBeUndefined();
+    s.renameComponent('led1', 'D1');
+    expect(labelOf('sw1')).toBeUndefined();
+  });
+
+  it('a real rename still names an unnamed net partner', () => {
+    setBoard();
+    useCircuitStore
+      .getState()
+      .setComponentParamsBatch([{ id: 'led1', params: { color: 'green' }, label: 'D2' }]);
+    expect(labelOf('sw1')).toBe('D2');
+  });
+
+  it('cancelling a rename conflict reverts the name only, params stay one undo step', () => {
+    setBoard('S1');
+    const s = useCircuitStore.getState();
+    s.setComponentParamsBatch([
+      { id: 'led1', params: { color: 'green', activeLow: true }, label: 'D2' },
+    ]);
+    expect(useCircuitStore.getState().labelConflict).not.toBeNull();
+    useCircuitStore.getState().cancelLabelConflict();
+    expect(useCircuitStore.getState().labelConflict).toBeNull();
+    expect(led().label).toBe('D1');
+    expect(led().params?.['color']).toBe('green');
+    expect(led().params?.['activeLow']).toBe(true);
+    expect(labelOf('sw1')).toBe('S1');
+    useCircuitStore.getState().undo();
+    expect(led().params?.['color']).toBe('red');
+    expect(led().params?.['activeLow']).toBe(false);
+  });
+
+  it('cancelling a single-component rename conflict keeps its params', () => {
+    setBoard('S1');
+    useCircuitStore.getState().setComponentParams('led1', { color: 'green' }, 'D2');
+    expect(useCircuitStore.getState().labelConflict).not.toBeNull();
+    useCircuitStore.getState().cancelLabelConflict();
+    expect(led().label).toBe('D1');
+    expect(led().params?.['color']).toBe('green');
+  });
+
+  it('cancelling a name-only rename conflict leaves nothing behind', () => {
+    setBoard('S1');
+    const before = useCircuitStore.getState().board;
+    useCircuitStore.getState().renameComponent('led1', 'D2');
+    expect(useCircuitStore.getState().labelConflict).not.toBeNull();
+    useCircuitStore.getState().cancelLabelConflict();
+    expect(useCircuitStore.getState().board).toEqual(before);
+  });
+
+  it('redo after a cancel brings back neither the wire nor the rename', () => {
+    const redoLeavesBoard = () => {
+      const before = useCircuitStore.getState().board;
+      expect(useCircuitStore.getState().canRedo()).toBe(false);
+      useCircuitStore.getState().redo();
+      expect(useCircuitStore.getState().board).toEqual(before);
+    };
+    setBoard('S1');
+    useCircuitStore
+      .getState()
+      .addWire(
+        { kind: 'pin', component: 'in1', pin: 'y' },
+        { kind: 'pin', component: 'sw1', pin: 'y' },
+      );
+    expect(useCircuitStore.getState().labelConflict).not.toBeNull();
+    useCircuitStore.getState().cancelLabelConflict();
+    redoLeavesBoard();
+
+    useCircuitStore.getState().renameComponent('led1', 'D2');
+    useCircuitStore.getState().cancelLabelConflict();
+    redoLeavesBoard();
+    expect(led().label).toBe('D1');
+
+    useCircuitStore
+      .getState()
+      .setComponentParamsBatch([{ id: 'led1', params: { color: 'green' }, label: 'D2' }]);
+    useCircuitStore.getState().cancelLabelConflict();
+    redoLeavesBoard();
+    expect(led().label).toBe('D1');
+    expect(led().params?.['color']).toBe('green');
+  });
+
+  it('a later wire conflict cancel does not replay an earlier rename', () => {
+    setBoard('S1');
+    useCircuitStore
+      .getState()
+      .setComponentParamsBatch([{ id: 'led1', params: { color: 'green' }, label: 'D2' }]);
+    useCircuitStore.getState().applyLabelConflicts([null]);
+    // A stale replay would put green back over this.
+    useCircuitStore.getState().setComponentParamsBatch([{ id: 'led1', params: { color: 'blue' } }]);
+    useCircuitStore
+      .getState()
+      .addWire(
+        { kind: 'pin', component: 'in1', pin: 'y' },
+        { kind: 'pin', component: 'sw1', pin: 'y' },
+      );
+    expect(useCircuitStore.getState().labelConflict).not.toBeNull();
+    useCircuitStore.getState().cancelLabelConflict();
+    const b = useCircuitStore.getState().board;
+    expect(b.wires).toHaveLength(1);
+    expect(led().label).toBe('D2');
+    expect(led().params?.['color']).toBe('blue');
   });
 });
 
@@ -4667,7 +4834,7 @@ describe('loadBoard (session restore / File > Open)', () => {
 
   const loaded = (): Board => ({
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'opened',
     name: 'opened',
     components: [
@@ -4964,6 +5131,69 @@ describe('tidyWiring', () => {
     expect(after.wires).toEqual(before.wires);
     expect(after.junctions).toEqual(before.junctions);
   });
+
+  /** What a background run computes: the same router over the basis. */
+  const backgroundResult = () => {
+    const st = useCircuitStore.getState();
+    const basis = st.tidyBasis();
+    const result = autoRoute({
+      components: st.board.components.map(routableOf),
+      wires: basis.wires,
+      junctions: basis.junctions,
+      grid: testTheme.gridSchematic,
+    });
+    return { basis, result };
+  };
+
+  it('applyTidy commits the same board as the synchronous path, as one undo step', () => {
+    useCircuitStore.setState({ board: fanoutBoard() });
+    runTidy();
+    const synced = useCircuitStore.getState().board;
+    useCircuitStore.setState({ board: fanoutBoard() });
+    const before = useCircuitStore.getState().board;
+    const { basis, result } = backgroundResult();
+    expect(useCircuitStore.getState().applyTidy(basis, result)).toBe('applied');
+    const after = useCircuitStore.getState().board;
+    expect(after.wires).toEqual(synced.wires);
+    expect(after.junctions).toEqual(synced.junctions);
+    useCircuitStore.getState().undo();
+    expect(useCircuitStore.getState().board.wires).toEqual(before.wires);
+  });
+
+  it('applyTidy drops a result once the board was edited meanwhile', () => {
+    useCircuitStore.setState({ board: fanoutBoard() });
+    const { basis, result } = backgroundResult();
+    useCircuitStore.getState().setSelection(new Set(['g2']));
+    useCircuitStore.getState().moveSelection(16, 0);
+    const edited = useCircuitStore.getState().board;
+    expect(useCircuitStore.getState().applyTidy(basis, result)).toBe('stale');
+    expect(useCircuitStore.getState().board).toBe(edited);
+  });
+
+  it('applyTidy drops a result once power changed meanwhile', () => {
+    useCircuitStore.setState({ board: fanoutBoard(), powered: false });
+    const { basis, result } = backgroundResult();
+    useCircuitStore.setState({ powered: true });
+    expect(useCircuitStore.getState().applyTidy(basis, result)).toBe('stale');
+    expect(useCircuitStore.getState().board.junctions).toHaveLength(0);
+    useCircuitStore.setState({ powered: false });
+  });
+
+  it('applyTidy drops a result once the chip library changed meanwhile', () => {
+    useCircuitStore.setState({ board: fanoutBoard() });
+    const { basis, result } = backgroundResult();
+    useCircuitStore.setState({ chipLib: new Map(useCircuitStore.getState().chipLib) });
+    expect(useCircuitStore.getState().applyTidy(basis, result)).toBe('stale');
+  });
+
+  it('applyTidy reports a result that routed nothing as unchanged', () => {
+    useCircuitStore.setState({ board: fanoutBoard() });
+    const basis = useCircuitStore.getState().tidyBasis();
+    const before = useCircuitStore.getState().board;
+    const empty = { wires: [...basis.wires], junctions: [...basis.junctions], routed: 0 };
+    expect(useCircuitStore.getState().applyTidy(basis, empty)).toBe('unchanged');
+    expect(useCircuitStore.getState().board).toBe(before);
+  });
 });
 
 describe('circuitStore groups', () => {
@@ -5054,7 +5284,7 @@ describe('circuitStore label sharing across a buffer', () => {
 
   const chainBoard = (withBuffer: boolean): Board => ({
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'chain',
     name: 'chain',
     components: [
@@ -5101,7 +5331,7 @@ describe('circuitStore label sharing across a buffer', () => {
   /** sw -> chain of single-input parts -> led. */
   const throughBoard = (kinds: readonly string[]): Board => ({
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'chain',
     name: 'chain',
     components: [

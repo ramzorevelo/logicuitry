@@ -110,6 +110,7 @@ const SOURCE_KINDS = new Set([
   'constant',
   'clock',
   'timer555',
+  'pattern',
 ]);
 
 const NS_TO_PS = 1000;

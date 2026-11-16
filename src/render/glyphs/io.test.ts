@@ -1,16 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buttonCapCircle,
   buttonLayout,
   clockLayout,
   dipBankLayout,
   dipCellIndexAt,
+  drawLed,
   ledBankLayout,
   ledLayout,
+  patternLayout,
   portLayout,
   switchLayout,
 } from './io';
-import { resolveComponentPins, symbolBounds } from './symbol';
+import { primitivePins, resolveComponentPins, symbolBounds } from './symbol';
+import type { Params } from '../../core/sim/primitives/types';
 import type { Component } from '../../core/model/types';
 import type { Theme } from '../theme';
 import { makeTestTheme } from '../theme.fixture';
@@ -103,6 +106,77 @@ describe('ledLayout', () => {
   });
 });
 
+/** Any canvas method is a recorded no-op; measureText answers so text layout runs. */
+function recordingCtx() {
+  const calls: { name: string; args: unknown[] }[] = [];
+  const target: Record<string, unknown> = {};
+  const ctx = new Proxy(target, {
+    get(t, key: string) {
+      if (key in t) return t[key];
+      if (key === 'measureText') return (text: string) => ({ width: text.length * 7 });
+      return (...args: unknown[]) => {
+        calls.push({ name: key, args });
+        return key.startsWith('create') ? { addColorStop: vi.fn() } : undefined;
+      };
+    },
+    set(t, key: string, value) {
+      t[key] = value;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  const texts = () => calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+  return { ctx, texts };
+}
+
+function ledInput(width: number, params: Params) {
+  const c = {
+    id: 'l',
+    kind: 'led',
+    pos: { x: 0, y: 0 },
+    params: { width, ...params },
+  } as Component;
+  return { kind: 'led', params: c.params as Params, pins: resolveComponentPins(c) };
+}
+
+describe('active-low LED', () => {
+  it('keeps the pin where it was and widens by the VCC lead only', () => {
+    const plain = ledLayout(G, 'a');
+    const low = ledLayout(G, 'a', true);
+    expect(low.pins.get('a')).toEqual(plain.pins.get('a'));
+    expect(low.bounds.h).toBe(plain.bounds.h);
+    expect(low.bounds.w).toBe(plain.bounds.w + 2 * G);
+    const bank = ledBankLayout(G, 4, ['a'], true);
+    expect(bank.pins.get('a')).toEqual(ledBankLayout(G, 4, ['a']).pins.get('a'));
+    expect(bank.bounds.w % G).toBe(0);
+  });
+
+  it.each([1, 4])('captions its VCC bar at width %i, and a plain LED draws none', (width) => {
+    for (const shape of ['symbol', 'round']) {
+      const raw = () => ({ v: 0, x: 0, z: 0 });
+      const low = recordingCtx();
+      drawLed(
+        low.ctx,
+        glyphTheme,
+        ledInput(width, { activeLow: true, shape }),
+        { pos: { x: 0, y: 0 } },
+        raw,
+        'FULL',
+      );
+      expect(low.texts()).toEqual(['VCC', 'FULL']);
+      const plain = recordingCtx();
+      drawLed(
+        plain.ctx,
+        glyphTheme,
+        ledInput(width, { shape }),
+        { pos: { x: 0, y: 0 } },
+        raw,
+        'FULL',
+      );
+      expect(plain.texts()).toEqual(['FULL']);
+    }
+  });
+});
+
 describe('clockLayout', () => {
   it('is at least the spec minimum 4G x 4G box', () => {
     const l = clockLayout(G, 'y');
@@ -114,6 +188,50 @@ describe('clockLayout', () => {
     const l = clockLayout(G, 'y');
     expectGridAligned(l.pins);
     expect(l.tipX).toBe(8 * G);
+  });
+});
+
+describe('patternLayout', () => {
+  const layout = (params: Params, theme = glyphTheme) =>
+    patternLayout({ kind: 'pattern', params, pins: primitivePins('pattern', params) }, theme);
+
+  it('time mode has only the output, on the right edge, on the grid', () => {
+    const l = layout({ width: 4 });
+    expect([...l.pins.keys()]).toEqual(['y']);
+    expect(l.pins.get('y')).toEqual({ x: l.bounds.w, y: l.pinY });
+    expect(l.boxLeft).toBe(0);
+    expectGridAligned(l.pins);
+  });
+
+  it('clocked mode adds clk on the left, level with the output', () => {
+    const l = layout({ width: 4, clocked: true });
+    expect(l.clocked).toBe(true);
+    expect(l.pins.get('clk')).toEqual({ x: 0, y: l.pinY });
+    expect(l.pins.get('y')!.y).toBe(l.pinY);
+    expect(l.boxLeft).toBe(2 * G);
+    expectGridAligned(l.pins);
+  });
+
+  it('puts the value strip level with the output, inside the box and clear of the clk wedge', () => {
+    for (const clocked of [false, true]) {
+      const l = layout({ width: 4, clocked });
+      const { strip } = l;
+      expect(strip.y + strip.h / 2).toBe(l.pinY);
+      expect(strip.y).toBeGreaterThan(l.headerH);
+      expect(strip.y + strip.h).toBeLessThan(l.boxH);
+      expect(strip.x + strip.w).toBeLessThan(l.boxRight);
+      // The wedge reaches one grid into the body.
+      expect(strip.x).toBeGreaterThan(l.boxLeft + (clocked ? G : 0));
+    }
+  });
+
+  it('keeps whole-grid bounds and pins when the glyph text grows', () => {
+    for (const glyphText of [13, 18, 22, 30]) {
+      const l = layout({ clocked: true }, makeTestTheme({ glyphText }));
+      expect(l.bounds.w % G).toBe(0);
+      expect(l.bounds.h % G).toBe(0);
+      expectGridAligned(l.pins);
+    }
   });
 });
 

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD_EXT, CHIP_EXT, isDocumentName } from './docExtensions';
+import { BOARD_EXT, CHIP_EXT, LESSON_EXT, isDocumentName } from './docExtensions';
 
 describe('document extensions', () => {
-  it('accepts boards and chips', () => {
+  it('accepts boards, chips and lessons', () => {
     expect(isDocumentName(`adder${BOARD_EXT}`)).toBe(true);
     expect(isDocumentName(`half-adder${CHIP_EXT}`)).toBe(true);
+    expect(isDocumentName(`alu-flags${LESSON_EXT}`)).toBe(true);
   });
 
   it('still reads the pre-extension names, so older saves keep opening', () => {
     expect(isDocumentName('adder.board.json')).toBe(true);
     expect(isDocumentName('half-adder.chip.json')).toBe(true);
+    expect(isDocumentName('noise-margins.lesson.json')).toBe(true);
   });
 
   // The whole point of the change: a chips folder that also holds notes,
@@ -23,6 +25,7 @@ describe('document extensions', () => {
   it('is case-insensitive, since Windows is', () => {
     expect(isDocumentName('ADDER.LCIRB')).toBe(true);
     expect(isDocumentName('Half-Adder.Lcirc')).toBe(true);
+    expect(isDocumentName('ALU-Flags.LCIRL')).toBe(true);
   });
 
   it('does not match a name that merely contains the extension', () => {

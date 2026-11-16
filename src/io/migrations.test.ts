@@ -219,8 +219,8 @@ describe('board v7 -> v8, chip v5 -> v6 (instance contents, inout pins)', () => 
   });
 
   it('refuses a file newer than this app, before any validation', () => {
-    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 13 })).toThrow(
-      'file is version 13, app supports up to 12',
+    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 16 })).toThrow(
+      'file is version 16, app supports up to 15',
     );
     expect(() => migrate({ ...structuredClone(chipV5), formatVersion: 9 })).toThrow(
       'file is version 9, app supports up to 8',
@@ -298,7 +298,7 @@ describe('board v9 -> v10 (timing vendor)', () => {
     const out = migrate(structuredClone(boardV9));
     expect(out).toEqual({
       ...boardV9,
-      formatVersion: 12,
+      formatVersion: 15,
       timing: { mode: 'datasheet', datasheet: 'max', vendor: 'ti' },
       runSpeed: 25_000,
     });
@@ -306,7 +306,7 @@ describe('board v9 -> v10 (timing vendor)', () => {
   });
 
   it('accepts the min column and the Fairchild vendor, and no other vendor', () => {
-    const v10 = { ...boardV9, formatVersion: 12, runSpeed: 25_000 };
+    const v10 = { ...boardV9, formatVersion: 15, runSpeed: 25_000 };
     const fairchild = {
       ...v10,
       timing: { mode: 'datasheet', datasheet: 'min', vendor: 'fairchild' },
@@ -332,12 +332,12 @@ describe('board v10 -> v11 (run speed)', () => {
 
   it('runs every older board at the first preset, 25 ns of sim time a second', () => {
     const out = migrate(structuredClone(boardV10));
-    expect(out).toEqual({ ...boardV10, formatVersion: 12, runSpeed: 25_000 });
+    expect(out).toEqual({ ...boardV10, formatVersion: 15, runSpeed: 25_000 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('refuses a run speed that is not a whole, positive ps count up to real time', () => {
-    const at = (runSpeed: unknown) => ({ ...boardV10, formatVersion: 12, runSpeed });
+    const at = (runSpeed: unknown) => ({ ...boardV10, formatVersion: 15, runSpeed });
     expect(validateDocument(at(1_000_000_000_000))).toEqual({ valid: true });
     for (const bad of [0, 2.5, 2_000_000_000_000, 'fast'])
       expect(validateDocument(at(bad)).valid).toBe(false);
@@ -357,13 +357,13 @@ describe('board v11 -> v12, chip v7 -> v8 (silenced checks)', () => {
 
   it('carries an older board through with no silenced checks', () => {
     const out = migrate(structuredClone(boardV11));
-    expect(out).toEqual({ ...boardV11, formatVersion: 12 });
+    expect(out).toEqual({ ...boardV11, formatVersion: 15 });
     expect(out['hiddenChecks']).toBeUndefined();
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('accepts a list of check keys on a board and a chip, and nothing else there', () => {
-    const board = { ...boardV11, formatVersion: 12, hiddenChecks: ['unwired:u1.a'] };
+    const board = { ...boardV11, formatVersion: 15, hiddenChecks: ['unwired:u1.a'] };
     expect(validateDocument(board)).toEqual({ valid: true });
     expect(validateDocument({ ...board, hiddenChecks: [3] }).valid).toBe(false);
     expect(validateDocument({ ...board, hiddenChecks: [''] }).valid).toBe(false);
@@ -383,5 +383,289 @@ describe('board v11 -> v12, chip v7 -> v8 (silenced checks)', () => {
     expect(validateDocument({ ...migrated, hiddenChecks: ['unused:x.y'] })).toEqual({
       valid: true,
     });
+  });
+});
+
+describe('board v12 -> v13 (input sequence)', () => {
+  const boardV12 = {
+    ...structuredClone(boardV1),
+    formatVersion: 12,
+    components: [],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
+  };
+  const sequence = {
+    inputs: ['a', 'b'],
+    expect: ['y'],
+    rows: [
+      { set: [1, 0], expect: [1], note: 'one' },
+      { set: [3, 1], expect: [null] },
+    ],
+    advance: { mode: 'clock', clock: 'clk' },
+    hideExpected: true,
+  };
+
+  it('carries an older board through with no sequence', () => {
+    const out = migrate(structuredClone(boardV12));
+    expect(out).toEqual({ ...boardV12, formatVersion: 15 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts a sequence and refuses rows whose cells miss their columns', () => {
+    const board = { ...boardV12, formatVersion: 15, sequence };
+    expect(validateDocument(board)).toEqual({ valid: true });
+    const short = { ...sequence, rows: [{ set: [1] }] };
+    expect(validateDocument({ ...board, sequence: short }).valid).toBe(false);
+    const twice = { ...sequence, inputs: ['a', 'a'] };
+    expect(validateDocument({ ...board, sequence: twice }).valid).toBe(false);
+    const noClock = { ...sequence, advance: { mode: 'clock' } };
+    expect(validateDocument({ ...board, sequence: noClock }).valid).toBe(false);
+    const negative = { ...sequence, rows: [{ set: [-1, 0] }] };
+    expect(validateDocument({ ...board, sequence: negative }).valid).toBe(false);
+  });
+});
+
+describe('lesson v1 -> v2 (kinds and actions)', () => {
+  const lessonV1 = (steps: unknown[]) => ({
+    format: 'lcir.lesson',
+    formatVersion: 1,
+    id: 'l1',
+    title: 'Old lesson',
+    workbench: 'circuit',
+    steps,
+  });
+  const stepsOf = (steps: unknown[]) => migrate(lessonV1(steps))['steps'];
+
+  it('passes a non-object step through, so the schema names it instead of a crash', () => {
+    const migrated = migrate(lessonV1([null]));
+    expect((migrated['steps'] as unknown[])[0]).toBeNull();
+    expect(validateDocument(migrated).valid).toBe(false);
+  });
+
+  it('keeps narrate and predict, and makes configure and highlight narrate steps', () => {
+    expect(
+      stepsOf([
+        { type: 'narrate', prose: 'Hi' },
+        { type: 'predict', prose: 'Q?' },
+        { type: 'configure' },
+        { type: 'highlight', params: { components: ['g1'] } },
+      ]),
+    ).toEqual([
+      { kind: 'narrate', prose: 'Hi', actions: [] },
+      { kind: 'predict', prose: 'Q?', actions: [] },
+      { kind: 'narrate', prose: '', actions: [] },
+      { kind: 'narrate', prose: '', actions: [{ kind: 'highlight', components: ['g1'] }] },
+    ]);
+  });
+
+  it('maps known params to actions in order: row, power, timing, highlight, tab', () => {
+    const params = {
+      tab: 'waveform',
+      highlight: ['a', 'b'],
+      timing: 'datasheet',
+      power: true,
+      row: 2,
+      choices: ['yes', 'no'],
+      answer: 'yes',
+      stray: 42,
+    };
+    expect(stepsOf([{ type: 'configure', params }])).toEqual([
+      {
+        kind: 'narrate',
+        prose: '',
+        actions: [
+          { kind: 'row', index: 2, when: 'open' },
+          { kind: 'power', on: true },
+          { kind: 'timing', mode: 'datasheet' },
+          { kind: 'highlight', components: ['a', 'b'] },
+          { kind: 'tab', tab: 'waveform' },
+        ],
+        choices: [{ text: 'yes' }, { text: 'no' }],
+        answer: 'yes',
+      },
+    ]);
+  });
+
+  it('holds a predict row back for the reveal', () => {
+    expect(stepsOf([{ type: 'predict', params: { row: 0 } }])).toEqual([
+      { kind: 'predict', prose: '', actions: [{ kind: 'row', index: 0, when: 'reveal' }] },
+    ]);
+  });
+
+  it('drops params it cannot read rather than failing the file', () => {
+    const params = { row: -1, power: 'on', timing: 'fast', tab: 'memory', components: [1] };
+    expect(stepsOf([{ type: 'narrate', params }])).toEqual([
+      { kind: 'narrate', prose: '', actions: [] },
+    ]);
+  });
+
+  it('keeps a widget step with its params, and an unknown kind as a widget', () => {
+    expect(
+      stepsOf([
+        { type: 'widget', prose: 'Watch', params: { id: 'metastability', seed: 7 } },
+        { type: 'widget', params: { seed: 7 } },
+        { type: 'kmap-walk', params: { cells: [1, 3] } },
+      ]),
+    ).toEqual([
+      {
+        kind: 'widget',
+        prose: 'Watch',
+        actions: [],
+        widget: { id: 'metastability', params: { id: 'metastability', seed: 7 } },
+      },
+      { kind: 'widget', prose: '', actions: [], widget: { id: 'unknown', params: { seed: 7 } } },
+      {
+        kind: 'widget',
+        prose: '',
+        actions: [],
+        widget: { id: 'kmap-walk', params: { cells: [1, 3] } },
+      },
+    ]);
+  });
+
+  it('loads a v1 file with no board as a lesson naming none', () => {
+    const out = migrate(lessonV1([{ type: 'narrate', prose: 'Hi' }]));
+    expect(out['formatVersion']).toBe(CURRENT_VERSION['lcir.lesson']);
+    expect('board' in out).toBe(false);
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('takes the board from the params of the first step when one is named', () => {
+    const out = migrate(lessonV1([{ type: 'narrate', params: { board: 'full-adder' } }]));
+    expect(out['board']).toBe('full-adder');
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('migrates a v2 lesson to v3 with nothing else changed', () => {
+    const v2 = {
+      ...lessonV1([]),
+      formatVersion: 2,
+      board: 'b1',
+      steps: [
+        {
+          kind: 'predict',
+          prose: 'Q?',
+          actions: [{ kind: 'row', index: 1, set: [7, 1], when: 'reveal' }],
+          choices: [{ text: 'a', right: true }],
+          answer: 'a',
+        },
+      ],
+    };
+    const out = migrate(structuredClone(v2));
+    expect(out).toEqual({ ...v2, formatVersion: 3 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('round-trips a v3 lesson with notes, narration and annotations unchanged', () => {
+    const v3 = {
+      ...lessonV1([]),
+      formatVersion: 3,
+      board: 'b1',
+      steps: [
+        {
+          kind: 'predict',
+          prose: 'Q?',
+          actions: [],
+          choices: [{ text: 'a', right: true }],
+          notes: 'Wait.',
+          headline: 'Look at Y',
+          narr: { at: 'caption' },
+          revealFreely: true,
+          annots: [
+            { kind: 'callout', id: 'n1', part: 'y', text: 't', offset: { x: 1, y: -2 }, until: 1 },
+            { kind: 'arrow', id: 'n2', from: { x: 0, y: 0 }, to: { x: 3, y: 4 } },
+          ],
+        },
+        { kind: 'narrate', prose: 'Next', actions: [], narr: { at: 'callout', part: 'y' } },
+      ],
+    };
+    const out = migrate(structuredClone(v3));
+    expect(out).toEqual(v3);
+    expect(validateDocument(out)).toEqual({ valid: true });
+    expect(JSON.parse(JSON.stringify(out))).toEqual(v3);
+  });
+});
+
+describe('board v13 -> v14 (active-low LED)', () => {
+  const led = { id: 'l', kind: 'led', pos: { x: 0, y: 0 } };
+  const boardV13 = {
+    ...structuredClone(boardV1),
+    formatVersion: 13,
+    components: [led],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
+  };
+
+  it('carries an older board through with its LEDs active high', () => {
+    const out = migrate(structuredClone(boardV13));
+    expect(out).toEqual({ ...boardV13, formatVersion: 15 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts an active-low LED', () => {
+    const board = {
+      ...boardV13,
+      formatVersion: 15,
+      components: [{ ...led, params: { activeLow: true } }],
+    };
+    expect(validateDocument(board)).toEqual({ valid: true });
+  });
+});
+
+describe('board v14 -> v15 (challenge)', () => {
+  const boardV14 = {
+    ...structuredClone(boardV1),
+    formatVersion: 14,
+    components: [],
+    wires: [],
+    junctions: [],
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+    runSpeed: 25_000,
+  };
+  const challenge = {
+    title: 'NAND only',
+    brief: 'Build Y = A AND B.',
+    allowed: ['nand'],
+    ics: { min: 0, max: 2 },
+    maxGates: 2,
+    required: [{ anyOf: ['nand'], count: 1 }],
+    tests: { steps: [{ set: { A: 1, B: 1 }, wait: { ms: 1 }, expect: { Y: 1 } }] },
+    truthTable: { inputs: ['A', 'B'], outputs: ['Y'], rows: [[1, 1, 1]] },
+    fingerprint: '00abc',
+  };
+
+  it('carries an older board through with no challenge', () => {
+    const out = migrate(structuredClone(boardV14));
+    expect(out).toEqual({ ...boardV14, formatVersion: 15 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('accepts a challenge and round-trips it', () => {
+    const board = { ...boardV14, formatVersion: 15, challenge };
+    expect(validateDocument(board)).toEqual({ valid: true });
+    expect(JSON.parse(JSON.stringify(migrate(structuredClone(board))))).toEqual(board);
+  });
+
+  it('refuses a bad block, naming the field', () => {
+    const at = (c: unknown) => validateDocument({ ...boardV14, formatVersion: 15, challenge: c });
+    const noTitle = at({ ...challenge, title: undefined });
+    expect(noTitle.valid).toBe(false);
+    const extra = at({ ...challenge, secret: 1 });
+    expect(extra.valid).toBe(false);
+    const badStep = at({ ...challenge, tests: { steps: [{ tick: 1 }] } });
+    expect(badStep).toEqual({
+      valid: false,
+      errors: ['/challenge/tests steps[0]: unknown key "tick"'],
+    });
+    const badCell = at({
+      ...challenge,
+      truthTable: { ...challenge.truthTable, rows: [[2, 1, 1]] },
+    });
+    expect(badCell.valid).toBe(false);
+    if (!badCell.valid) expect(badCell.errors[0]).toMatch(/^\/challenge\/truthTable\/rows\/0\/0/);
   });
 });

@@ -5,7 +5,7 @@
 import type { ChipDef, ChipLibrary, Circuit, Component, PinDir } from '../model/types';
 import { driverFloats } from '../model/pinSlots';
 import { getPrimitive, hasPrimitive } from '../sim/primitives/registry';
-import { getPackage } from '../parts/packages';
+import { getPackage, type PackagePin } from '../parts/packages';
 
 /** What a pin does on its net, as far as the checks care. */
 export interface NetPin {
@@ -33,14 +33,14 @@ export interface CheckNet {
 
 const CONNECTORS = new Set(['netlabel', 'tunnel']);
 
-/** Datasheet pin number and supply role per pin name of a built-in package def. */
+/** Datasheet pin number, supply role and section per pin name of a built-in package def. */
 export function packagePins(
   def: ChipDef | undefined,
-): Map<string, { number: number; fn: string }> | undefined {
+): Map<string, { number: number; fn: string; gate?: PackagePin['gate'] }> | undefined {
   if (!def?.appearance?.package) return undefined;
   const entry = getPackage(def.id);
   if (!entry) return undefined;
-  return new Map(entry.pins.map((p) => [p.name, { number: p.pin, fn: p.fn }]));
+  return new Map(entry.pins.map((p) => [p.name, { number: p.pin, fn: p.fn, gate: p.gate }]));
 }
 
 /** The checkable pins of one component, connectors excluded. */

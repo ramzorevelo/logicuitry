@@ -1,6 +1,7 @@
 // Hierarchy data model: chip definitions referenced by id, lightweight instances.
 
 import type { DatasheetColumn, Vendor } from '../parts/partsDb';
+import type { StimulusJson } from '../runner/stimulus';
 
 export type PinRole = 'data' | 'clock' | 'enable' | 'asyncSet' | 'asyncClear' | 'select';
 /** `passive` is a net LABEL's pin: neither driver nor sink, it takes the
@@ -44,6 +45,7 @@ export type ComponentKind =
   | 'button'
   | 'spdt'
   | 'clock'
+  | 'pattern'
   | 'timer555'
   | 'constant'
   | 'inport'
@@ -236,7 +238,7 @@ export const DEFAULT_RUN_SPEED = RUN_SPEEDS[0]!;
 
 export interface Board extends Circuit {
   format: 'lcir.board';
-  formatVersion: 12;
+  formatVersion: 15;
   id: string;
   name: string;
   /** Hierarchical net paths pinned to the waveform view. */
@@ -244,21 +246,123 @@ export interface Board extends Circuit {
   view: { x: number; y: number; zoom: number };
   timing: TimingSetting;
   runSpeed: number;
+  /** Absent means none; undefined is allowed so an undo can clear it through a spread. */
+  sequence?: BoardSequence | undefined;
+  /** Absent means none; undefined is allowed so an undo can clear it through a spread. */
+  challenge?: Challenge | undefined;
 }
 
+/** A row of 0/1 inputs then 0/1 outputs, in column order; a null output is don't care. */
+export type ChallengeTableRow = (0 | 1 | null)[];
+
+export interface ChallengeTruthTable {
+  inputs: string[];
+  outputs: string[];
+  rows: ChallengeTableRow[];
+}
+
+/** Each entry needs `count` of any part in `anyOf`. */
+export interface ChallengeRequirement {
+  anyOf: string[];
+  count: number;
+}
+
+/** A brief, part constraints and behavior a board is checked against, names keyed by label. */
+export interface Challenge {
+  title: string;
+  brief: string;
+  /** Kinds ("nand", "led", "timer555") or chip part numbers ("74LS00"). Empty: any part. */
+  allowed: string[];
+  ics?: { min?: number; max?: number };
+  maxGates?: number;
+  required: ChallengeRequirement[];
+  /** The board runner's file shape, names keyed by label. */
+  tests?: StimulusJson;
+  truthTable?: ChallengeTruthTable;
+  /** Set on the first "Set challenge"; absent on a draft. */
+  fingerprint?: string;
+}
+
+export type SequenceAdvance = { mode: 'key' } | { mode: 'clock'; clock: string };
+
+/** One step of a board sequence. `expect` cells are null for don't care. */
+export interface SequenceRow {
+  set: number[];
+  expect?: (number | null)[];
+  note?: string;
+}
+
+/** Input rows played onto a board's own switches, by component id. */
+export interface BoardSequence {
+  inputs: string[];
+  expect: string[];
+  rows: SequenceRow[];
+  advance: SequenceAdvance;
+  hideExpected: boolean;
+}
+
+export type LessonStepKind = 'narrate' | 'predict' | 'widget';
+export type LessonDockTab = 'waveform' | 'analyze' | 'checks' | 'sequence';
+
+export type LessonAction =
+  /** `set` is the row's input values when the lesson was written; absent on a migrated v1 row. */
+  | { kind: 'row'; index: number; set?: number[]; when: 'open' | 'reveal' }
+  | { kind: 'power'; on: boolean }
+  | { kind: 'timing'; mode: TimingMode }
+  | { kind: 'highlight'; components: string[] }
+  | { kind: 'tab'; tab: LessonDockTab };
+
+export interface LessonChoice {
+  text: string;
+  right?: boolean;
+}
+
+export type NarrationPlacement = 'panel' | 'caption' | 'callout';
+
+/** Where viewers read a step's prose; `part` is the component a callout points at. */
+export interface LessonNarration {
+  at: NarrationPlacement;
+  part?: string;
+}
+
+/**
+ * On-board note owned by one step, shown through step `until` (absolute,
+ * 0-based; absent means the owning step only). Points are board coordinates,
+ * the units of `Component.pos`. Ids are unique per lesson.
+ */
+export type LessonAnnotation =
+  /** `offset` runs from the part to the bubble, so the callout follows the part. */
+  | { kind: 'callout'; id: string; part: string; text: string; offset: Point; until?: number }
+  | { kind: 'text'; id: string; at: Point; text: string; until?: number }
+  | { kind: 'arrow'; id: string; from: Point; to: Point; until?: number };
+
 export interface LessonStep {
-  type: string;
-  /** Markdown rendered in the lesson side panel. */
-  prose?: string;
-  params?: Record<string, unknown>;
+  kind: LessonStepKind;
+  /** Markdown subset; the question on a predict step. */
+  prose: string;
+  actions: LessonAction[];
+  choices?: LessonChoice[];
+  /** Markdown shown on reveal. */
+  answer?: string;
+  widget?: { id: string; params?: Record<string, unknown> };
+  /** Speaker notes: the author's only, never shown to viewers. */
+  notes?: string;
+  /** One line under the board, for every viewer. */
+  headline?: string;
+  narr?: LessonNarration;
+  annots?: LessonAnnotation[];
+  /** Predict only: a student alone may reveal without picking a choice. */
+  revealFreely?: boolean;
 }
 
 export interface Lesson {
   format: 'lcir.lesson';
-  formatVersion: 1;
+  formatVersion: 3;
   id: string;
   title: string;
   workbench: 'numbers' | 'gates' | 'circuit' | 'devicelab';
+  /** The board's `Board.id`; absent on a lesson that names none (a migrated v1 file). */
+  board?: string;
   steps: LessonStep[];
 }
 

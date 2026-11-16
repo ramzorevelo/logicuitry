@@ -56,6 +56,23 @@ export interface SettleReport {
   oscillation?: { nets: number[]; primitives: number[]; recent: NetChangeRecord[] };
 }
 
+export interface GateStepReport {
+  time: number;
+  changedNets: number[];
+  evaluated: number[];
+  /** Primitives still holding a live drive or wake after the step. */
+  pendingPrimitives: number[];
+  settled: boolean;
+  /** Present when a zero-delay loop blew the event budget within the step. */
+  oscillation?: NonNullable<SettleReport['oscillation']>;
+}
+
+export interface NextSlice {
+  time: number;
+  primitives: number[];
+  wakes: boolean;
+}
+
 type Listener = (net: number, value: bv.BusValue, time: number) => void;
 
 /** Weak pulls claim only the bits every driver left floating. */
@@ -262,6 +279,90 @@ export class Simulator {
     // would drag the next paused settle out to their edges.
     if (!this.running) this.cancelTimedWakes((ev) => ev.timed === 'endless');
     return report;
+  }
+
+  /**
+   * One gate delay: every slice at the next pending time, so wiring that
+   * passes a value on in zero time lands in the same press. Arms the
+   * self-timed sources on an empty queue as stepToNextEvent does. Null when
+   * nothing can move.
+   */
+  gateStep(limit = OSC_EVENT_LIMIT): GateStepReport | null {
+    const first = this.stepToNextEvent();
+    if (!first) return null;
+    const changed = new Set(first.changedNets);
+    const evaluated = new Set(first.evaluated);
+    let processed = changed.size + evaluated.size;
+    while (this.peekLive()?.time === first.time) {
+      if (processed > limit)
+        return {
+          ...this.gateReport(first.time, changed, evaluated),
+          settled: false,
+          oscillation: this.oscillationReport(),
+        };
+      const report = this.deltaStep()!;
+      for (const net of report.changedNets) changed.add(net);
+      for (const pi of report.evaluated) evaluated.add(pi);
+      processed += report.changedNets.length + report.evaluated.length;
+    }
+    return this.gateReport(first.time, changed, evaluated);
+  }
+
+  private gateReport(
+    time: number,
+    changed: ReadonlySet<number>,
+    evaluated: ReadonlySet<number>,
+  ): GateStepReport {
+    const ascending = (a: number, b: number) => a - b;
+    return {
+      time,
+      changedNets: [...changed].sort(ascending),
+      evaluated: [...evaluated].sort(ascending),
+      pendingPrimitives: this.pendingPrimitives(),
+      settled: this.settled,
+    };
+  }
+
+  /** Primitives with a live drive or wake queued: the parts a gate step will still move. */
+  pendingPrimitives(): number[] {
+    const out: number[] = [];
+    this.pendingDrives.forEach((outs, pi) => {
+      const wake = this.pendingWakeEv[pi];
+      const waking = !!wake && !wake.cancelled && this.pendingWake[pi] === wake.time;
+      if (waking || outs.some((pending) => pending.length > 0)) out.push(pi);
+    });
+    return out;
+  }
+
+  /** What lands at the next pending time: the primitive behind each live
+   *  event there, and whether any of them is a wake. Null on an empty queue. */
+  nextSlice(): NextSlice | null {
+    const first = this.peekLive();
+    if (!first) return null;
+    const primitives = new Set<number>();
+    let wakes = false;
+    this.queue.forEach((ev) => {
+      if (ev.cancelled || ev.time !== first.time) return;
+      primitives.add(ev.prim);
+      if (ev.out === -1) wakes = true;
+    });
+    return { time: first.time, primitives: [...primitives].sort((a, b) => a - b), wakes };
+  }
+
+  /** Every drive has landed and only self-timed wakes (clocks, bounce) remain:
+   *  a running board's logic has caught up with its last edge. */
+  get logicSettled(): boolean {
+    if (this.pendingDrives.some((outs) => outs.some((pending) => pending.length > 0))) return false;
+    let plainWake = false;
+    this.queue.forEach((ev) => {
+      if (!ev.cancelled && ev.out === -1 && !ev.timed) plainWake = true;
+    });
+    return !plainWake;
+  }
+
+  /** Nothing queued. A paused clocked board is settled yet can still step. */
+  get settled(): boolean {
+    return this.liveEvents === 0;
   }
 
   /** Whether stepToNextEvent can still move: something queued, or some source

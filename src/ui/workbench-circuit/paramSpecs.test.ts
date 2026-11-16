@@ -51,6 +51,14 @@ describe('isWidthCapable', () => {
     expect(clampParamValue('spdt', 'toGround', true)).toBeNull();
   });
 
+  it("LED active low is structural, since it resizes the glyph, and the LED's own", () => {
+    expect(paramLiveness('led', 'activeLow')).toBe('structural');
+    expect(paramKeysFor('led', {})).toContain('activeLow');
+    expect(clampParamValue('led', 'activeLow', 1)).toBe(true);
+    expect(clampParamValue('ledmatrix', 'activeLow', true)).toBeNull();
+    expect(clampParamValue('sevenseg', 'activeLow', true)).toBeNull();
+  });
+
   it('comparator hasCascade is structural and its own', () => {
     expect(paramLiveness('comparator', 'hasCascade')).toBe('structural');
     expect(clampParamValue('comparator', 'hasCascade', 1)).toBe(true);
@@ -145,8 +153,10 @@ describe('paramKeysFor', () => {
     expect(paramKeysFor('toggle', { width: 1 })).toEqual(new Set(['width', 'initial']));
   });
 
-  it('led has width plus its physical colour and shape', () => {
-    expect(paramKeysFor('led', { width: 1 })).toEqual(new Set(['width', 'color', 'shape']));
+  it('led has width plus its physical colour, shape and polarity', () => {
+    expect(paramKeysFor('led', { width: 1 })).toEqual(
+      new Set(['width', 'color', 'shape', 'activeLow']),
+    );
   });
 
   it('probe has only width', () => {

@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "format": { "const": "lcir.board" },
-    "formatVersion": { "const": 12 },
+    "formatVersion": { "const": 15 },
     "id": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1 },
     "components": {
@@ -65,6 +65,106 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 1000000000000
+    },
+    "sequence": {
+      "description": "Input rows played onto the board's own switches, by component id.",
+      "type": "object",
+      "properties": {
+        "inputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "expect": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "set": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 } },
+              "expect": {
+                "type": "array",
+                "items": { "type": ["integer", "null"], "minimum": 0, "maximum": 4294967295 }
+              },
+              "note": { "type": "string" }
+            },
+            "required": ["set"],
+            "additionalProperties": false
+          }
+        },
+        "advance": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": { "mode": { "const": "key" } },
+              "required": ["mode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "mode": { "const": "clock" }, "clock": { "type": "string", "minLength": 1 } },
+              "required": ["mode", "clock"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "hideExpected": { "type": "boolean" }
+      },
+      "required": ["inputs", "expect", "rows", "advance", "hideExpected"],
+      "additionalProperties": false
+    },
+    "challenge": {
+      "description": "A brief, part constraints and behavior the board is checked against; names are labels.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "brief": { "type": "string" },
+        "allowed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ics": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "maxGates": { "type": "integer", "minimum": 0 },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "anyOf": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+              "count": { "type": "integer", "minimum": 1 }
+            },
+            "required": ["anyOf", "count"],
+            "additionalProperties": false
+          }
+        },
+        "tests": {
+          "description": "The board runner's stimulus shape, keyed by name.",
+          "type": "object",
+          "properties": {
+            "clock": { "type": "string", "minLength": 1 },
+            "watch": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "steps": { "type": "array", "items": { "type": "object" } }
+          },
+          "required": ["steps"],
+          "additionalProperties": false
+        },
+        "truthTable": {
+          "type": "object",
+          "properties": {
+            "inputs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+            "outputs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+            "rows": {
+              "type": "array",
+              "items": { "type": "array", "items": { "enum": [0, 1, null] } }
+            }
+          },
+          "required": ["inputs", "outputs", "rows"],
+          "additionalProperties": false
+        },
+        "fingerprint": { "type": "string", "minLength": 1 }
+      },
+      "required": ["title", "brief", "allowed", "required"],
+      "additionalProperties": false
     }
   },
   "required": [

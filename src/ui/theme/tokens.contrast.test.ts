@@ -89,6 +89,25 @@ describe.each(THEMES.map((t) => t.name))('theme %s', (name) => {
     }
   });
 
+  it('draws the lesson highlight at 3:1 or better on the board', () => {
+    const alias = /^var\((--[\w-]+)\)$/.exec(get('--lesson-highlight'));
+    const color = alias ? get(alias[1]!) : get('--lesson-highlight');
+    expect(contrast(color, get('--paper'))).toBeGreaterThanOrEqual(3);
+  });
+
+  // The ring is what a class watches a change ripple by, so it gets the text floor.
+  it('draws the gate step ring at 4.5:1 and the pending outline at 3:1 on the board', () => {
+    const floors: [string, number][] = [
+      ['--gate-ripple', 4.5],
+      ['--gate-pending', 3],
+    ];
+    for (const [key, floor] of floors) {
+      const alias = /^var\((--[\w-]+)\)$/.exec(get(key));
+      const color = alias ? get(alias[1]!) : get(key);
+      expect(contrast(color, get('--paper')), key).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
   it('keeps the mixed bus apart from the lanes-all-clear colour it alternates with', () => {
     expect(
       Math.abs(luminance(get('--signal-mixed')) - luminance(get('--muted'))),

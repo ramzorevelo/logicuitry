@@ -1179,5 +1179,138 @@
     "mode": "ideal",
     "datasheet": "typ",
     "vendor": "fairchild"
+  },
+  "sequence": {
+    "inputs": [
+      "a",
+      "b",
+      "f1",
+      "f0"
+    ],
+    "expect": [
+      "y",
+      "n",
+      "z",
+      "cf",
+      "vf"
+    ],
+    "rows": [
+      {
+        "set": [
+          3,
+          2,
+          0,
+          0
+        ],
+        "expect": [
+          5,
+          0,
+          0,
+          0,
+          0
+        ],
+        "note": "3 + 2"
+      },
+      {
+        "set": [
+          7,
+          1,
+          0,
+          0
+        ],
+        "expect": [
+          8,
+          1,
+          0,
+          0,
+          1
+        ],
+        "note": "7 + 1 overflows"
+      },
+      {
+        "set": [
+          5,
+          5,
+          0,
+          1
+        ],
+        "expect": [
+          0,
+          0,
+          1,
+          1,
+          0
+        ],
+        "note": "5 - 5"
+      },
+      {
+        "set": [
+          2,
+          5,
+          0,
+          1
+        ],
+        "expect": [
+          13,
+          1,
+          0,
+          0,
+          0
+        ],
+        "note": "2 - 5 borrows"
+      },
+      {
+        "set": [
+          8,
+          1,
+          0,
+          1
+        ],
+        "expect": [
+          7,
+          0,
+          0,
+          1,
+          1
+        ],
+        "note": "-8 - 1 overflows"
+      },
+      {
+        "set": [
+          12,
+          10,
+          1,
+          0
+        ],
+        "expect": [
+          8,
+          1,
+          0,
+          0,
+          0
+        ],
+        "note": "AND"
+      },
+      {
+        "set": [
+          12,
+          10,
+          1,
+          1
+        ],
+        "expect": [
+          14,
+          1,
+          0,
+          0,
+          0
+        ],
+        "note": "OR"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
   }
 }

@@ -21,6 +21,9 @@ export function makeTestTheme(overrides: Partial<Theme> = {}): Theme {
       warn: '#c60',
       ok: '#0a0',
       signalMixed: '#06c',
+      lessonHighlight: '#c60',
+      gateRipple: '#0a6f80',
+      gatePending: '#999',
       kmapGroups: [],
     },
     ledColors: {

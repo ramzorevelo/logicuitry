@@ -1,4 +1,4 @@
-import { BOARD_EXT } from './docExtensions';
+import { BOARD_EXT, LESSON_EXT } from './docExtensions';
 // File > Open / Save / Save As for board documents, plus the recent list.
 //
 // Every read goes through parseDocument (migrate -> validate), so an older or
@@ -8,7 +8,7 @@ import { BOARD_EXT } from './docExtensions';
 // without a picker for the rest of the session once permission is granted
 // (across sessions only if the user chose "Allow on every visit").
 
-import type { Board, ChipDef } from '../core/model/types';
+import type { Board, ChipDef, Lesson } from '../core/model/types';
 import { requestOf } from './handleStore';
 import {
   PermissionLapsedError,
@@ -45,17 +45,18 @@ export async function readBoardFile(file: DocFile): Promise<Board> {
   return parseBoard(await readDocFile(file));
 }
 
-/** A board or a chip -- a chip's internals are a circuit too, so Open offers
- *  both rather than refusing by format. Anything else (a lesson) still throws. */
-export type OpenedDocument = { kind: 'board'; board: Board } | { kind: 'chip'; def: ChipDef };
+/** A board, a chip or a lesson -- a chip's internals are a circuit too, so Open
+ *  offers both rather than refusing by format, and a lesson opens over its board. */
+export type OpenedDocument =
+  | { kind: 'board'; board: Board }
+  | { kind: 'chip'; def: ChipDef }
+  | { kind: 'lesson'; lesson: Lesson };
 
 export function parseDocumentFile(text: string): OpenedDocument {
   const doc = parseDocument(text);
   if (doc.format === 'lcir.board') return { kind: 'board', board: doc };
   if (doc.format === 'lcir.chip') return { kind: 'chip', def: doc };
-  throw new BoardFileError(
-    `that file is a ${doc.format.replace('lcir.', '')}, not a board or a chip`,
-  );
+  return { kind: 'lesson', lesson: doc };
 }
 
 export async function readDocumentFile(file: DocFile): Promise<OpenedDocument> {
@@ -104,14 +105,21 @@ export async function saveBoardAs(
   return file;
 }
 
-/** Filename for a board, derived from its own name so Save As pre-fills usefully. */
-export function boardFileName(board: Board): string {
-  const slug = board.name
+const slugOf = (name: string): string =>
+  name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  return `${slug || 'board'}${BOARD_EXT}`;
+
+/** Filename for a board, derived from its own name so Save As pre-fills usefully. */
+export function boardFileName(board: Board): string {
+  return `${slugOf(board.name) || 'board'}${BOARD_EXT}`;
+}
+
+/** Filename for a lesson, from its title by the same rule as a board's. */
+export function lessonFileName(lesson: Lesson): string {
+  return `${slugOf(lesson.title) || 'lesson'}${LESSON_EXT}`;
 }
 
 export async function loadRecentBoards(): Promise<RecentBoard[]> {

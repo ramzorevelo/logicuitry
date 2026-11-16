@@ -10,7 +10,7 @@
 // the canvas (the current view's centre, the live selection).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Board, ChipDef } from '../../core/model/types';
+import type { Board, ChipDef, Lesson } from '../../core/model/types';
 import { docFileWritable, exportDoc, filePickersSupported } from '../../io/fsAccess';
 import {
   boardFileName,
@@ -26,12 +26,13 @@ import {
 } from '../../io/boardFile';
 import { parseDocument, serializeDocument } from '../../io/library';
 import { loadSession, saveSession } from '../../io/sessionStore';
+import { loadFileLessons, rememberFileLesson } from '../../io/lessonFiles';
 import { starterBoard, useCircuitStore } from '../workbench-circuit/circuitStore';
 import { OpenChipDialog } from '../workbench-circuit/OpenChipDialog';
 import { ExamplesDialog } from '../components/ExamplesDialog';
 import { isDesktop } from '../../io/platform';
 import type { DocFile } from '../../io/platform';
-import type { Example } from '../../examples';
+import { EXAMPLES, type Example } from '../../examples';
 import { UnsavedChangesDialog } from '../workbench-circuit/UnsavedChangesDialog';
 import { useShellStore } from '../store';
 import { getPrefs } from '../prefs';
@@ -39,8 +40,26 @@ import { SHORTCUTS } from '../menu/shortcuts';
 import type { Menu } from '../menu/menuModel';
 import { modalKeysHeld } from '../modalKeys';
 import { isDirtyAgainst, restoredCleanMark, type CleanMark } from './cleanMark';
+import { useCompact } from '../compact';
+import { useLessonStore } from '../lesson/lessonStore';
+import {
+  findLibraryBoard,
+  lessonsForBoard,
+  loadLibraryLessons,
+  type LibraryLesson,
+} from '../lesson/lessonLibrary';
+import { lessonDirty, useLessonEditorStore } from '../lesson/lessonEditorStore';
+import { LessonUnsavedDialog } from '../lesson/LessonEditor';
+import { lessonFileName } from '../lesson/lessonSave';
+import { newLesson } from '../../core/lesson';
+import { BUILTIN_LESSONS } from '../../examples/lessons';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
+
+const editor = () => useLessonEditorStore.getState();
+
+/** An open lesson draft asks first; then `run`. */
+const afterLessonEditor = (action: string, run: () => void) => editor().requestClose(action, run);
 
 /** The File Handling API's launch queue, Chromium only and absent from the DOM lib. */
 interface LaunchWindow {
@@ -66,6 +85,9 @@ export function useBoardDocument(): BoardDocument {
   const rev = useCircuitStore((s) => s.rev);
   // Open and Save As start in the BOARDS folder, not the chip shelf.
   const boardsDir = useShellStore((st) => st.boardsDir);
+  // The library root: chips/, boards/ and lessons/ live under it.
+  const libraryDir = useShellStore((st) => st.chipsDir);
+  const compact = useCompact();
 
   // The file this board came from (Save writes back here) and whether it has
   // edits since the last save/load. Both ride along in the autosave so a
@@ -151,16 +173,17 @@ export function useBoardDocument(): BoardDocument {
   /** Runs `run` now when there is nothing to lose, else asks. Turning the
    *  confirmation preference off skips the ask entirely, unsaved work included
    *  -- that is what the preference says. */
-  const guardDiscard = (action: string, run: () => void) => {
-    // Read from the refs, not `dirty`: a launch right after the restore runs before the render
-    // that sets it.
-    const clean = cleanRef.current;
-    const unsaved =
-      (clean !== null && isDirtyAgainst(store.getState().board, clean)) ||
-      store.getState().hasTabEdits();
-    if (!unsaved || !getPrefs().confirmReplaceBoard) run();
-    else setPendingDiscard({ action, run });
-  };
+  const guardDiscard = (action: string, run: () => void) =>
+    afterLessonEditor(action, () => {
+      // Read from the refs, not `dirty`: a launch right after the restore runs before the render
+      // that sets it.
+      const clean = cleanRef.current;
+      const unsaved =
+        (clean !== null && isDirtyAgainst(store.getState().board, clean)) ||
+        store.getState().hasTabEdits();
+      if (!unsaved || !getPrefs().confirmReplaceBoard) run();
+      else setPendingDiscard({ action, run });
+    });
 
   // `guardDiscard` closes over `dirty`, which changes on every edit; a ref
   // keeps `acceptOpened` memoised without going stale.
@@ -190,9 +213,9 @@ export function useBoardDocument(): BoardDocument {
   // An example always opens UNTITLED: no file is adopted, so Save is Save As
   // and a bundled example can never be clobbered by a student's edits. The
   // board is deep-copied because the imported JSON module is shared.
-  const openExample = (example: Example) => {
+  const openExample = (example: Example, then?: () => void) => {
     setExamplesOpen(false);
-    guardDiscard(`Open ${example.name}`, () => {
+    guardDiscardRef.current(`Open ${example.name}`, () => {
       if (example.chips?.length) store.getState().loadChipDefs(structuredClone(example.chips));
       store.getState().loadBoard(structuredClone(example.board));
       // An example ships no camera worth restoring, so it always frames --
@@ -200,8 +223,126 @@ export function useBoardDocument(): BoardDocument {
       store.getState().requestFit();
       setCurrentFile(null);
       markClean();
+      then?.();
     });
   };
+  const openExampleRef = useRef(openExample);
+  openExampleRef.current = openExample;
+
+  const [folderLessons, setFolderLessons] = useState<LibraryLesson[]>([]);
+  const [fileLessons, setFileLessons] = useState<LibraryLesson[]>([]);
+  const lessonSaves = useLessonEditorStore((s) => s.savedCount);
+  const [lessonFilesSeen, setLessonFilesSeen] = useState(0);
+  useEffect(() => {
+    if (!libraryDir) {
+      setFolderLessons([]);
+      return;
+    }
+    let cancelled = false;
+    void loadLibraryLessons(libraryDir).then((lessons) => {
+      if (!cancelled) setFolderLessons(lessons);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryDir, lessonSaves]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadFileLessons()
+      .then((list) => {
+        if (cancelled) return;
+        setFileLessons(list.map(({ lesson, file }) => ({ lesson, fileName: file.name, file })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonSaves, lessonFilesSeen]);
+  // A lesson opened through File > Open saves back to that file, before its listing has reloaded.
+  const openedLessonFiles = useRef(new WeakMap<Lesson, DocFile>());
+  // The library's own folder first: a copy there wins over a file elsewhere.
+  const libraryLessons = useMemo(
+    () => [...folderLessons, ...fileLessons],
+    [folderLessons, fileLessons],
+  );
+
+  const playLesson = useCallback((lesson: Lesson) => {
+    const fromEditor = editor().draft !== null;
+    afterLessonEditor(`Play ${lesson.title}`, () => {
+      useShellStore.getState().setWorkbench('circuit');
+      useLessonStore.getState().open(lesson, 0, { keepDock: fromEditor });
+    });
+  }, []);
+
+  /** Opens the editor on a lesson; one already open asks first, unless it is this one. */
+  const editLesson = useCallback(
+    (lesson: Lesson, opts?: { isNew?: boolean; takenIds?: ReadonlySet<string> }) => {
+      const ed = editor();
+      if (ed.draft?.id === lesson.id && !opts?.isNew) {
+        ed.backFromPlay();
+        return;
+      }
+      const runner = useLessonStore.getState();
+      const step = runner.lesson?.id === lesson.id ? runner.step : 0;
+      const fromRunner = runner.lesson !== null;
+      // The menu's own entry first: another board's lesson can share this id.
+      const entry =
+        libraryLessons.find((l) => l.lesson === lesson) ??
+        libraryLessons.find((l) => l.lesson.id === lesson.id && l.lesson.board === lesson.board);
+      const opened = openedLessonFiles.current.get(lesson);
+      const file = opened ?? entry?.file;
+      const fileName = opened?.name ?? entry?.fileName ?? lessonFileName(lesson.id);
+      afterLessonEditor(`Edit ${lesson.title}`, () => {
+        useLessonStore.getState().close();
+        useShellStore.getState().setWorkbench('circuit');
+        editor().open(lesson, fileName, {
+          step,
+          keepDock: fromRunner,
+          ...(file ? { file } : {}),
+          ...opts,
+        });
+      });
+    },
+    [libraryLessons],
+  );
+
+  /** A lesson opens over its board: the open one, an example, or a library board, in that order. */
+  const openLesson = useCallback(
+    async (lesson: Lesson) => {
+      const id = lesson.board;
+      if (!id) {
+        useCircuitStore.setState({ error: 'open: This lesson names no board' });
+        return;
+      }
+      if (store.getState().board.id === id) {
+        playLesson(lesson);
+        return;
+      }
+      const example = EXAMPLES.find((e) => e.id === id);
+      if (example) {
+        openExampleRef.current(example, () => playLesson(lesson));
+        return;
+      }
+      const { boardsDir: boards, chipsDir: library } = useShellStore.getState();
+      const found = await findLibraryBoard(id, [
+        ...(boards ? [{ dir: boards }] : []),
+        ...(library ? [{ dir: library, sub: 'boards' as const }] : []),
+      ]);
+      if (!found) {
+        useCircuitStore.setState({
+          error: `open: This lesson's board (${id}) is not in the library or the examples`,
+        });
+        return;
+      }
+      guardDiscardRef.current(`Open ${found.board.name}`, () => {
+        store.getState().loadBoard(found.board);
+        if (getPrefs().fitOnOpen) store.getState().requestFit();
+        adoptFile(found.file, found.board);
+        playLesson(lesson);
+      });
+    },
+    [adoptFile, playLesson, store],
+  );
 
   const fileNew = () => {
     guardDiscard('Start a new board', () => {
@@ -231,9 +372,20 @@ export function useBoardDocument(): BoardDocument {
         });
         return;
       }
+      if (doc.kind === 'lesson') {
+        // Listed in the Lesson menu from now on, and Edit then saves back to this file.
+        if (docFileWritable(file)) {
+          openedLessonFiles.current.set(doc.lesson, file);
+          void rememberFileLesson({ lesson: doc.lesson, file, savedAt: Date.now() })
+            .then(() => setLessonFilesSeen((n) => n + 1))
+            .catch(() => {});
+        }
+        void openLesson(doc.lesson);
+        return;
+      }
       setPendingChip({ def: doc.def, file });
     },
-    [adoptFile, store],
+    [adoptFile, openLesson, store],
   );
 
   // Double-clicking a document in the file manager launches us
@@ -338,7 +490,7 @@ export function useBoardDocument(): BoardDocument {
       if (!file) return;
       const doc = await readDocumentFile(file);
       if (doc.kind !== 'chip') {
-        useCircuitStore.setState({ error: 'open: that file is a board, not a chip' });
+        useCircuitStore.setState({ error: `open: that file is a ${doc.kind}, not a chip` });
         return;
       }
       openAsChip(doc.def, file);
@@ -405,6 +557,8 @@ export function useBoardDocument(): BoardDocument {
       if (modalKeysHeld()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (!(e.ctrlKey || e.metaKey) || !onBoardRef.current) return;
+      // The lesson editor saves the lesson; its own key handler has it.
+      if (editor().draft && !editor().playing) return;
       // Ctrl+N is not bound: a browser reserves it for a new window and it
       // cannot be reliably intercepted, so New lives in the menu only.
       if (e.key === 's' || e.key === 'S') {
@@ -422,8 +576,30 @@ export function useBoardDocument(): BoardDocument {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // A browser offers only its own Leave or Stay here, never Save.
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!lessonDirty(editor())) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, []);
+
+  const openLessonId = useLessonStore((s) => s.lesson?.id);
+  const editingId = useLessonEditorStore((s) => s.draft?.id);
   const menus = useMemo<Menu[]>(() => {
     const pickers = filePickersSupported();
+    const lessons = lessonsForBoard(board.id, libraryLessons);
+    const running = useLessonStore.getState().lesson;
+    const draft = editor().draft;
+    // A lesson needs its board findable by id: a library file or a built-in example.
+    const boardSaved = !!currentFile || EXAMPLES.some((e) => e.id === board.id);
+    const takenIds = new Set([
+      ...BUILTIN_LESSONS.map((l) => l.id),
+      ...libraryLessons.flatMap((l) => [l.lesson.id, l.fileName.replace(/\.[^.]+$/, '')]),
+    ]);
     return [
       {
         id: 'file',
@@ -480,16 +656,98 @@ export function useBoardDocument(): BoardDocument {
           },
         ],
       },
+      {
+        id: 'lesson',
+        items: [
+          ...(lessons.length > 0
+            ? lessons.map((lesson) => ({
+                id: `play-${lesson.id}`,
+                label: lesson.title,
+                checked: lesson.id === openLessonId,
+                disabled: !onBoard,
+                run: () => playLesson(lesson),
+              }))
+            : [
+                {
+                  id: 'noLessons',
+                  label: 'No lessons for this board',
+                  disabled: true,
+                  run: () => {},
+                },
+              ]),
+          { separator: true },
+          // Phones play lessons but never author them.
+          ...(compact
+            ? []
+            : [
+                {
+                  id: 'newLesson',
+                  label: 'New lesson',
+                  disabled: !onBoard || !boardSaved,
+                  ...(boardSaved ? {} : { title: 'Save the board first' }),
+                  run: () => editLesson(newLesson(board.id, takenIds), { isNew: true, takenIds }),
+                },
+                {
+                  id: 'editLesson',
+                  label: 'Edit lesson',
+                  disabled: !onBoard || lessons.length === 0,
+                  items: lessons.map((lesson) => ({
+                    id: `edit-${lesson.id}`,
+                    label: lesson.title,
+                    checked: lesson.id === editingId,
+                    run: () => editLesson(lesson),
+                  })),
+                },
+              ]),
+          {
+            id: 'playFromStart',
+            label: 'Play from step 1',
+            disabled: !onBoard || !(running || draft),
+            run: () => {
+              if (draft) editor().play(0);
+              else if (running) playLesson(running);
+            },
+          },
+          {
+            id: 'closeLesson',
+            label: 'Close lesson',
+            disabled: !running && !draft,
+            run: () => afterLessonEditor('Close lesson', () => useLessonStore.getState().close()),
+          },
+        ],
+      },
     ];
     // fileNew and friends are rebuilt every render by design; the values they
     // read that actually change the menu are listed here.
-  }, [dirty, recents, currentFile, boardsDir, onBoard]);
+  }, [
+    dirty,
+    recents,
+    currentFile,
+    boardsDir,
+    onBoard,
+    board.id,
+    libraryLessons,
+    openLessonId,
+    editingId,
+    compact,
+    playLesson,
+    editLesson,
+  ]);
 
+  const lessonPrompt = useLessonEditorStore((s) => s.pendingClose !== null);
   const dialogs =
-    pendingDiscard || pendingChip || examplesOpen ? (
+    pendingDiscard || pendingChip || examplesOpen || lessonPrompt ? (
       <>
+        <LessonUnsavedDialog />
         {examplesOpen && (
-          <ExamplesDialog onOpen={openExample} onCancel={() => setExamplesOpen(false)} />
+          <ExamplesDialog
+            onOpen={openExample}
+            onOpenLesson={(lesson) => {
+              setExamplesOpen(false);
+              void openLesson(lesson);
+            }}
+            onCancel={() => setExamplesOpen(false)}
+          />
         )}
         {pendingDiscard && (
           <UnsavedChangesDialog

@@ -27,6 +27,10 @@ export function cloneCircuit(c: Circuit): Circuit {
     junctions: c.junctions.map((j) => ({ ...j })),
     ...(c.groups ? { groups: c.groups.map((g) => ({ ...g })) } : {}),
     ...(c.hiddenChecks ? { hiddenChecks: [...c.hiddenChecks] } : {}),
+    // Rows are replaced, never mutated in place, so sharing them is safe.
+    ...('sequence' in c && c.sequence ? { sequence: c.sequence } : {}),
+    // Replaced whole on every Set, never mutated, so sharing it is safe too.
+    ...('challenge' in c && c.challenge ? { challenge: c.challenge } : {}),
   };
 }
 

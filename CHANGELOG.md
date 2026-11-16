@@ -5,6 +5,34 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.8.0] - 2026-11-16
+
+### Added
+
+- Lessons: a step-by-step runner with reveal, and an editor that records a
+  step as you drive the board.
+- Gate step: `.` advances one gate delay, with ripple rings on what changed.
+  Settle is a button.
+- Board challenges: allowed parts, IC and gate limits, test rows and a target
+  truth table, checked from the Challenge menu.
+- Input sequences and a pattern source, stepped a row at a time with `[`
+  and `]`.
+- Active-low LEDs, wired from VCC as on the breadboard.
+- File > Examples is now a browser with sections, a filter and previews.
+- Examples: memory and cache boards, a counter module, a NAND-only majority
+  vote, minterms on a 74LS138.
+
+### Changed
+
+- Tidy wiring is about four times faster, runs in the background and can be
+  cancelled.
+
+### Fixed
+
+- An unlit 74LS47 segment reads Z at its pin.
+- On a short phone, a lesson no longer squeezes the board to nothing.
+- Saving an overlay no longer asks about labels that did not change.
+
 ## [0.7.0] - 2026-11-03
 
 ### Added

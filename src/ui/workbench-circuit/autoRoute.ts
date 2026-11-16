@@ -83,8 +83,6 @@ const CROWD = 90;
 
 const DX = [1, -1, 0, 0];
 const DY = [0, 0, 1, -1];
-/** Direction index -> true when the move is along x. */
-const HORIZ = [true, true, false, false];
 
 type PinEnd = { kind: 'pin'; component: string; pin: string };
 
@@ -96,51 +94,73 @@ function pinKey(component: string, pin: string): string {
   return `${component} ${pin}`;
 }
 
-/** Binary heap over (f, g, cell, dir). A total order, so ties never depend on
- *  insertion order and the same board always yields the same routes. */
+/** Priority queue over (f, g, cell * 4 + dir), popped in exactly that total
+ *  order, so ties never depend on insertion order and the same board always
+ *  yields the same routes. Costs are integers, so it buckets on f and keeps a
+ *  small heap of (g, key) packed into one number per bucket: a project-size
+ *  board pops millions of states, and one global tuple heap dominated. */
 class Frontier {
-  private readonly heap: [number, number, number, number][] = [];
+  private buckets: number[][] = [];
+  private touched: number[] = [];
+  private cur = 0;
+  /** Packing radix: a state key is below it, so g * radix + key is exact. */
+  private radix = 1;
+  size = 0;
+  /** The last popped entry's g and state key. */
+  topG = 0;
+  topK = 0;
 
-  get size(): number {
-    return this.heap.length;
+  clear(states: number): void {
+    for (const f of this.touched) this.buckets[f]!.length = 0;
+    this.touched.length = 0;
+    this.size = 0;
+    this.cur = Infinity;
+    this.radix = 2 ** Math.ceil(Math.log2(states + 1));
   }
 
-  push(item: [number, number, number, number]): void {
-    const h = this.heap;
-    h.push(item);
-    let i = h.length - 1;
+  push(f: number, g: number, k: number): void {
+    let heap = this.buckets[f];
+    if (!heap) heap = this.buckets[f] = [];
+    if (heap.length === 0) this.touched.push(f);
+    // Below the cursor only if the heuristic were inconsistent; moving the
+    // cursor down keeps the pop order exact either way.
+    if (f < this.cur) this.cur = f;
+    const v = g * this.radix + k;
+    let i = heap.length;
+    heap.push(v);
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (!less(h[i]!, h[p]!)) break;
-      [h[i], h[p]] = [h[p]!, h[i]!];
+      if (heap[p]! <= v) break;
+      heap[i] = heap[p]!;
       i = p;
     }
+    heap[i] = v;
+    this.size++;
   }
 
-  pop(): [number, number, number, number] | undefined {
-    const h = this.heap;
-    const top = h[0];
-    const last = h.pop();
-    if (h.length && last) {
-      h[0] = last;
+  /** Removes the least entry into topG/topK; the caller checks size first. */
+  pop(): void {
+    let heap = this.buckets[this.cur];
+    while (!heap || heap.length === 0) heap = this.buckets[++this.cur];
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    const n = heap.length;
+    if (n > 0) {
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
-        let m = i;
-        if (l < h.length && less(h[l]!, h[m]!)) m = l;
-        if (l + 1 < h.length && less(h[l + 1]!, h[m]!)) m = l + 1;
-        if (m === i) break;
-        [h[i], h[m]] = [h[m]!, h[i]!];
+        if (l >= n) break;
+        const m = l + 1 < n && heap[l + 1]! < heap[l]! ? l + 1 : l;
+        if (heap[m]! >= last) break;
+        heap[i] = heap[m]!;
         i = m;
       }
+      heap[i] = last;
     }
-    return top;
+    this.size--;
+    this.topG = Math.floor(top / this.radix);
+    this.topK = top - this.topG * this.radix;
   }
-}
-
-function less(a: readonly number[], b: readonly number[]): boolean {
-  for (let i = 0; i < 4; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
-  return false;
 }
 
 interface Net {
@@ -166,16 +186,25 @@ interface Net {
 class Grid {
   readonly blocked: Uint8Array;
   readonly hug: Uint8Array;
-  /** Per cell, the net key owning a pin there; '' for no pin. */
-  readonly pinOwner: string[];
+  /** Per cell, the owner id (see ownerId) of a pin there; 0 for no pin. */
+  readonly pinOwner: Int32Array;
   /** Committed segments per orientation, so a later net prices running
    *  alongside one differently from crossing it. */
   readonly usedH: Uint8Array;
   readonly usedV: Uint8Array;
   /** Which net laid each committed run. A net running along its own trunk is
    *  merging with itself, which is free; only another net's run is overlap. */
-  readonly byH: string[];
-  readonly byV: string[];
+  readonly byH: Int32Array;
+  readonly byV: Int32Array;
+  /** Owner keys as small ints, so the search compares numbers, not strings. */
+  private readonly owners = new Map<string, number>();
+  /** A* scratch, reused across searches: `best` is valid only where `seen`
+   *  holds the current search's stamp, so no full-grid refill per search. */
+  readonly best: Float64Array;
+  readonly from: Int32Array;
+  readonly seen: Uint32Array;
+  stamp = 0;
+  readonly frontier = new Frontier();
 
   constructor(
     readonly step: number,
@@ -188,11 +217,14 @@ class Grid {
     const n = cols * rows;
     this.blocked = new Uint8Array(n);
     this.hug = new Uint8Array(n);
-    this.pinOwner = new Array<string>(n).fill('');
+    this.pinOwner = new Int32Array(n);
     this.usedH = new Uint8Array(n);
     this.usedV = new Uint8Array(n);
-    this.byH = new Array<string>(n).fill('');
-    this.byV = new Array<string>(n).fill('');
+    this.byH = new Int32Array(n);
+    this.byV = new Int32Array(n);
+    this.best = new Float64Array(n * 4);
+    this.from = new Int32Array(n * 4);
+    this.seen = new Uint32Array(n * 4);
 
     // A body blocks its border as well as its interior. Pins sit on the
     // border, so leaving the border walkable would let a route slide along an
@@ -239,19 +271,19 @@ class Grid {
     };
   }
 
-  /** True when a same-orientation run already sits in the next lane over. */
-  crowded(cell: number, horizontal: boolean, along: Uint8Array): boolean {
-    const col = cell % this.cols;
-    const row = (cell / this.cols) | 0;
-    const a = horizontal ? this.idx(col, row - 1) : this.idx(col - 1, row);
-    const b = horizontal ? this.idx(col, row + 1) : this.idx(col + 1, row);
-    return (a >= 0 && along[a] === 1) || (b >= 0 && along[b] === 1);
+  ownerId(key: string): number {
+    let id = this.owners.get(key);
+    if (id === undefined) {
+      id = this.owners.size + 1;
+      this.owners.set(key, id);
+    }
+    return id;
   }
 
   /** Pins are the doors in an otherwise solid body. */
   openPin(i: number, owner: string): void {
     this.blocked[i] = 0;
-    this.pinOwner[i] = owner;
+    this.pinOwner[i] = this.ownerId(owner);
   }
 
   /** Open the run of border cells a pin shares its face with, so a wire can
@@ -280,7 +312,8 @@ class Grid {
       }
   }
 
-  commit(path: readonly number[], owner: string): void {
+  commit(path: readonly number[], ownerKey: string): void {
+    const owner = this.ownerId(ownerKey);
     for (let k = 1; k < path.length; k++) {
       const a = path[k - 1]!;
       const b = path[k]!;
@@ -698,7 +731,8 @@ function mst(grid: Grid, nodes: readonly number[]): { edges: [number, number][];
 /** Terminals plus the Steiner points worth adding, as tree edges in the order
  *  they should be routed (driver first). Iterated 1-Steiner over the Hanan
  *  grid, with every tie broken on cell index so the result is deterministic. */
-function steinerEdges(cells: readonly number[], grid: Grid, owner: string): [number, number][] {
+function steinerEdges(cells: readonly number[], grid: Grid, ownerKey: string): [number, number][] {
+  const owner = grid.ownerId(ownerKey);
   const nodes = [...new Set(cells)];
   let current = mst(grid, nodes);
 
@@ -737,64 +771,84 @@ function search(
   grid: Grid,
   sources: ReadonlySet<number>,
   target: number,
-  owner: string,
+  ownerKey: string,
 ): number[] | undefined {
-  const n = grid.cols * grid.rows;
-  const best = new Float64Array(n * 4).fill(Infinity);
-  const from = new Int32Array(n * 4).fill(-1);
-  const tc = target % grid.cols;
-  const tr = (target / grid.cols) | 0;
+  const owner = grid.ownerId(ownerKey);
+  const { best, from, seen, cols, rows, blocked, pinOwner, hug, usedH, usedV, byH, byV } = grid;
+  const stamp = ++grid.stamp;
+  const known = (k: number): number => (seen[k] === stamp ? best[k]! : Infinity);
+  const tc = target % cols;
+  const tr = (target / cols) | 0;
   const h = (cell: number): number =>
-    (Math.abs((cell % grid.cols) - tc) + Math.abs(((cell / grid.cols) | 0) - tr)) * STEP;
+    (Math.abs((cell % cols) - tc) + Math.abs(((cell / cols) | 0) - tr)) * STEP;
 
-  const frontier = new Frontier();
+  const frontier = grid.frontier;
+  frontier.clear(best.length);
   // Seed each source cell in all four incoming directions at zero, so leaving
   // the tree is never charged a bend the route did not make.
   for (const s of [...sources].sort((a, b) => a - b))
     for (let d = 0; d < 4; d++) {
-      best[s * 4 + d] = 0;
-      frontier.push([h(s), 0, s, d]);
+      const k = s * 4 + d;
+      seen[k] = stamp;
+      best[k] = 0;
+      from[k] = -1;
+      frontier.push(h(s), 0, k);
     }
 
   while (frontier.size) {
-    const [, g, cell, dir] = frontier.pop()!;
-    if (best[cell * 4 + dir]! < g) continue;
+    frontier.pop();
+    const g = frontier.topG;
+    const key = frontier.topK;
+    const cell = key >> 2;
+    const dir = key & 3;
+    if (known(key) < g) continue;
     if (cell === target) {
       const path: number[] = [];
-      for (let k: number = cell * 4 + dir; k >= 0; k = from[k]!) path.push((k / 4) | 0);
+      for (let k: number = key; k >= 0; k = from[k]!) path.push(k >> 2);
       return path.reverse();
     }
-    const col = cell % grid.cols;
-    const row = (cell / grid.cols) | 0;
+    const col = cell % cols;
+    const row = (cell / cols) | 0;
+    const pinHere = pinOwner[cell] !== 0;
     for (let d = 0; d < 4; d++) {
-      const next = grid.idx(col + DX[d]!, row + DY[d]!);
-      if (next < 0 || grid.blocked[next]) continue;
+      const nc = col + DX[d]!;
+      const nr = row + DY[d]!;
+      if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+      const next = nr * cols + nc;
+      if (blocked[next]) continue;
+      const pin = pinOwner[next]!;
       // A route may END at a pin, never pass THROUGH one -- not even its own
       // net's. Passing through makes that pin a branch point, so the fan-out
       // is drawn as a T on a gate's input pin instead of a dot on the trunk.
-      if (next !== target && grid.pinOwner[next]) continue;
+      if (next !== target && pin) continue;
       let cost = STEP;
       // A pin has a facing, so the first move off one is not a corner anybody
       // sees -- charging it would push routes into a dogleg to avoid it.
-      if (d !== dir && !grid.pinOwner[cell]) cost += BEND;
-      if (grid.hug[next]) cost += HUG;
-      const pin = grid.pinOwner[next];
+      if (d !== dir && !pinHere) cost += BEND;
+      if (hug[next]) cost += HUG;
       if (pin && pin !== owner) cost += FOREIGN_PIN;
-      const along = HORIZ[d] ? grid.usedH : grid.usedV;
-      const alongBy = HORIZ[d] ? grid.byH : grid.byV;
-      const acrossBy = HORIZ[d] ? grid.byV : grid.byH;
+      const horizontal = d < 2;
+      const along = horizontal ? usedH : usedV;
       if (along[next]) {
         // Merging with this net's own trunk, not overlapping a stranger's.
-        if (alongBy[next] !== owner) cost += SHARE;
-      } else if (HORIZ[d] ? grid.usedV[next] : grid.usedH[next]) {
-        if (acrossBy[next] !== owner) cost += CROSS;
-      } else if (grid.crowded(next, HORIZ[d]!, along)) cost += CROWD;
+        if ((horizontal ? byH : byV)[next] !== owner) cost += SHARE;
+      } else if ((horizontal ? usedV : usedH)[next]) {
+        if ((horizontal ? byV : byH)[next] !== owner) cost += CROSS;
+      } else if (
+        horizontal
+          ? (nr > 0 && along[next - cols] === 1) || (nr + 1 < rows && along[next + cols] === 1)
+          : (nc > 0 && along[next - 1] === 1) || (nc + 1 < cols && along[next + 1] === 1)
+      ) {
+        // A same-orientation run already sits in the next lane over.
+        cost += CROWD;
+      }
       const ng = g + cost;
       const k = next * 4 + d;
-      if (ng >= best[k]!) continue;
+      if (seen[k] === stamp && ng >= best[k]!) continue;
+      seen[k] = stamp;
       best[k] = ng;
-      from[k] = cell * 4 + dir;
-      frontier.push([ng + h(next), ng, next, d]);
+      from[k] = key;
+      frontier.push(ng + (Math.abs(nc - tc) + Math.abs(nr - tr)) * STEP, ng, k);
     }
   }
   return undefined;

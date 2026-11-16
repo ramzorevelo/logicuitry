@@ -11,6 +11,7 @@ import { getPart } from './partsDb';
 import { getPrimitive } from '../sim/primitives/registry';
 import type { PrimitivePin } from '../sim/primitives/types';
 import { OUTPUT_STAGE_PARAM } from '../model/pinSlots';
+import { OPEN_COLLECTOR_PARAM } from '../sim/primitives/gates';
 
 export interface PackagePin {
   pin: number;
@@ -402,7 +403,9 @@ export function buildPackageChipDef(
             ? { ...STRUCTURAL, enableTiming: entry.part }
             : totemPole
               ? { ...STRUCTURAL, [OUTPUT_STAGE_PARAM]: p.name }
-              : STRUCTURAL,
+              : OPEN_COLLECTOR_PARTS.has(entry.part)
+                ? { ...STRUCTURAL, [OPEN_COLLECTOR_PARAM]: true }
+                : STRUCTURAL,
       });
       nextWire(pinEnd(gateId(gate), p.fn), pinEnd(bufId(p.pin), 'a'));
       nextWire(pinEnd(chipEnable, 'y'), pinEnd(bufId(p.pin), 'en'));

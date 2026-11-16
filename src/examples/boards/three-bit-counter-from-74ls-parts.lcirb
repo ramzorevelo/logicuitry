@@ -1,0 +1,382 @@
+{
+  "format": "lcir.board",
+  "formatVersion": 15,
+  "id": "three-bit-counter-from-74ls-parts",
+  "name": "Three-bit counter from 74LS parts",
+  "components": [
+    {
+      "id": "clk",
+      "kind": "clock",
+      "label": "CLK",
+      "params": {
+        "periodPs": 400000
+      },
+      "pos": {
+        "x": -40,
+        "y": 448
+      }
+    },
+    {
+      "id": "clr",
+      "kind": "toggle",
+      "label": "/CLR",
+      "params": {
+        "initial": 0
+      },
+      "pos": {
+        "x": -16,
+        "y": 512
+      }
+    },
+    {
+      "id": "vccs",
+      "kind": "vcc",
+      "pos": {
+        "x": -16,
+        "y": 560
+      }
+    },
+    {
+      "id": "nvcc",
+      "kind": "netlabel",
+      "label": "VCC",
+      "pos": {
+        "x": 32,
+        "y": 600
+      }
+    },
+    {
+      "id": "gnds",
+      "kind": "gnd",
+      "pos": {
+        "x": 120,
+        "y": 584
+      }
+    },
+    {
+      "id": "ngnd",
+      "kind": "netlabel",
+      "label": "GND",
+      "pos": {
+        "x": 168,
+        "y": 568
+      }
+    },
+    {
+      "id": "lq2",
+      "kind": "led",
+      "label": "Q2",
+      "pos": {
+        "x": 904,
+        "y": 176
+      }
+    },
+    {
+      "id": "lq1",
+      "kind": "led",
+      "label": "Q1",
+      "pos": {
+        "x": 904,
+        "y": 232
+      }
+    },
+    {
+      "id": "lq0",
+      "kind": "led",
+      "label": "Q0",
+      "pos": {
+        "x": 904,
+        "y": 288
+      }
+    },
+    {
+      "id": "n1",
+      "kind": "netlabel",
+      "label": "CLK",
+      "pos": {
+        "x": 40,
+        "y": 456
+      }
+    },
+    {
+      "id": "n2",
+      "kind": "netlabel",
+      "label": "/CLR",
+      "pos": {
+        "x": 40,
+        "y": 520
+      }
+    },
+    {
+      "id": "n24",
+      "kind": "netlabel",
+      "label": "Q2",
+      "pos": {
+        "x": 848,
+        "y": 192
+      },
+      "mirror": true
+    },
+    {
+      "id": "n25",
+      "kind": "netlabel",
+      "label": "Q1",
+      "pos": {
+        "x": 848,
+        "y": 248
+      },
+      "mirror": true
+    },
+    {
+      "id": "n26",
+      "kind": "netlabel",
+      "label": "Q0",
+      "pos": {
+        "x": 848,
+        "y": 304
+      },
+      "mirror": true
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "a": {
+        "kind": "pin",
+        "component": "clk",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n1",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "a": {
+        "kind": "pin",
+        "component": "clr",
+        "pin": "y"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n2",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w17",
+      "a": {
+        "kind": "pin",
+        "component": "vccs",
+        "pin": "p"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "nvcc",
+        "pin": "a"
+      },
+      "points": [
+        {
+          "x": 0,
+          "y": 608
+        }
+      ]
+    },
+    {
+      "id": "w16",
+      "a": {
+        "kind": "pin",
+        "component": "ngnd",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "gnds",
+        "pin": "p"
+      },
+      "points": [
+        {
+          "x": 136,
+          "y": 576
+        }
+      ]
+    },
+    {
+      "id": "w38",
+      "a": {
+        "kind": "pin",
+        "component": "lq2",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n24",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w39",
+      "a": {
+        "kind": "pin",
+        "component": "lq1",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n25",
+        "pin": "a"
+      },
+      "points": []
+    },
+    {
+      "id": "w40",
+      "a": {
+        "kind": "pin",
+        "component": "lq0",
+        "pin": "a"
+      },
+      "b": {
+        "kind": "pin",
+        "component": "n26",
+        "pin": "a"
+      },
+      "points": []
+    }
+  ],
+  "junctions": [],
+  "probes": [],
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "timing": {
+    "mode": "ideal",
+    "datasheet": "max",
+    "vendor": "fairchild"
+  },
+  "runSpeed": 25000,
+  "challenge": {
+    "title": "Three-bit counter from 74LS parts",
+    "brief": "Count 0 to 7 and wrap, one count per rising CLK edge once /CLR goes high; /CLR low holds the count at 0. Q2 Q1 Q0 show the count, Q0 the low bit. Use two 74LS74s and gates from 74LS00, 74LS04, 74LS08, 74LS32 or 74LS86 packages, four ICs at most. Power every chip.",
+    "allowed": [
+      "74LS74",
+      "74LS00",
+      "74LS04",
+      "74LS08",
+      "74LS32",
+      "74LS86",
+      "clock"
+    ],
+    "ics": {
+      "max": 4
+    },
+    "required": [
+      {
+        "anyOf": [
+          "74LS74"
+        ],
+        "count": 2
+      }
+    ],
+    "tests": {
+      "clock": "CLK",
+      "steps": [
+        {
+          "set": {
+            "/CLR": 0
+          },
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 0,
+            "Q0": 0
+          },
+          "note": "held clear"
+        },
+        {
+          "set": {
+            "/CLR": 1
+          },
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 0,
+            "Q0": 1
+          },
+          "note": "released"
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 1,
+            "Q0": 0
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 1,
+            "Q0": 1
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 1,
+            "Q1": 0,
+            "Q0": 0
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 1,
+            "Q1": 0,
+            "Q0": 1
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 1,
+            "Q1": 1,
+            "Q0": 0
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 1,
+            "Q1": 1,
+            "Q0": 1
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 0,
+            "Q0": 0
+          }
+        },
+        {
+          "ticks": 1,
+          "expect": {
+            "Q2": 0,
+            "Q1": 0,
+            "Q0": 1
+          }
+        }
+      ]
+    },
+    "fingerprint": "1bbacf661a8065"
+  }
+}

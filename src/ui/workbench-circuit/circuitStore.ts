@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type {
   Board,
+  BoardSequence,
+  Challenge,
   ChipDef,
   ChipInstance,
   ChipLibrary,
@@ -13,6 +15,7 @@ import type {
   ParamValue,
   PinDir,
   Point,
+  TimingMode,
   TimingSetting,
   Wire,
 } from '../../core/model/types';
@@ -33,11 +36,24 @@ import {
   type RamState,
 } from '../../core/sim/primitives/ram';
 import {
+  clockShape,
+  ledLitValue,
+  nextClockFall,
   settledState,
+  spdtPosition,
   type ButtonState,
   type SpdtState,
   type Throw,
 } from '../../core/sim/primitives/stimulus';
+import type { Params } from '../../core/sim/primitives/types';
+import {
+  addRow,
+  columnWidth,
+  emptySequence,
+  maskToWidth,
+  pruneSequence,
+  rowPasses,
+} from '../../core/model/sequence';
 import { printPreload } from '../../core/sim/primitives/ramPreload';
 import { listRams, type RamEntry } from '../../core/model/ramView';
 import {
@@ -48,6 +64,14 @@ import {
 import { Simulator } from '../../core/sim/kernel';
 import { loopNetNames, loopOf } from './oscillation';
 import {
+  gateOverlay as overlayOfRun,
+  gateStatusText,
+  nextGateRun,
+  pressGateStep,
+  type GateOverlay,
+  type GateRun,
+} from './gateStep';
+import {
   inheritedColor,
   nextGroupColor,
   recoloredWire,
@@ -57,7 +81,14 @@ import { builtinChipLibrary, isBuiltinChipDef, isBuiltinChipId } from '../../cor
 import { idealDelay, datasheetDelay } from '../../core/sim/delay';
 import * as bv from '../../core/value/busValue';
 import { busSignalState, type SignalState } from '../../render/theme';
-import { History, applyToCircuit, diffCircuits, type ApplyFn } from './history';
+import {
+  History,
+  applyToCircuit,
+  diffCircuits,
+  type ApplyFn,
+  type ChallengeHolder,
+  type SequenceHolder,
+} from './history';
 import { paramLiveness } from './paramLiveness';
 import type { WireEnd } from '../../core/model/types';
 import { canFloat, isOutputSlot, mayShareNet } from '../../core/model/pinSlots';
@@ -71,7 +102,7 @@ import {
   type ResolveWireEnd,
   type WireHit,
 } from './junctions';
-import { autoRoute, type RoutableComponent } from './autoRoute';
+import { autoRoute, type AutoRouteResult, type RoutableComponent } from './autoRoute';
 import { splicePins } from './spliceOnWire';
 import { wireWidth } from './pinTargets';
 import {
@@ -136,6 +167,18 @@ export type { ResolveWireEnd };
  *  conflict) -- distinct from 'miss' so the caller can leave the pending wire
  *  untouched instead of planting a bend on top of the rejected target. */
 export type WireAttachResult = 'connected' | 'rejected' | 'miss';
+
+/** Identity of the active circuit's arrays (every edit replaces them), plus
+ *  power, since landing a tidy powers the board off, and the chip library,
+ *  whose defs place the pins the routes were drawn to. */
+export interface TidyBasis {
+  tabId: string;
+  powered: boolean;
+  chipLib: ChipLibrary;
+  components: readonly Component[];
+  wires: readonly Wire[];
+  junctions: readonly Junction[];
+}
 
 export type Tool =
   | { kind: 'select' }
@@ -298,7 +341,7 @@ const snapPoint = (p: Point, g: number): Point => ({
 export function starterBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 12,
+    formatVersion: 15,
     id: 'scratch',
     name: 'Untitled board',
     components: [
@@ -367,7 +410,6 @@ interface CircuitState {
   /** Wires touching the component a width edit made mismatched; warn-colored
    *  in the editor, cleared on the next successful edit. */
   mismatchWires: ReadonlySet<string>;
-  changedPrims: Set<string>; // component paths changed by the last delta step
   timing: TimingSetting;
 
   // --- Bubble-push mode (M5 fold-in). None of these fields bump `rev`: the
@@ -383,16 +425,16 @@ interface CircuitState {
    *  edit (wire commit or a rename that touches several output nets at
    *  once, e.g. naming a decoder); the dialog picks a radio choice per row
    *  and commits every row at once via Apply. Esc/click-outside instead
-   *  undoes the whole edit that raised the conflict (the rename itself
-   *  reverts, not just the label choice). Analyze prefers the pin side
-   *  until resolved. */
+   *  reverts what raised the conflict: the wire, or the rename alone (a
+   *  param overlay's other edits stay). Analyze prefers the pin side until
+   *  resolved. */
   labelConflict: LabelConflictRow[] | null;
   /** Apply: `choices[i]` is the chosen label for `labelConflict[i]` (written
    *  to every component on that row's net) or `null` to keep both -- every
    *  row commits in ONE edit/undo step. Clears the field either way. */
   applyLabelConflicts: (choices: (string | null)[]) => void;
-  /** Esc / click-outside: undo the edit that raised the conflict (the
-   *  attempted rename itself, not just the label choice) and close. */
+  /** Esc / click-outside: undo the wire or rename that raised the conflict,
+   *  keeping a param overlay's other edits, and close. */
   cancelLabelConflict: () => void;
 
   /** Id of a def tab whose close was deferred because it has uncommitted
@@ -513,6 +555,13 @@ interface CircuitState {
     grid: number;
     only?: ReadonlySet<string>;
   }) => void;
+  /** The circuit a background Tidy wiring routes from, kept to tell whether
+   *  its result still fits when it lands. */
+  tidyBasis: () => TidyBasis;
+  /** Commits a routed result as Tidy wiring's one undo step, unless the
+   *  active tab or its circuit changed since `basis`: routes drawn for an
+   *  older board would undo the user's newer edit. */
+  applyTidy: (basis: TidyBasis, result: AutoRouteResult) => 'applied' | 'stale' | 'unchanged';
   /** `resolveEnd`, when given, stretches every wire with an end on a moved
    *  component/junction so its stored bends follow (KiCad drag-stretch); the
    *  live pointer-drag preview needs it too, so it's read off the *current*
@@ -654,14 +703,35 @@ interface CircuitState {
   undo: () => void;
   redo: () => void;
   setTiming: (t: Partial<TimingSetting>) => void;
+  /** A lesson's timing switch: the same restart as setTiming, but the board
+   *  keeps its saved mode, so nothing is dirtied or saved. */
+  setSessionTiming: (mode: TimingMode) => void;
+  /** Where a lesson replay starts: the board as it is, unpowered, with no
+   *  switch or RAM memory carried in. Never touches `board` or history. */
+  resetForLesson: () => void;
+  /** Parts the open lesson step points at. Session-only, and it never bumps
+   *  `rev`: the canvas redraw effect lists it. */
+  lessonHighlight: ReadonlySet<string>;
+  setLessonHighlight: (ids: Iterable<string>) => void;
+  /** Bumped by every loadBoard, so a session over one board can tell it was replaced. */
+  boardLoads: number;
   /** Sim ps per wall second while running. Saved with the board, so it
    *  dirties the document, but pacing alone never powers the sim off. */
   setRunSpeed: (psPerSecond: number) => void;
   power: () => void;
-  step: () => void;
-  /** Whether step() can still move time. Read during render off `rev`, not a
+  /** One gate delay while paused; see pressGateStep. */
+  gateStep: () => void;
+  /** Whether gateStep() can still move time. Read during render off `rev`, not a
    *  stored field: it is a question for the kernel, not editor state. */
   canStep: () => boolean;
+  /** Runs a paused sim on until nothing is pending, counting the gate delays it took. */
+  settle: () => void;
+  /** Whether settle() has anything to do: something is pending. */
+  canSettle: () => boolean;
+  /** The paused sim's status line, null while unpowered or running. */
+  gateStatus: (prefix?: string) => string | null;
+  /** What the last gate step draws, while it is still the sim's latest move. */
+  gateOverlay: (prefix?: string) => GateOverlay | undefined;
   toggleRun: () => void;
   pump: (ps: number) => void;
   toggleInput: (componentId: string, bit?: number, prefix?: string) => void;
@@ -679,7 +749,6 @@ interface CircuitState {
   /** Raw per-bit value (v/x/z), for glyphs that render more than an
    *  aggregate state (e.g. the DIP-bank switch). */
   pinRawValue: (componentId: string, pinName: string, prefix?: string) => bv.BusValue | undefined;
-  changedComponentIds: (prefix?: string) => Set<string>;
   simTimePs: () => number | null;
 
   // --- Waveform panel / scrub-replay (M6). `replayTimePs`/`hoverTrackPath`
@@ -690,6 +759,20 @@ interface CircuitState {
    *  the grid has no history to rewind. */
   dockTab: DockTab;
   setDockTab: (tab: DockTab) => void;
+
+  // --- Input sequence.
+  /** Row cursor and per-row results of the live sim; null while unpowered. */
+  sequenceRun: () => SequenceRunView | null;
+  /** Sets every input column to that row's values; false when refused. */
+  applySequenceRow: (index: number) => boolean;
+  /** The row after or before the cursor. */
+  stepSequence: (delta: 1 | -1) => boolean;
+  /** One undoable edit of the board's sequence; undefined removes it. */
+  editSequence: (label: string, fn: (seq: BoardSequence) => BoardSequence | undefined) => void;
+  /** Writes or, with undefined, removes the board's challenge as one undo step. */
+  setChallenge: (label: string, next: Challenge | undefined) => void;
+  /** Appends a row of the inputs' live values (powered) or saved initial ones. */
+  captureSequenceRow: () => void;
 
   // --- Memory panel.
   /** The board's RAMs, from the live compile while powered; memoized on the
@@ -753,7 +836,8 @@ interface CircuitState {
    *  pre-filtered by the caller (decision 2's "silently leave the rest
    *  unchanged"), so a rejection there never surfaces. A width-affecting key
    *  in any spec re-validates the board once, same as the single-component
-   *  path. */
+   *  path. `reanchor` maps an edited component to a new pos, as for
+   *  convertBubble: the caller holds the glyph metrics. */
   setComponentParamsBatch: (
     specs: {
       id: string;
@@ -761,6 +845,7 @@ interface CircuitState {
       label?: string;
       kind?: ComponentKind;
     }[],
+    reanchor?: (before: Component, after: Component) => { x: number; y: number } | undefined,
   ) => boolean;
 
   // --- STA overlay. View-state only: no board mutation, no undo entry;
@@ -809,6 +894,40 @@ const historyFor = (id: string): History => {
   return h;
 };
 let sim: SimState | null = null;
+
+/** A run of gate steps on one sim, current only while nothing else has moved it since. */
+interface GateRunRecord extends GateRun {
+  owner: SimState;
+  traceLength: number;
+}
+let gateRun: GateRunRecord | null = null;
+let gateOverlayCache: {
+  run: GateRunRecord;
+  circuit: Circuit;
+  prefix: string;
+  overlay: GateOverlay;
+} | null = null;
+
+/** Most presses one Settle takes before a loop that never settles goes to the kernel's own budget. */
+const SETTLE_PRESS_LIMIT = 1000;
+
+/** A sequence's progress on one sim; any other sim reads as a fresh start. */
+interface SequenceRun {
+  owner: SimState;
+  cursor: number;
+  results: (boolean | null)[];
+  /** A row applied while running, compared just before the next one lands. */
+  pendingCompare: number | null;
+  /** The clock fall already acted on; a fall at or before it never fires again. */
+  handledFallPs: number;
+}
+let sequenceRun: SequenceRun | null = null;
+
+export interface SequenceRunView {
+  cursor: number;
+  results: readonly (boolean | null)[];
+  pending: number | null;
+}
 // Replay index over the trace at scrub start; dropped when replay exits (any
 // sim-advancing action) so it can never serve stale values.
 let replayIdx: ReplayIndex | null = null;
@@ -867,7 +986,7 @@ function shadowNotice(ids: readonly string[]): { error?: string } {
   return { error: `chips: your ${ids.join(', ')} replaces the built-in part of the same name` };
 }
 
-export type DockTab = 'waves' | 'memory' | 'checks';
+export type DockTab = 'waves' | 'memory' | 'checks' | 'sequence' | 'challenge';
 
 export interface LastRun {
   board: Board;
@@ -900,8 +1019,6 @@ export function staleContentsNotice(keys: readonly StaleContentsKey[]): string {
   ];
   return `contents: ${parts.filter(Boolean).join('; ')}; the saved memory is kept`;
 }
-
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function omitPos(v: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...v };
@@ -957,7 +1074,8 @@ export type SimEffect = 'none' | 'live' | 'topology';
 const GEOMETRY_KEYS = new Set(['pos', 'rot', 'mirror', 'nameOffset']);
 
 export function simEffectOfItem(item: import('./history').PickedItem): SimEffect {
-  if (item.kind === 'checks') return 'none';
+  if (item.kind === 'checks' || item.kind === 'sequence' || item.kind === 'challenge')
+    return 'none';
   if (isPureMoveItem(item)) return 'none';
   if (item.kind === 'group' && item.before && item.after) {
     // The name prefixes compiled paths; colour and tab are drawing only.
@@ -1009,6 +1127,9 @@ function isPureMoveItem(item: import('./history').PickedItem): boolean {
  *  can restore them when the pref asks. Deliberately outside the store: it is
  *  not board content, nothing should undo it, and no file should carry it. */
 const heldSwitchState = new Map<string, unknown>();
+/** A lesson's timing restart keeps the switches whatever the pref says: a step
+ *  only changes what it names. Consumed by the next power-on. */
+let restoreSwitchesOnce = false;
 const HELD_KINDS = new Set(['toggle', 'button', 'spdt']);
 
 /** RAM cells a powered edit dropped the sim on, by `componentId`, restored at
@@ -1051,6 +1172,172 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const chipLib = new Map(get().chipLib);
     chipLib.set(tab.defId, { ...def, hiddenChecks: keys });
     set((s) => ({ chipLib, rev: s.rev + 1 }));
+  };
+
+  const boardSequence = (): BoardSequence | undefined =>
+    activeTab().kind === 'board' ? get().board.sequence : undefined;
+
+  const runOfSim = (): SequenceRun | null => {
+    if (!sim) return null;
+    if (sequenceRun?.owner !== sim)
+      sequenceRun = {
+        owner: sim,
+        cursor: -1,
+        results: [],
+        pendingCompare: null,
+        handledFallPs: -1,
+      };
+    return sequenceRun;
+  };
+
+  const primOf = (componentId: string): number | undefined =>
+    sim?.compiled.componentToPrimitive.get(`main/${componentId}`);
+
+  // A lane-expanded LED or probe has no single `a` pin; its lanes read LSB first.
+  const readExpectColumn = (comp: Component): bv.BusValue | undefined => {
+    if (!sim || !hasPrimitive(comp.kind)) return undefined;
+    const pins = getPrimitive(comp.kind).pins((comp.params ?? {}) as never);
+    const parts: { value: bv.BusValue; width: number }[] = [];
+    for (const pin of [...pins].reverse()) {
+      const net = pinNet(sim.compiled, comp, pin.name);
+      if (net === undefined) return undefined;
+      parts.push({ value: sim.sim.netValue(net), width: pin.width });
+    }
+    const value = parts.length === 1 ? parts[0]!.value : bv.concat(parts);
+    if (comp.kind !== 'led') return value;
+    const width = parts.reduce((sum, p) => sum + p.width, 0);
+    return ledLitValue(value, width, (comp.params ?? {}) as Params);
+  };
+
+  const compareRow = (run: SequenceRun, seq: BoardSequence, index: number) => {
+    const row = seq.rows[index];
+    if (!row) return;
+    if (!row.expect || row.expect.every((cell) => cell === null)) {
+      run.results[index] = null;
+      return;
+    }
+    const byId = new Map(get().board.components.map((c) => [c.id, c]));
+    const comps = seq.expect.map((id) => byId.get(id));
+    const actual = comps.map((c) => (c ? readExpectColumn(c) : undefined));
+    run.results[index] = rowPasses(row, actual, comps.map(columnWidth));
+  };
+
+  // Same state shapes a click writes; a button or SPDT already in place is left
+  // alone so a repeat does not restart its bounce.
+  const writeRowInputs = (seq: BoardSequence, index: number) => {
+    const live = sim;
+    const row = seq.rows[index];
+    if (!live || !row) return;
+    const byId = new Map(get().board.components.map((c) => [c.id, c]));
+    seq.inputs.forEach((id, col) => {
+      const comp = byId.get(id);
+      const pi = primOf(id);
+      if (!comp || pi === undefined) return;
+      const value = row.set[col] ?? 0;
+      if (comp.kind === 'toggle') {
+        live.sim.setPrimitiveStateAt(pi, { value: maskToWidth(value, columnWidth(comp)) });
+      } else if (comp.kind === 'button') {
+        const on = (value & 1) === 1;
+        if ((live.sim.primitiveStateAt(pi) as ButtonState).on !== on)
+          live.sim.setPrimitiveStateAt(pi, { on } satisfies ButtonState);
+      } else if (comp.kind === 'spdt') {
+        const position: Throw = (value & 1) === 1 ? 'b' : 'a';
+        if ((live.sim.primitiveStateAt(pi) as SpdtState).position !== position)
+          live.sim.setPrimitiveStateAt(pi, { position } satisfies SpdtState);
+      }
+    });
+  };
+
+  /**
+   * Applies a row on the live sim; the caller bumps `rev`. Without `settleNow`
+   * the board settles under the run or later steps, so the comparison waits for
+   * the next row, the next fall or Run stopping.
+   */
+  const applyRowNow = (index: number, settleNow = !get().running): boolean => {
+    const seq = boardSequence();
+    const run = runOfSim();
+    const live = sim;
+    if (!seq || !run || !live || index < 0 || index >= seq.rows.length) return false;
+    if (run.pendingCompare !== null) compareRow(run, seq, run.pendingCompare);
+    run.pendingCompare = null;
+    writeRowInputs(seq, index);
+    replayIdx = null;
+    run.cursor = index;
+    if (!settleNow) run.pendingCompare = index;
+    else {
+      set({ oscillation: loopOf(live.compiled, live.sim.settle()) });
+      compareRow(run, seq, index);
+    }
+    return true;
+  };
+
+  const resolvePendingCompare = () => {
+    const run = sim && sequenceRun?.owner === sim ? sequenceRun : null;
+    const seq = boardSequence();
+    if (!run || !seq || run.pendingCompare === null) return;
+    compareRow(run, seq, run.pendingCompare);
+    run.pendingCompare = null;
+  };
+
+  // Past the last row a fall still closes that row's comparison.
+  const onSequenceFall = (run: SequenceRun, seq: BoardSequence, fall: number) => {
+    run.handledFallPs = fall;
+    if (run.cursor + 1 < seq.rows.length) applyRowNow(run.cursor + 1, false);
+    else resolvePendingCompare();
+  };
+
+  const sequenceClock = (): ReturnType<typeof clockShape> | null => {
+    const advance = boardSequence()?.advance;
+    if (advance?.mode !== 'clock') return null;
+    const clock = get().board.components.find((c) => c.id === advance.clock);
+    if (clock?.kind !== 'clock') return null;
+    try {
+      return clockShape((clock.params ?? {}) as never);
+    } catch {
+      return null;
+    }
+  };
+
+  // Runs to `target`, stopping at each fall of the sequence clock to apply the
+  // next row there. A fall the budget did not reach carries to the next frame.
+  const runSplitAtSequenceFalls = (target: number) => {
+    const live = sim;
+    if (!live) return;
+    const shape = sequenceClock();
+    const run = shape ? runOfSim() : null;
+    const seq = boardSequence();
+    if (!shape || !run || !seq) {
+      live.sim.runUntil(target);
+      return;
+    }
+    for (;;) {
+      const fall = nextClockFall(shape, Math.max(run.handledFallPs, live.sim.time - 1));
+      if (fall > target) break;
+      live.sim.runUntil(fall);
+      if (live.sim.isBehind(fall)) return;
+      onSequenceFall(run, seq, fall);
+    }
+    live.sim.runUntil(target);
+  };
+
+  /** The gate-step run, while the sim's latest move was one of its presses. */
+  const currentGateRun = (): GateRunRecord | null => {
+    const run = gateRun;
+    if (!run || !sim || run.owner !== sim || get().running) return null;
+    return run.timePs === sim.sim.time && run.traceLength === sim.sim.traceLength ? run : null;
+  };
+
+  // Only falls inside this step count: one passed while clock mode was off is history.
+  const applyFallsInStep = (from: number, to: number) => {
+    const shape = sequenceClock();
+    const run = shape ? runOfSim() : null;
+    const seq = boardSequence();
+    if (!shape || !run || !seq) return;
+    let fall = nextClockFall(shape, Math.max(run.handledFallPs, from - 1));
+    while (fall <= to) {
+      onSequenceFall(run, seq, fall);
+      fall = nextClockFall(shape, fall);
+    }
   };
 
   const activeCircuit = (): Circuit => {
@@ -1186,6 +1473,30 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     }
   };
 
+  /** `boardTiming` null leaves the board alone: a lesson's timing is session state. */
+  const restartTiming = (timing: TimingSetting, boardTiming: TimingSetting | null) => {
+    replayIdx = null;
+    if (get().powered) captureSwitchState();
+    set((s) => ({
+      timing,
+      ...(boardTiming ? { board: { ...s.board, timing: boardTiming } } : {}),
+      powered: false,
+      running: false,
+      replayTimePs: null,
+      rev: s.rev + 1,
+    }));
+    holdRamCells();
+    sim = null;
+    refreshSta(timing);
+  };
+
+  // An open report would go on showing the old column's or vendor's figures.
+  const refreshSta = (timing: TimingSetting) => {
+    if (!get().staReport) return;
+    if (timing.mode === 'datasheet') get().runSta();
+    else get().clearSta();
+  };
+
   // Bubble params lower to literal kinds and spliced NOTs before compile; the
   // defs are lowered too so a packaged def carrying bubble params compiles.
   const compileBoard = (): CompiledCircuit => {
@@ -1233,6 +1544,9 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const draft = cloneCircuit(activeCircuit());
     fn(draft);
     collapseJunctions(draft, () => genId('w'), resolveEnd);
+    // Deleting a switch drops its column in the same undo step.
+    const held = draft as SequenceHolder;
+    if (held.sequence) held.sequence = pruneSequence(held.sequence, draft.components);
     const cmd = diffCircuits(before, draft, label);
     if (cmd.items.length === 0) return;
     if (tab.kind !== 'board') {
@@ -2006,7 +2320,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     if (!comp) return null;
     const newKind = kind ?? comp.kind;
     const trimmedLabel = label?.trim();
-    if (label !== undefined && trimmedLabel && trimmedLabel !== comp.label) {
+    // The overlay always sends the current name: re-syncing an unchanged one would re-raise a
+    // conflict left on "keep both" and name unnamed partners, though nothing was renamed.
+    const renaming = !!trimmedLabel && trimmedLabel !== comp.label;
+    if (renaming) {
       const netIds = ownNetTerminalIds(circuit, get().chipLib, id);
       if (labelUsedElsewhere(circuit, trimmedLabel, netIds, comp.group)) return null;
     }
@@ -2096,12 +2413,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         )
         .map((w) => ({ ...w, a: retarget(w.a), b: retarget(w.b) }))
         .concat(addWires);
-      if (trimmedLabel) {
-        const dataPin = dataPinOf(newKind);
-        if (dataPin) return syncLabels(d, [{ component: id, pin: dataPin }]);
-        return syncOutputLabels(d, id, trimmedLabel);
-      }
-      return null;
+      if (!renaming) return null;
+      const dataPin = dataPinOf(newKind);
+      if (dataPin) return syncLabels(d, [{ component: id, pin: dataPin }]);
+      return syncOutputLabels(d, id, trimmedLabel);
     };
   };
 
@@ -2123,8 +2438,16 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       set({ error: driverError });
       return false;
     }
-    if (conflict) set({ labelConflict: conflict });
+    if (conflict) raiseRenameConflict(conflict, () => get().setComponentParams(id, params));
     return true;
+  };
+
+  // A rename conflict's cancel reverts the name only: the undo takes the whole edit, then this
+  // replays its params. Keyed by the rows, so a later wire conflict never runs a stale one.
+  let renameConflictReplay: { rows: LabelConflictRow[]; replay: () => void } | null = null;
+  const raiseRenameConflict = (rows: LabelConflictRow[], replay: () => void) => {
+    renameConflictReplay = { rows, replay };
+    set({ labelConflict: rows });
   };
 
   // Unticking output enable makes a shared q plain, which may leave two plain
@@ -2280,7 +2603,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const circuit = activeCircuit();
     const comp = circuit.components.find((c) => c.id === id);
     if (!comp) return false;
-    if (trimmed && trimmed !== comp.label && comp.kind !== 'netlabel') {
+    const renaming = !!trimmed && trimmed !== comp.label;
+    if (renaming && comp.kind !== 'netlabel') {
       const netIds = ownNetTerminalIds(circuit, get().chipLib, id);
       if (labelUsedElsewhere(circuit, trimmed, netIds, comp.group)) return false;
     }
@@ -2311,8 +2635,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         });
       }
       const dataPin = dataPinOf(comp.kind);
-      if (trimmed && dataPin) conflict = syncLabels(d, [{ component: id, pin: dataPin }]);
-      else if (trimmed) conflict = syncOutputLabels(d, id, trimmed);
+      if (renaming && dataPin) conflict = syncLabels(d, [{ component: id, pin: dataPin }]);
+      else if (renaming) conflict = syncOutputLabels(d, id, trimmed);
     });
     if (conflict) set({ labelConflict: conflict });
     return true;
@@ -2439,7 +2763,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     oscillation: null,
     error: null,
     mismatchWires: new Set(),
-    changedPrims: new Set(),
     timing: { mode: getPrefs().timingModel, datasheet: 'typ', vendor: 'ti' },
     waveformOpen: false,
     dockTab: 'waves',
@@ -2447,6 +2770,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     replayTimePs: null,
     hoverTrackPath: null,
     staReport: null,
+    lessonHighlight: new Set(),
+    boardLoads: 0,
     mode: 'edit',
     labelConflict: null,
     pendingTabClose: null,
@@ -2526,9 +2851,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     loadBoard: (loaded) => {
-      const board = loaded.hiddenChecks
+      const checked = loaded.hiddenChecks
         ? { ...loaded, hiddenChecks: pruneHiddenChecksOf(loaded, get().chipLib) }
         : loaded;
+      const board = checked.sequence
+        ? { ...checked, sequence: pruneSequence(checked.sequence, checked.components) }
+        : checked;
       seedNextId(board);
       historyByTab.clear();
       sim = null;
@@ -2544,13 +2872,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         selection: new Set<string>(),
         staleInstances: new Set<string>(),
         mismatchWires: new Set<string>(),
-        changedPrims: new Set<string>(),
         error: null,
         powered: false,
         running: false,
         staReport: null,
         replayTimePs: null,
         labelConflict: null,
+        lessonHighlight: new Set<string>(),
+        boardLoads: st.boardLoads + 1,
         rev: st.rev + 1,
       }));
       shownStaleContents = '';
@@ -2603,12 +2932,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     // The edit that raised the conflict already committed (it's the most
-    // recent history entry) -- undoing it reverts the attempted rename
-    // itself, not just the unresolved label choice.
+    // recent history entry): undoing it reverts the wire or rename itself. A cancelled edit is
+    // not redoable: redo would bring it back past the dialog it was cancelled from.
     cancelLabelConflict: () => {
-      if (!get().labelConflict) return;
+      const rows = get().labelConflict;
+      if (!rows) return;
+      const replay = renameConflictReplay?.rows === rows ? renameConflictReplay.replay : null;
+      renameConflictReplay = null;
       set({ labelConflict: null });
       get().undo();
+      historyFor(activeTab().id).discardRedo();
+      replay?.();
     },
 
     place: (kind, pos, grid, params, pose, defId, pinsOf, group) => {
@@ -2886,18 +3220,48 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     tidyWiring: ({ components, grid, only }) => {
-      edit('tidy', (d) => {
-        const r = autoRoute({
-          components,
-          wires: d.wires,
-          junctions: d.junctions,
-          grid,
-          ...(only && only.size > 0 ? { only } : {}),
-        });
-        if (r.routed === 0) return;
-        d.wires = r.wires;
-        d.junctions = r.junctions;
+      const basis = get().tidyBasis();
+      // Cloned: autoRoute passes untouched wires through and the junction
+      // collapse after it mutates wire ends in place.
+      const r = autoRoute({
+        components,
+        wires: structuredClone(basis.wires),
+        junctions: structuredClone(basis.junctions),
+        grid,
+        ...(only && only.size > 0 ? { only } : {}),
       });
+      get().applyTidy(basis, r);
+    },
+
+    tidyBasis: () => {
+      const c = activeCircuit();
+      return {
+        tabId: get().activeTabId,
+        powered: get().powered,
+        chipLib: get().chipLib,
+        components: c.components,
+        wires: c.wires,
+        junctions: c.junctions,
+      };
+    },
+
+    applyTidy: (basis, result) => {
+      const c = activeCircuit();
+      if (
+        get().activeTabId !== basis.tabId ||
+        get().powered !== basis.powered ||
+        get().chipLib !== basis.chipLib ||
+        c.components !== basis.components ||
+        c.wires !== basis.wires ||
+        c.junctions !== basis.junctions
+      )
+        return 'stale';
+      if (result.routed === 0) return 'unchanged';
+      edit('tidy', (d) => {
+        d.wires = result.wires;
+        d.junctions = result.junctions;
+      });
+      return 'applied';
     },
 
     mirrorSelection: (ids) => {
@@ -3668,25 +4032,36 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       dropStaleSelection();
     },
 
-    setTiming: (t) => {
-      const timing = { ...get().timing, ...t };
+    // Merged separately: a lesson's session mode must not leak into the board
+    // when the instructor changes the column or vendor mid-lesson.
+    setTiming: (t) => restartTiming({ ...get().timing, ...t }, { ...get().board.timing, ...t }),
+
+    setSessionTiming: (mode) => {
+      restoreSwitchesOnce = true;
+      restartTiming({ ...get().timing, mode }, null);
+    },
+
+    resetForLesson: () => {
       replayIdx = null;
+      sim = null;
+      sequenceRun = null;
+      heldSwitchState.clear();
+      heldRamCells.clear();
+      restoreSwitchesOnce = false;
       set((s) => ({
-        timing,
-        board: { ...s.board, timing },
+        timing: s.board.timing,
         powered: false,
         running: false,
+        runBehind: false,
+        oscillation: null,
+        lastRun: null,
         replayTimePs: null,
         rev: s.rev + 1,
       }));
-      holdRamCells();
-      sim = null;
-      // An open report would go on showing the old column's or vendor's figures.
-      if (get().staReport) {
-        if (timing.mode === 'datasheet') get().runSta();
-        else get().clearSta();
-      }
+      refreshSta(get().timing);
     },
+
+    setLessonHighlight: (ids) => set({ lessonHighlight: new Set(ids) }),
 
     setRunSpeed: (psPerSecond) => {
       if (get().board.runSpeed === psPerSecond) return;
@@ -3707,7 +4082,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           lastRun: runs.size > 0 ? { board: s.board, chipLib: s.chipLib, runs } : null,
           powered: false,
           running: false,
-          changedPrims: new Set(),
           replayTimePs: null,
           rev: s.rev + 1,
         }));
@@ -3720,8 +4094,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         // Consumed by the power-on that follows the capture, never held past it:
         // a later session (another board, the pref flipped on in between) must
         // not inherit positions from whatever was powered before it.
-        const restoring = getPrefs().keepSwitchesAcrossPower ? new Map(heldSwitchState) : null;
+        const keep = getPrefs().keepSwitchesAcrossPower || restoreSwitchesOnce;
+        const restoring = keep ? new Map(heldSwitchState) : null;
         heldSwitchState.clear();
+        restoreSwitchesOnce = false;
         if (restoring) {
           // Addressed by component id, never by path: two components can share
           // a label, and a path would then drive the wrong one.
@@ -3756,7 +4132,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           oscillation: loopOf(compiled, report),
           lastRun: null,
           error: null,
-          changedPrims: new Set(),
           replayTimePs: null,
           // Powering on drops any edit tool. The board cannot be edited while
           // the sim owns it, so a live wire tool could only start a wire that
@@ -3772,29 +4147,110 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       }
     },
 
-    step: () => {
-      if (!sim) return;
+    gateStep: () => {
+      // Free-running, the pump owns time; the button is disabled, and so is the key.
+      if (!sim || get().running) return;
+      const live = sim;
+      const from = live.sim.time;
+      const prev = currentGateRun();
+      const fromSettled = live.sim.settled;
+      const report = pressGateStep(live.sim, live.compiled, get().timing.mode === 'ideal');
+      if (!report) return;
       replayIdx = null;
-      const report = sim.sim.stepToNextEvent();
-      const changed = new Set<string>();
-      if (report) for (const pi of report.evaluated) changed.add(sim.compiled.primitives[pi]!.path);
+      applyFallsInStep(from, report.time);
+      gateRun = {
+        ...nextGateRun(prev, report, live.compiled, from, fromSettled),
+        // A sequence row applied at a fall above has just woken its switches.
+        pendingPrimitives: live.sim.pendingPrimitives(),
+        owner: live,
+        traceLength: live.sim.traceLength,
+      };
       // Park the cursor on the time just stepped to rather than snapping back
       // to live: stepping is for reading the moment you landed on.
       set((s) => ({
-        changedPrims: changed,
-        replayTimePs: report ? report.time : null,
+        // A loop found earlier stands until a press finds it again or the board settles.
+        oscillation: report.oscillation
+          ? loopNetNames(live.compiled, report.oscillation.nets)
+          : report.settled
+            ? null
+            : s.oscillation,
+        replayTimePs: report.time,
         rev: s.rev + 1,
       }));
     },
 
     canStep: () => (sim ? sim.sim.canStep : false),
 
+    settle: () => {
+      if (!sim || get().running || sim.sim.settled) return;
+      replayIdx = null;
+      const live = sim;
+      const ideal = get().timing.mode === 'ideal';
+      let run: GateRun | null = currentGateRun();
+      let loop: string[] | null = null;
+      // Press by press rather than one kernel settle, so the readout can say how many gate
+      // delays it took.
+      for (let i = 0; i < SETTLE_PRESS_LIMIT && !live.sim.settled; i++) {
+        const from = live.sim.time;
+        const report = pressGateStep(live.sim, live.compiled, ideal);
+        if (!report) break;
+        applyFallsInStep(from, report.time);
+        run = nextGateRun(run, report, live.compiled, from, false);
+        if (report.oscillation) {
+          loop = loopNetNames(live.compiled, report.oscillation.nets);
+          break;
+        }
+      }
+      if (!live.sim.settled && !loop) {
+        // A loop with delay in it never settles; the kernel's event budget calls it.
+        const from = live.sim.time;
+        const report = live.sim.settle();
+        applyFallsInStep(from, report.time);
+        loop = loopOf(live.compiled, report);
+        run = null;
+      }
+      gateRun = run ? { ...run, owner: live, traceLength: live.sim.traceLength } : null;
+      set((s) => ({ oscillation: loop, replayTimePs: live.sim.time, rev: s.rev + 1 }));
+    },
+
+    canSettle: () => !!sim && !get().running && !sim.sim.settled,
+
+    gateStatus: (prefix = 'main/') => {
+      if (!sim || !get().powered || get().running) return null;
+      const run = currentGateRun();
+      return gateStatusText({
+        run,
+        ideal: get().timing.mode === 'ideal',
+        boardNets: run ? (get().gateOverlay(prefix)?.boardNets ?? 0) : 0,
+        settled: sim.sim.settled,
+        canStep: sim.sim.canStep,
+      });
+    },
+
+    gateOverlay: (prefix = 'main/') => {
+      const run = currentGateRun();
+      if (!run || !sim) return undefined;
+      // Scrubbed to another time, the board shows values the run's rings do not describe.
+      const shown = get().replayTimePs;
+      if (shown !== null && shown !== run.timePs) return undefined;
+      const circuit = activeCircuit();
+      const hit = gateOverlayCache;
+      if (hit && hit.run === run && hit.circuit === circuit && hit.prefix === prefix)
+        return hit.overlay;
+      const overlay = overlayOfRun(circuit, sim.compiled, prefix, run);
+      gateOverlayCache = { run, circuit, prefix, overlay };
+      return overlay;
+    },
+
     toggleRun: () => {
       if (!sim) return;
       replayIdx = null;
       const running = !get().running;
       if (running) sim.sim.start();
-      else sim.sim.stop();
+      else {
+        sim.sim.stop();
+        resolvePendingCompare();
+      }
       set((s) => ({
         running,
         runBehind: false,
@@ -3802,6 +4258,63 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         replayTimePs: null,
         rev: s.rev + 1,
       }));
+    },
+
+    sequenceRun: () => {
+      if (!sim || !get().powered || !boardSequence()) return null;
+      const run = runOfSim()!;
+      return { cursor: run.cursor, results: run.results, pending: run.pendingCompare };
+    },
+
+    applySequenceRow: (index) => {
+      if (!get().powered) return false;
+      if (!applyRowNow(index)) return false;
+      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      return true;
+    },
+
+    stepSequence: (delta) => {
+      const run = sim && get().powered ? runOfSim() : null;
+      if (!run) return false;
+      return get().applySequenceRow(run.cursor + delta);
+    },
+
+    editSequence: (label, fn) => {
+      if (activeTab().kind !== 'board') return;
+      edit(label, (draft) => {
+        const held = draft as SequenceHolder;
+        held.sequence = fn(held.sequence ?? emptySequence());
+      });
+    },
+
+    setChallenge: (label, next) => {
+      if (activeTab().kind !== 'board') return;
+      edit(label, (draft) => {
+        (draft as ChallengeHolder).challenge = next;
+      });
+    },
+
+    captureSequenceRow: () => {
+      const seq = boardSequence();
+      if (!seq) return;
+      const byId = new Map(get().board.components.map((c) => [c.id, c]));
+      const live = get().powered ? sim : null;
+      const cells = seq.inputs.map((id) => {
+        const comp = byId.get(id);
+        if (!comp) return 0;
+        const pi = live ? primOf(id) : undefined;
+        if (live && pi !== undefined) {
+          const state = live.sim.primitiveStateAt(pi);
+          if (comp.kind === 'toggle') return (state as { value: number }).value >>> 0;
+          if (comp.kind === 'button') return (state as ButtonState).on ? 1 : 0;
+          return (state as SpdtState).position === 'b' ? 1 : 0;
+        }
+        if (comp.kind === 'toggle') return Number(comp.params?.['initial'] ?? 0) >>> 0;
+        if (comp.kind === 'spdt') return spdtPosition((comp.params ?? {}) as never) === 'b' ? 1 : 0;
+        return 0;
+      });
+      const expect = seq.expect.length ? { expect: seq.expect.map(() => null) } : {};
+      get().editSequence('capture row', (cur) => addRow(cur, { set: cells, ...expect }));
     },
 
     pump: (ps) => {
@@ -3813,7 +4326,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         return;
       }
       const from = sim.sim.time;
-      sim.sim.runUntil(target);
+      runSplitAtSequenceFalls(target);
       const runBehind = sim.sim.isBehind(target);
       // A budget spent with time standing still is a zero-delay loop, not a slow board.
       const oscillation =
@@ -4118,7 +4631,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       set((st) => ({ replayTimePs: null, rev: st.rev + 1 }));
     },
 
-    setComponentParamsBatch: (specs) => {
+    setComponentParamsBatch: (specs, reanchor) => {
       if (specs.length === 0) return true;
       let firstOk = true;
       let anyApplied = false;
@@ -4140,6 +4653,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           const c = plan(d);
           if (c) conflicts.push(...c);
           anyApplied = true;
+          const was = before.components.find((x) => x.id === spec.id);
+          const now = d.components.find((x) => x.id === spec.id);
+          const pos = was && now ? reanchor?.(was, now) : undefined;
+          if (now && pos) now.pos = pos;
           if (Object.keys(spec.params).some((k) => /width/i.test(k) || k === 'pinView'))
             anyWidthLike = true;
         });
@@ -4161,7 +4678,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           seenNets.add(key);
           return true;
         });
-        set({ labelConflict: deduped });
+        const paramsOnly = specs.map((spec) => {
+          const copy = { ...spec };
+          delete copy.label;
+          return copy;
+        });
+        raiseRenameConflict(deduped, () => get().setComponentParamsBatch(paramsOnly, reanchor));
       }
       if (anyApplied && anyWidthLike) checkWidthMismatch('');
       return firstOk;
@@ -4315,16 +4837,6 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           return c;
         });
       });
-    },
-
-    changedComponentIds: (prefix = 'main/') => {
-      const ids = new Set<string>();
-      const re = new RegExp(`^${escapeRegExp(prefix)}(.+)$`);
-      for (const path of get().changedPrims) {
-        const m = re.exec(path);
-        if (m) ids.add(m[1]!);
-      }
-      return ids;
     },
   };
 });

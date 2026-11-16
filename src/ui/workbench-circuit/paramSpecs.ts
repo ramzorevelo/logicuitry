@@ -82,6 +82,7 @@ export function paramKeysFor(kind: string, params: Params): ReadonlySet<string> 
   if (kind === 'led') {
     keys.add('color');
     keys.add('shape');
+    keys.add('activeLow');
   }
   if (kind === 'sevenseg') {
     keys.add('color');
@@ -138,6 +139,8 @@ export function clampParamValue(kind: string, key: string, raw: ParamValue): Par
       return kind === 'button' || kind === 'spdt' ? !!raw : null;
     case 'toGround':
       return kind === 'button' ? !!raw : null;
+    case 'activeLow':
+      return kind === 'led' ? !!raw : null;
     case 'position':
       return kind === 'spdt' ? (raw === 'b' ? 'b' : 'a') : null;
     case 'form':

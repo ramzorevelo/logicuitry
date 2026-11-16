@@ -233,6 +233,7 @@ export function MenuBar({ menus }: Props) {
                               className="menubar__item"
                               role="menuitem"
                               disabled={cmd.disabled ?? false}
+                              title={cmd.title}
                               aria-checked={cmd.checked}
                               data-active={subIndex === k ? '' : undefined}
                               tabIndex={-1}
@@ -260,6 +261,7 @@ export function MenuBar({ menus }: Props) {
                     className="menubar__item"
                     role="menuitem"
                     disabled={entry.disabled ?? false}
+                    title={entry.title}
                     aria-checked={entry.checked}
                     data-active={itemIndex === j ? '' : undefined}
                     tabIndex={-1}

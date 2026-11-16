@@ -176,6 +176,26 @@ describe('gate packages', () => {
   });
 });
 
+describe('74LS47 open-collector outputs at the package pins', () => {
+  const code1 = { A0: true, A1: false, A2: false, A3: false, '/LT': true, '/BI_RBO': true };
+  const segments = (v: (pin: string) => string) => [...'abcdefg'].map(v).join('');
+
+  it('sinks a lit segment to 0 and floats an unlit one, never X', () => {
+    const v = run('74LS47', { ...code1, '/RBI': true, VCC: true, GND: false });
+    expect(segments(v)).toBe('Z00ZZZZ');
+  });
+
+  it("the '48's totem-pole outputs still drive both levels", () => {
+    const v = run('74LS48', { ...code1, '/RBI': true, VCC: true, GND: false });
+    expect(segments(v)).toBe('0110000');
+  });
+
+  it('floats every segment unpowered', () => {
+    const v = run('74LS47', { ...code1, '/RBI': true, VCC: null, GND: null });
+    expect(segments(v)).toBe('ZZZZZZZ');
+  });
+});
+
 describe('parts DB timing for the display decoders', () => {
   for (const part of ['74LS47', '74LS48']) {
     it(`${part} publishes a max column only`, () => {

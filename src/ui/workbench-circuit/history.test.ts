@@ -60,4 +60,17 @@ describe('history diff + apply', () => {
     });
     expect(history.canRedo).toBe(false);
   });
+
+  it('discardRedo drops the redo stack and keeps undo', () => {
+    const history = new History();
+    for (const id of ['x', 'y'])
+      history.commit({
+        label: id,
+        items: [{ kind: 'component', id, before: null, after: comp(id) }],
+      });
+    history.undo(() => {});
+    history.discardRedo();
+    expect(history.canRedo).toBe(false);
+    expect(history.canUndo).toBe(true);
+  });
 });

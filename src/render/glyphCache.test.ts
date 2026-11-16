@@ -12,6 +12,7 @@ import {
   drawWithGlyphBudget,
   fitGlyphCacheTo,
   glyphCacheSize,
+  paintWithoutGlyphCache,
   tileWorldSize,
   zoomBucket,
 } from './glyphCache';
@@ -116,6 +117,21 @@ describe('drawWithGlyphBudget', () => {
     fitGlyphCacheTo(1500);
     for (let i = 0; i < 1500; i++) draw(`k${i}`, 1);
     expect(glyphCacheSize()).toBe(1500);
+    fitGlyphCacheTo(0);
+  });
+
+  it('paints a one-off picture without touching the tiles or the cap', () => {
+    fitGlyphCacheTo(1500);
+    for (let i = 0; i < 1500; i++) draw(`k${i}`, 1);
+    painted = [];
+    paintWithoutGlyphCache(() => {
+      fitGlyphCacheTo(10);
+      draw('thumb', 0.3);
+    });
+    expect(painted).toEqual([screen]);
+    expect(glyphCacheSize()).toBe(1500);
+    draw('after', 1);
+    expect(glyphCacheSize()).toBe(1501);
     fitGlyphCacheTo(0);
   });
 });

@@ -16,6 +16,7 @@ import {
   restoreDirectory,
 } from '../io/fsAccess';
 import { useCircuitStore } from './workbench-circuit/circuitStore';
+import { lessonDirty, useLessonEditorStore } from './lesson/lessonEditorStore';
 import { getPrefs, usePrefsStore } from './prefs';
 import { useShellStore, type Workbench } from './store';
 import type { LibraryDir } from '../io/platform';
@@ -131,6 +132,13 @@ export function App() {
     void (async () => {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       const off = await getCurrentWindow().onCloseRequested(async (e) => {
+        if (lessonDirty(useLessonEditorStore.getState())) {
+          e.preventDefault();
+          useLessonEditorStore
+            .getState()
+            .requestClose('Quit Logicuitry', () => void getCurrentWindow().close());
+          return;
+        }
         try {
           if (!(await applyUpdateOnClose())) return;
           // install() exits the app itself; stop the close so the two do not race.
@@ -254,7 +262,13 @@ export function App() {
       } else if (e.key === 't' || e.key === 'T') {
         pickTheme(cycleTheme(currentTheme(), e.shiftKey ? -1 : 1));
       } else if ((e.key === 'p' || e.key === 'P') && !compact) {
-        toggleFullscreen();
+        const ed = useLessonEditorStore.getState();
+        // From the editor, P plays the selected step to the class: it turns presentation on, never off.
+        if (ed.draft && !ed.playing) {
+          setWorkbench('circuit');
+          ed.play();
+          if (!document.documentElement.classList.contains('presentation')) toggleFullscreen();
+        } else toggleFullscreen();
       } else if (e.ctrlKey) {
         const target = WORKBENCHES[Number.parseInt(e.key, 10) - 1];
         if (target) {

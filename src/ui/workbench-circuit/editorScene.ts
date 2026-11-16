@@ -14,6 +14,7 @@ import type {
 } from '../../core/model/types';
 import {
   drawStubBusBadge,
+  captionAwareBounds,
   captionPad,
   glyphBodyName,
   oneLine,
@@ -41,6 +42,7 @@ import {
   drawButton,
   drawSpdt,
   drawClock,
+  drawPattern,
   drawLed,
   drawLedMatrix,
   drawNetLabel,
@@ -186,7 +188,10 @@ export interface RenderParams extends GlyphContext {
   /** A touch hold has picked the selection up: drawn heavier so the lift shows
    *  on a phone whose touch vibration is off. */
   lifted?: boolean;
-  changed: ReadonlySet<string>;
+  /** Gate step: wires on the nets the last press changed, ringed. */
+  gateRing?: ReadonlySet<string> | undefined;
+  /** Gate step: parts with a drive or wake still pending, outlined. */
+  gatePending?: ReadonlySet<string> | undefined;
   /** Chip instances with a re-bind badge (a def edit stranded one of their wires). */
   stale?: ReadonlySet<string>;
   hoverPin?: Vec2 | undefined;
@@ -242,6 +247,9 @@ export interface RenderParams extends GlyphContext {
    *  wire to look at, so an accidental one is invisible until the peers say
    *  so -- this is the only thing that shows the join. */
   peerLabels?: ReadonlySet<string> | undefined;
+  /** Parts the open lesson step points at: a heavier, wider dashed ring than
+   *  any editing outline, so the class sees it from the back row. */
+  lessonHighlight?: ReadonlySet<string> | undefined;
   /** STA overlay: per-wire path role + per-component hop delay labels. */
   staOverlay?:
     | {
@@ -366,6 +374,7 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
     // hide the very cue that points at it.
     const outer = sheath ? sheathWidth(theme, busWidth) : coreWidth(theme, busWidth);
     const haloWidth = Math.max(theme.strokes.wire * 4, outer + theme.strokes.wire * 2);
+    if (p.gateRing?.has(wire.id)) gateRingWire(ctx, theme, pts, haloWidth);
     if (p.highlightWires?.has(wire.id)) {
       // Waveform-track hover halo, drawn under the wire's own signal color.
       ctx.save();
@@ -506,7 +515,6 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
     drawPinBusBadges(ctx, theme, comp, g, p.chipLib, badgeRule);
     if (p.selection.has(comp.id))
       outline(ctx, theme, g.bounds, theme.colors.accent, 1, p.lifted ?? false);
-    else if (p.changed.has(comp.label || comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     else if (p.stale?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.warn);
     if (p.paramHighlight?.has(comp.id)) outline(ctx, theme, g.bounds, theme.colors.ok, 1.8);
     if (p.blockedFlash?.ids.has(comp.id)) {
@@ -534,6 +542,20 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
       ctx.textBaseline = 'top';
       ctx.fillText(staShort, g.bounds.x + g.bounds.w / 2, g.bounds.y + g.bounds.h + 4);
     }
+  }
+
+  if (p.gatePending?.size)
+    for (const comp of p.board.components) {
+      const g = p.gatePending.has(comp.id) ? geo.get(comp.id) : undefined;
+      if (g && inView(g.bounds, theme.gridSchematic * 3)) gatePendingOutline(ctx, theme, g.bounds);
+    }
+
+  if (p.lessonHighlight?.size) {
+    const parts = p.board.components.flatMap((comp) => {
+      const g = p.lessonHighlight!.has(comp.id) ? geo.get(comp.id) : undefined;
+      return g ? [captionAwareBounds(g.bounds, comp.label, theme)] : [];
+    });
+    for (const box of lessonHighlightBoxes(parts, theme)) lessonOutline(ctx, theme, box);
   }
 
   if (p.subExpressions && theme.lod !== 'flat')
@@ -1200,6 +1222,8 @@ export function drawComponent(
     drawLed(ctx, theme, input, placement, raw, comp.label, live);
   } else if (comp.kind === 'clock') {
     drawClock(ctx, theme, input, placement, comp.label);
+  } else if (comp.kind === 'pattern') {
+    drawPattern(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin), comp.label);
   } else if (comp.kind === 'timer555') {
     drawTimer(ctx, theme, input, placement, (pin) => p.pinSignal(comp.id, pin), comp.label);
   } else if (comp.kind === 'sevenseg') {
@@ -1440,6 +1464,84 @@ function drawTapPoint(
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   ctx.fillText(label, pos.x + theme.gridSchematic * 0.3, pos.y - theme.gridSchematic * 0.2);
+}
+
+const within = (a: Rect, b: Rect, gap: number) =>
+  a.x <= b.x + b.w + gap &&
+  b.x <= a.x + a.w + gap &&
+  a.y <= b.y + b.h + gap &&
+  b.y <= a.y + a.h + gap;
+
+const union = (a: Rect, b: Rect): Rect => {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
+
+/** One padded box per highlighted part; boxes less than a grid square apart
+ *  merge, so close parts (a column of flag LEDs) read as one group rather than
+ *  a stack of crossed or doubled rings. */
+export function lessonHighlightBoxes(parts: readonly Rect[], theme: Theme): Rect[] {
+  const grid = theme.gridSchematic;
+  const boxes = parts.map((r) => inflateRect(r, grid * 1.2));
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (let i = 0; i < boxes.length && !merged; i++)
+      for (let j = i + 1; j < boxes.length; j++)
+        if (within(boxes[i]!, boxes[j]!, grid)) {
+          boxes[i] = union(boxes[i]!, boxes[j]!);
+          boxes.splice(j, 1);
+          merged = true;
+          break;
+        }
+  }
+  return boxes;
+}
+
+/** A changed net's ring: a halo along the wire, under its own signal colour. */
+export function gateRingWire(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  pts: readonly Vec2[],
+  haloWidth: number,
+): void {
+  // Opaque: the token's contrast is the ring's, and a class reads it from the back row.
+  ctx.save();
+  ctx.strokeStyle = theme.colors.gateRipple;
+  ctx.lineWidth = haloWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A part still due to move: a fine dashed box with a "pending" tag over its corner. */
+export function gatePendingOutline(ctx: CanvasRenderingContext2D, theme: Theme, b: Rect): void {
+  const grid = theme.gridSchematic;
+  const pad = grid * 0.375;
+  ctx.save();
+  ctx.strokeStyle = theme.colors.gatePending;
+  ctx.lineWidth = theme.strokes.min;
+  ctx.setLineDash([grid * 0.375, grid * 0.375]);
+  ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
+  ctx.setLineDash([]);
+  ctx.font = `${theme.canvasTextMin}px ${theme.fonts.mono}`;
+  ctx.fillStyle = theme.colors.gatePending;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('pending', b.x - pad, b.y - pad * 1.5);
+  ctx.restore();
+}
+
+export function lessonOutline(ctx: CanvasRenderingContext2D, theme: Theme, box: Rect): void {
+  const grid = theme.gridSchematic;
+  ctx.strokeStyle = theme.colors.lessonHighlight;
+  ctx.lineWidth = theme.strokes.min * 2;
+  ctx.setLineDash([grid * 0.75, grid * 0.5]);
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
+  ctx.setLineDash([]);
 }
 
 function outline(

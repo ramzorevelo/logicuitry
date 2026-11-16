@@ -16,6 +16,7 @@ export type BlockedReason =
   | 'powered-rename'
   | 'bubble-edit'
   | 'view-only'
+  | 'lesson-edit'
   | 'board-tab';
 
 /** Quiet gap after which a reason may announce itself again. */
@@ -36,6 +37,7 @@ const TEXT: Record<BlockedReason, string> = {
   'powered-rename': 'Power off to rename.',
   'bubble-edit': 'Leave bubble mode to edit the board.',
   'view-only': 'Leave view-only to edit the board.',
+  'lesson-edit': 'Close the lesson editor to edit the board.',
   'board-tab': 'Build circuit works on the board tab.',
 };
 
@@ -48,10 +50,12 @@ export function blockedText(reason: BlockedReason): string {
 export function buildBlockedReason(state: {
   tab: string;
   viewOnly: boolean;
+  lessonEdit?: boolean;
   mode: string;
   powered: boolean;
 }): BlockedReason | null {
   if (state.tab !== 'board') return 'board-tab';
+  if (state.lessonEdit) return 'lesson-edit';
   if (state.viewOnly) return 'view-only';
   if (state.mode === 'bubble') return 'bubble-edit';
   if (state.powered) return 'powered-place';

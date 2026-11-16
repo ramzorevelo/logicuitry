@@ -8,6 +8,9 @@
      sized by its own padding); the compact shell overrides it, and every bar,
      tab, drawer and floating button follows from that one value. */
   --touch-h: 44px;
+  /* The accessibility floor, for the few controls that may not follow the
+     compact shell's trimmed --touch-h: the lesson sheet's Back, Reveal, Next. */
+  --touch-target: 44px;
 
   /* color */
   --paper: #edeff6;
@@ -23,6 +26,13 @@
   --ok: #2e6b4f;
   /* signal state M: a width>1 net whose lanes disagree */
   --signal-mixed: #26307d;
+  /* The open lesson step's parts. An alias, so every theme's warn carries it;
+     a dashed outline, so it never reads as the X wire state that warn also is. */
+  --lesson-highlight: var(--warn);
+  /* Gate step. The ripple ring is its own hue, apart from every signal colour, since it rides
+     on top of them; pending is the quiet secondary accent, since it marks what has not moved. */
+  --gate-ripple: #0a6f80;
+  --gate-pending: var(--accent-2);
 
   /* Physical LED colours. Deliberately declared once, never re-authored per
      theme: a red LED is red on every board. Wires keep the signal colours.
@@ -126,6 +136,7 @@
   --warn: #9a5a0b;
   --ok: #2e6b4f;
   --signal-mixed: #26307d;
+  --gate-ripple: #0a6f80;
   --led-white: #c3cee3;
 }
 
@@ -143,6 +154,7 @@
   --warn: #ffb02e;
   --ok: #5cc98d;
   --signal-mixed: #8fb0ff;
+  --gate-ripple: #4fd6e8;
 
   --kmap-g1: #4996d2;
   --kmap-g2: #d67a3c;
@@ -258,6 +270,7 @@
   --warn: #f19765;
   --ok: #58c39a;
   --signal-mixed: #86e850;
+  --gate-ripple: #4fd6e8;
 
   /* Dark-ground palette, as Dark: the :root values are tuned for a pale one. */
   --kmap-g1: #4996d2;
@@ -296,6 +309,7 @@
   --warn: #f5906d;
   --ok: #6fd6a4;
   --signal-mixed: #d070d8;
+  --gate-ripple: #4fd6e8;
 
   /* Dark-ground palette, as Dark: the :root values are tuned for a pale one. */
   --kmap-g1: #4996d2;
@@ -409,7 +423,7 @@
 :root .reveal-btn,
 :root .algebra-step,
 :root .segmented,
-:root .package-dialog button:not(.package-swatch),
+:root .package-dialog button:not(.package-swatch, .examples-item, .examples-index__item),
 :root .analyze-drawer button {
   position: relative;
   isolation: isolate;
@@ -436,7 +450,7 @@
 :root .reveal-btn::before,
 :root .algebra-step::before,
 :root .segmented::before,
-:root .package-dialog button:not(.package-swatch)::before,
+:root .package-dialog button:not(.package-swatch, .examples-item, .examples-index__item)::before,
 :root .analyze-drawer button::before {
   content: '';
   position: absolute;

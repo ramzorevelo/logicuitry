@@ -4,9 +4,24 @@
 // per-action inverse logic -- Component/Wire/Junction are flat id-keyed records,
 // so a picked item is just {kind, id, before, after}.
 
-import type { Circuit, Component, Junction, Wire, Group } from '../../core/model/types';
+import type {
+  BoardSequence,
+  Challenge,
+  Circuit,
+  Component,
+  Junction,
+  Wire,
+  Group,
+} from '../../core/model/types';
 
-export type EntityKind = 'component' | 'wire' | 'junction' | 'group' | 'checks';
+export type EntityKind =
+  | 'component'
+  | 'wire'
+  | 'junction'
+  | 'group'
+  | 'checks'
+  | 'sequence'
+  | 'challenge';
 
 /** The circuit's silenced checks, as one entity so a hide is one undo step. */
 export interface HiddenChecksEntity {
@@ -16,7 +31,35 @@ export interface HiddenChecksEntity {
 
 export const HIDDEN_CHECKS_ID = 'hiddenChecks';
 
-export type Entity = Component | Wire | Junction | Group | HiddenChecksEntity;
+/** A board's input sequence, as one entity so a cell edit is one undo step. */
+export interface SequenceEntity {
+  id: typeof SEQUENCE_ID;
+  sequence: BoardSequence;
+}
+
+export const SEQUENCE_ID = 'sequence';
+
+/** Only a board carries a sequence; a chip's circuit never has one. */
+export type SequenceHolder = Circuit & { sequence?: BoardSequence | undefined };
+
+/** A board's challenge, as one entity so Set, Edit and Remove are one undo step each. */
+export interface ChallengeEntity {
+  id: typeof CHALLENGE_ID;
+  challenge: Challenge;
+}
+
+export const CHALLENGE_ID = 'challenge';
+
+export type ChallengeHolder = Circuit & { challenge?: Challenge | undefined };
+
+export type Entity =
+  | Component
+  | Wire
+  | Junction
+  | Group
+  | HiddenChecksEntity
+  | SequenceEntity
+  | ChallengeEntity;
 
 export interface PickedItem {
   kind: EntityKind;
@@ -61,6 +104,12 @@ function diffKind(
 const hiddenChecksOf = (c: Circuit): HiddenChecksEntity[] =>
   c.hiddenChecks?.length ? [{ id: HIDDEN_CHECKS_ID, keys: c.hiddenChecks }] : [];
 
+const sequenceOf = (c: SequenceHolder): SequenceEntity[] =>
+  c.sequence ? [{ id: SEQUENCE_ID, sequence: c.sequence }] : [];
+
+const challengeOf = (c: ChallengeHolder): ChallengeEntity[] =>
+  c.challenge ? [{ id: CHALLENGE_ID, challenge: c.challenge }] : [];
+
 /** Diff two circuit snapshots into one command's picked-item list. */
 export function diffCircuits(before: Circuit, after: Circuit, label: string): Command {
   return {
@@ -71,6 +120,8 @@ export function diffCircuits(before: Circuit, after: Circuit, label: string): Co
       ...diffKind('junction', before.junctions, after.junctions),
       ...diffKind('group', before.groups ?? [], after.groups ?? []),
       ...diffKind('checks', hiddenChecksOf(before), hiddenChecksOf(after)),
+      ...diffKind('sequence', sequenceOf(before), sequenceOf(after)),
+      ...diffKind('challenge', challengeOf(before), challengeOf(after)),
     ],
   };
 }
@@ -109,6 +160,10 @@ export class History {
     return cmd;
   }
 
+  discardRedo(): void {
+    this.redoStack = [];
+  }
+
   clear(): void {
     this.undoStack = [];
     this.redoStack = [];
@@ -125,6 +180,14 @@ export function applyToCircuit(
   if (kind === 'checks') {
     const keys = (value as HiddenChecksEntity | null)?.keys;
     circuit.hiddenChecks = keys?.length ? [...keys] : undefined;
+    return;
+  }
+  if (kind === 'sequence') {
+    (circuit as SequenceHolder).sequence = (value as SequenceEntity | null)?.sequence;
+    return;
+  }
+  if (kind === 'challenge') {
+    (circuit as ChallengeHolder).challenge = (value as ChallengeEntity | null)?.challenge;
     return;
   }
   const key: keyof Circuit =

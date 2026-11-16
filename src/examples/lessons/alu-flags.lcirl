@@ -1,0 +1,58 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 2,
+  "id": "alu-flags",
+  "title": "ALU flags: when is V set?",
+  "workbench": "circuit",
+  "board": "four-operation-alu",
+  "steps": [
+    {
+      "kind": "narrate",
+      "prose": "The overflow flag **V** says the signed result does not fit in 4 bits. Two's complement 4-bit values run from -8 to 7.",
+      "actions": [{ "kind": "power", "on": true }]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Start with an ordinary sum, 3 + 2. Watch Y and the four flags.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [3, 2, 0, 0], "when": "open" },
+        { "kind": "highlight", "components": ["a", "b", "f1", "f0"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now 7 + 1. Which flags light?",
+      "choices": [
+        { "text": "None" },
+        { "text": "N" },
+        { "text": "N and V", "right": true },
+        { "text": "C and V" }
+      ],
+      "answer": "Y = 1000 reads as -8: N is its sign bit, and two positives giving a negative is exactly overflow. No carry leaves bit 3, so C stays off.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [7, 1, 0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["n", "z", "cf", "vf"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "5 - 5. The ALU adds 5 to the complement of 5 with carry in 1. Is C set?",
+      "choices": [{ "text": "C = 0" }, { "text": "C = 1", "right": true }],
+      "answer": "In subtraction, C = 1 means no borrow. 0101 + 1010 + 1 = 1 0000, so C = 1 and Z = 1.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [5, 5, 0, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["n", "z", "cf", "vf"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "The mux picks one of four results by F1 F0; the flags only mean something for add and subtract.",
+      "actions": [{ "kind": "highlight", "components": ["mux"] }]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Play the rest of the sequence with `]` and check each row against your own prediction.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    }
+  ]
+}

@@ -34,7 +34,7 @@ function logicuitryDocuments(): Plugin {
   return {
     name: 'logicuitry-documents',
     transform(code, id) {
-      if (!/\.(lcirb|lcirc)$/.test(id.split('?')[0] ?? '')) return null;
+      if (!/\.(lcirb|lcirc|lcirl)$/.test(id.split('?')[0] ?? '')) return null;
       // JSON.parse first so a malformed document fails the build here rather
       // than at runtime, and so the emitted module is a literal, not a string.
       return { code: `export default ${JSON.stringify(JSON.parse(code))};`, map: null };
@@ -98,7 +98,7 @@ export default defineConfig({
               file_handlers: [
                 {
                   action: base,
-                  accept: { 'application/json': ['.lcirb', '.lcirc'] },
+                  accept: { 'application/json': ['.lcirb', '.lcirc', '.lcirl'] },
                 },
               ],
               icons: [

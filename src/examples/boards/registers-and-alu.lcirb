@@ -30,7 +30,7 @@
       "id": "io",
       "kind": "chip",
       "pos": {
-        "x": 700,
+        "x": 704,
         "y": 96
       },
       "group": "gin",
@@ -41,7 +41,7 @@
       "id": "in",
       "kind": "toggle",
       "pos": {
-        "x": 580,
+        "x": 584,
         "y": 120
       },
       "group": "gin",
@@ -55,7 +55,7 @@
       "id": "sie",
       "kind": "toggle",
       "pos": {
-        "x": 60,
+        "x": 64,
         "y": 96
       },
       "group": "gin",
@@ -68,7 +68,7 @@
       "id": "ln3",
       "kind": "netlabel",
       "pos": {
-        "x": 108,
+        "x": 112,
         "y": 104
       },
       "group": "gin",
@@ -78,7 +78,7 @@
       "id": "ln4",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 120
       },
       "group": "gin",
@@ -88,7 +88,7 @@
       "id": "bh",
       "kind": "chip",
       "pos": {
-        "x": 700,
+        "x": 704,
         "y": 320
       },
       "group": "grb",
@@ -99,7 +99,7 @@
       "id": "bo",
       "kind": "chip",
       "pos": {
-        "x": 700,
+        "x": 704,
         "y": 528
       },
       "group": "grb",
@@ -110,7 +110,7 @@
       "id": "bl",
       "kind": "chip",
       "pos": {
-        "x": 700,
+        "x": 704,
         "y": 736
       },
       "group": "grb",
@@ -121,7 +121,7 @@
       "id": "ledb",
       "kind": "led",
       "pos": {
-        "x": 400,
+        "x": 392,
         "y": 600
       },
       "group": "grb",
@@ -136,7 +136,7 @@
       "id": "sbi",
       "kind": "toggle",
       "pos": {
-        "x": 60,
+        "x": 64,
         "y": 328
       },
       "group": "grb",
@@ -149,8 +149,8 @@
       "id": "sbo",
       "kind": "toggle",
       "pos": {
-        "x": 60,
-        "y": 380
+        "x": 64,
+        "y": 384
       },
       "group": "grb",
       "label": "/BO",
@@ -162,7 +162,7 @@
       "id": "ln11",
       "kind": "netlabel",
       "pos": {
-        "x": 108,
+        "x": 112,
         "y": 336
       },
       "group": "grb",
@@ -172,7 +172,7 @@
       "id": "ln12",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 440
       },
       "group": "grb",
@@ -182,7 +182,7 @@
       "id": "ln13",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 424
       },
       "group": "grb",
@@ -192,7 +192,7 @@
       "id": "ln14",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 856
       },
       "group": "grb",
@@ -202,7 +202,7 @@
       "id": "ln15",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 840
       },
       "group": "grb",
@@ -212,8 +212,8 @@
       "id": "ln16",
       "kind": "netlabel",
       "pos": {
-        "x": 108,
-        "y": 388
+        "x": 112,
+        "y": 392
       },
       "group": "grb",
       "label": "/BO"
@@ -222,7 +222,7 @@
       "id": "ln17",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 552
       },
       "group": "grb",
@@ -232,7 +232,7 @@
       "id": "ah",
       "kind": "chip",
       "pos": {
-        "x": 1060,
+        "x": 1064,
         "y": 72
       },
       "group": "gra",
@@ -244,7 +244,7 @@
       "id": "ao",
       "kind": "chip",
       "pos": {
-        "x": 1060,
+        "x": 1064,
         "y": 280
       },
       "group": "gra",
@@ -256,7 +256,7 @@
       "id": "al",
       "kind": "chip",
       "pos": {
-        "x": 1060,
+        "x": 1064,
         "y": 504
       },
       "group": "gra",
@@ -282,7 +282,7 @@
       "id": "sai",
       "kind": "toggle",
       "pos": {
-        "x": 1620,
+        "x": 1624,
         "y": 80
       },
       "group": "gra",
@@ -295,8 +295,8 @@
       "id": "sao",
       "kind": "toggle",
       "pos": {
-        "x": 1620,
-        "y": 132
+        "x": 1624,
+        "y": 136
       },
       "group": "gra",
       "label": "/AO",
@@ -308,7 +308,7 @@
       "id": "ln49",
       "kind": "netlabel",
       "pos": {
-        "x": 1668,
+        "x": 1672,
         "y": 88
       },
       "group": "gra",
@@ -318,7 +318,7 @@
       "id": "ln50",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 192
       },
       "group": "gra",
@@ -329,7 +329,7 @@
       "id": "ln51",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 176
       },
       "group": "gra",
@@ -340,7 +340,7 @@
       "id": "ln52",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 624
       },
       "group": "gra",
@@ -351,7 +351,7 @@
       "id": "ln53",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 608
       },
       "group": "gra",
@@ -362,8 +362,8 @@
       "id": "ln54",
       "kind": "netlabel",
       "pos": {
-        "x": 1668,
-        "y": 140
+        "x": 1672,
+        "y": 144
       },
       "group": "gra",
       "label": "/AO"
@@ -372,7 +372,7 @@
       "id": "ln55",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 304
       },
       "group": "gra",
@@ -383,7 +383,7 @@
       "id": "eo",
       "kind": "chip",
       "pos": {
-        "x": 1060,
+        "x": 1064,
         "y": 712
       },
       "group": "galu",
@@ -395,7 +395,7 @@
       "id": "xh",
       "kind": "chip",
       "pos": {
-        "x": 1580,
+        "x": 1584,
         "y": 712
       },
       "group": "galu",
@@ -406,8 +406,8 @@
       "id": "xl",
       "kind": "chip",
       "pos": {
-        "x": 1580,
-        "y": 882
+        "x": 1584,
+        "y": 880
       },
       "group": "galu",
       "defId": "74LS86",
@@ -417,7 +417,7 @@
       "id": "sh",
       "kind": "chip",
       "pos": {
-        "x": 1820,
+        "x": 1824,
         "y": 712
       },
       "group": "galu",
@@ -428,8 +428,8 @@
       "id": "sl",
       "kind": "chip",
       "pos": {
-        "x": 1820,
-        "y": 902
+        "x": 1824,
+        "y": 904
       },
       "group": "galu",
       "defId": "74LS283",
@@ -439,7 +439,7 @@
       "id": "nor",
       "kind": "chip",
       "pos": {
-        "x": 1580,
+        "x": 1584,
         "y": 1112
       },
       "group": "galu",
@@ -450,7 +450,7 @@
       "id": "and",
       "kind": "chip",
       "pos": {
-        "x": 1820,
+        "x": 1824,
         "y": 1112
       },
       "group": "galu",
@@ -461,7 +461,7 @@
       "id": "fl",
       "kind": "chip",
       "pos": {
-        "x": 2060,
+        "x": 2064,
         "y": 1112
       },
       "group": "galu",
@@ -495,7 +495,7 @@
       "kind": "toggle",
       "pos": {
         "x": 2000,
-        "y": 868
+        "y": 872
       },
       "group": "galu",
       "label": "SU",
@@ -508,7 +508,7 @@
       "kind": "toggle",
       "pos": {
         "x": 2136,
-        "y": 868
+        "y": 872
       },
       "group": "galu",
       "label": "/EO",
@@ -521,7 +521,7 @@
       "kind": "toggle",
       "pos": {
         "x": 2280,
-        "y": 868
+        "y": 872
       },
       "group": "galu",
       "label": "/FI",
@@ -534,7 +534,7 @@
       "kind": "netlabel",
       "pos": {
         "x": 2048,
-        "y": 876
+        "y": 880
       },
       "group": "galu",
       "label": "SU"
@@ -543,7 +543,7 @@
       "id": "ln70",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 736
       },
       "group": "galu",
@@ -554,7 +554,7 @@
       "id": "ln71",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 784
       },
       "group": "galu",
@@ -565,7 +565,7 @@
       "id": "ln72",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 784
       },
       "group": "galu",
@@ -575,7 +575,7 @@
       "id": "ln73",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 736
       },
       "group": "galu",
@@ -585,8 +585,8 @@
       "id": "ln74",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 906
+        "x": 1536,
+        "y": 904
       },
       "group": "galu",
       "label": "SU",
@@ -596,8 +596,8 @@
       "id": "ln75",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 954
+        "x": 1536,
+        "y": 952
       },
       "group": "galu",
       "label": "SU",
@@ -607,8 +607,8 @@
       "id": "ln76",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 954
+        "x": 1696,
+        "y": 952
       },
       "group": "galu",
       "label": "SU"
@@ -617,8 +617,8 @@
       "id": "ln77",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 906
+        "x": 1696,
+        "y": 904
       },
       "group": "galu",
       "label": "SU"
@@ -627,8 +627,8 @@
       "id": "ln78",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 1006
+        "x": 1776,
+        "y": 1008
       },
       "group": "galu",
       "label": "SU",
@@ -639,7 +639,7 @@
       "kind": "netlabel",
       "pos": {
         "x": 2184,
-        "y": 876
+        "y": 880
       },
       "group": "galu",
       "label": "/EO"
@@ -648,7 +648,7 @@
       "id": "ln80",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 736
       },
       "group": "galu",
@@ -660,7 +660,7 @@
       "kind": "netlabel",
       "pos": {
         "x": 2328,
-        "y": 876
+        "y": 880
       },
       "group": "galu",
       "label": "/FI"
@@ -669,7 +669,7 @@
       "id": "ln82",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1232
       },
       "group": "galu",
@@ -679,8 +679,8 @@
       "id": "ln83",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 922
+        "x": 1536,
+        "y": 920
       },
       "group": "galu",
       "label": "X0",
@@ -690,8 +690,8 @@
       "id": "ln84",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 990
+        "x": 1776,
+        "y": 992
       },
       "group": "galu",
       "label": "X0",
@@ -701,8 +701,8 @@
       "id": "ln85",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 958
+        "x": 1776,
+        "y": 960
       },
       "group": "galu",
       "label": "S0",
@@ -712,7 +712,7 @@
       "id": "ln86",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 848
       },
       "group": "galu",
@@ -722,7 +722,7 @@
       "id": "ln87",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1152
       },
       "group": "galu",
@@ -732,8 +732,8 @@
       "id": "ln88",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 970
+        "x": 1536,
+        "y": 968
       },
       "group": "galu",
       "label": "X1",
@@ -743,8 +743,8 @@
       "id": "ln89",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 926
+        "x": 1776,
+        "y": 928
       },
       "group": "galu",
       "label": "X1",
@@ -754,8 +754,8 @@
       "id": "ln90",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 910
+        "x": 1776,
+        "y": 912
       },
       "group": "galu",
       "label": "S1",
@@ -765,7 +765,7 @@
       "id": "ln91",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 832
       },
       "group": "galu",
@@ -775,7 +775,7 @@
       "id": "ln92",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1168
       },
       "group": "galu",
@@ -785,8 +785,8 @@
       "id": "ln93",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 986
+        "x": 1696,
+        "y": 984
       },
       "group": "galu",
       "label": "X2"
@@ -795,8 +795,8 @@
       "id": "ln94",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 926
+        "x": 1936,
+        "y": 928
       },
       "group": "galu",
       "label": "X2"
@@ -805,8 +805,8 @@
       "id": "ln95",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 958
+        "x": 1936,
+        "y": 960
       },
       "group": "galu",
       "label": "S2"
@@ -815,7 +815,7 @@
       "id": "ln96",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 816
       },
       "group": "galu",
@@ -825,7 +825,7 @@
       "id": "ln97",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1200
       },
       "group": "galu",
@@ -835,8 +835,8 @@
       "id": "ln98",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 938
+        "x": 1696,
+        "y": 936
       },
       "group": "galu",
       "label": "X3"
@@ -845,8 +845,8 @@
       "id": "ln99",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 990
+        "x": 1936,
+        "y": 992
       },
       "group": "galu",
       "label": "X3"
@@ -855,8 +855,8 @@
       "id": "ln100",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 1006
+        "x": 1936,
+        "y": 1008
       },
       "group": "galu",
       "label": "S3"
@@ -865,7 +865,7 @@
       "id": "ln101",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 800
       },
       "group": "galu",
@@ -875,7 +875,7 @@
       "id": "ln102",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1216
       },
       "group": "galu",
@@ -885,7 +885,7 @@
       "id": "ln103",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 752
       },
       "group": "galu",
@@ -896,7 +896,7 @@
       "id": "ln104",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 800
       },
       "group": "galu",
@@ -907,7 +907,7 @@
       "id": "ln105",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 768
       },
       "group": "galu",
@@ -918,7 +918,7 @@
       "id": "ln106",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 784
       },
       "group": "galu",
@@ -928,7 +928,7 @@
       "id": "ln107",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1200
       },
       "group": "galu",
@@ -939,7 +939,7 @@
       "id": "ln108",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 800
       },
       "group": "galu",
@@ -950,7 +950,7 @@
       "id": "ln109",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 736
       },
       "group": "galu",
@@ -961,7 +961,7 @@
       "id": "ln110",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 720
       },
       "group": "galu",
@@ -972,7 +972,7 @@
       "id": "ln111",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 768
       },
       "group": "galu",
@@ -982,7 +982,7 @@
       "id": "ln112",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1184
       },
       "group": "galu",
@@ -993,7 +993,7 @@
       "id": "ln113",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 816
       },
       "group": "galu",
@@ -1003,7 +1003,7 @@
       "id": "ln114",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 736
       },
       "group": "galu",
@@ -1013,7 +1013,7 @@
       "id": "ln115",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 768
       },
       "group": "galu",
@@ -1023,7 +1023,7 @@
       "id": "ln116",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 752
       },
       "group": "galu",
@@ -1033,7 +1033,7 @@
       "id": "ln117",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1152
       },
       "group": "galu",
@@ -1044,7 +1044,7 @@
       "id": "ln118",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 768
       },
       "group": "galu",
@@ -1054,7 +1054,7 @@
       "id": "ln119",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 800
       },
       "group": "galu",
@@ -1064,7 +1064,7 @@
       "id": "ln120",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 816
       },
       "group": "galu",
@@ -1074,7 +1074,7 @@
       "id": "ln121",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 736
       },
       "group": "galu",
@@ -1084,7 +1084,7 @@
       "id": "ln122",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1136
       },
       "group": "galu",
@@ -1095,8 +1095,8 @@
       "id": "ln123",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 1022
+        "x": 1936,
+        "y": 1024
       },
       "group": "galu",
       "label": "C4"
@@ -1105,7 +1105,7 @@
       "id": "ln124",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 816
       },
       "group": "galu",
@@ -1116,7 +1116,7 @@
       "id": "ln125",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 832
       },
       "group": "galu",
@@ -1126,7 +1126,7 @@
       "id": "ln126",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1152
       },
       "group": "galu",
@@ -1136,7 +1136,7 @@
       "id": "ln127",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1120
       },
       "group": "galu",
@@ -1147,7 +1147,7 @@
       "id": "ln128",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1120
       },
       "group": "galu",
@@ -1158,7 +1158,7 @@
       "id": "ln129",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 1168
       },
       "group": "galu",
@@ -1169,7 +1169,7 @@
       "id": "ln130",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1136
       },
       "group": "galu",
@@ -1180,7 +1180,7 @@
       "id": "ln131",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1184
       },
       "group": "galu",
@@ -1190,7 +1190,7 @@
       "id": "ln132",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1168
       },
       "group": "galu",
@@ -1201,7 +1201,7 @@
       "id": "ln133",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1136
       },
       "group": "galu",
@@ -1211,7 +1211,7 @@
       "id": "ln134",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1184
       },
       "group": "galu",
@@ -1222,7 +1222,7 @@
       "id": "ln135",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1152
       },
       "group": "galu",
@@ -1233,7 +1233,7 @@
       "id": "ln136",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 1200
       },
       "group": "galu",
@@ -1243,7 +1243,7 @@
       "id": "ln137",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 1200
       },
       "group": "galu",
@@ -1254,7 +1254,7 @@
       "id": "ln138",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 1184
       },
       "group": "galu",
@@ -1264,7 +1264,7 @@
       "id": "ln139",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 1216
       },
       "group": "galu",
@@ -1274,7 +1274,7 @@
       "id": "ln140",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1168
       },
       "group": "galu",
@@ -1284,7 +1284,7 @@
       "id": "ln141",
       "kind": "netlabel",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1152
       },
       "group": "galu",
@@ -1305,7 +1305,7 @@
       "id": "ln143",
       "kind": "netlabel",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1168
       },
       "group": "galu",
@@ -1326,7 +1326,7 @@
       "id": "clk",
       "kind": "clock",
       "pos": {
-        "x": 60,
+        "x": 64,
         "y": 0
       },
       "label": "CLK",
@@ -1350,7 +1350,7 @@
       "id": "ln200",
       "kind": "netlabel",
       "pos": {
-        "x": 132,
+        "x": 136,
         "y": 8
       },
       "label": "CLK"
@@ -1359,7 +1359,7 @@
       "id": "ln203",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 176
       },
       "label": "CLK"
@@ -1368,7 +1368,7 @@
       "id": "ln204",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 608
       },
       "label": "CLK"
@@ -1377,7 +1377,7 @@
       "id": "ln205",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 424
       },
       "label": "CLK",
@@ -1387,7 +1387,7 @@
       "id": "ln206",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 840
       },
       "label": "CLK",
@@ -1397,7 +1397,7 @@
       "id": "ln207",
       "kind": "netlabel",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1216
       },
       "label": "CLK",
@@ -1416,7 +1416,7 @@
       "id": "ln211",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 96
       },
       "label": "CLR",
@@ -1426,7 +1426,7 @@
       "id": "ln212",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 528
       },
       "label": "CLR",
@@ -1436,7 +1436,7 @@
       "id": "ln213",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 344
       },
       "label": "CLR"
@@ -1445,7 +1445,7 @@
       "id": "ln214",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 760
       },
       "label": "CLR"
@@ -1454,7 +1454,7 @@
       "id": "ln215",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1136
       },
       "label": "CLR"
@@ -1463,7 +1463,7 @@
       "id": "bus",
       "kind": "led",
       "pos": {
-        "x": 760,
+        "x": 752,
         "y": 920
       },
       "label": "BUS",
@@ -1477,7 +1477,7 @@
       "id": "pd0",
       "kind": "pulldown",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 1160
       }
     },
@@ -1485,7 +1485,7 @@
       "id": "pd1",
       "kind": "pulldown",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 1160
       }
     },
@@ -1493,7 +1493,7 @@
       "id": "pd2",
       "kind": "pulldown",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 1160
       }
     },
@@ -1501,7 +1501,7 @@
       "id": "pd3",
       "kind": "pulldown",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 1160
       }
     },
@@ -1509,7 +1509,7 @@
       "id": "pd4",
       "kind": "pulldown",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 1160
       }
     },
@@ -1517,7 +1517,7 @@
       "id": "pd5",
       "kind": "pulldown",
       "pos": {
-        "x": 852,
+        "x": 856,
         "y": 1160
       }
     },
@@ -1525,7 +1525,7 @@
       "id": "pd6",
       "kind": "pulldown",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 1160
       }
     },
@@ -1533,7 +1533,7 @@
       "id": "pd7",
       "kind": "pulldown",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 1160
       }
     },
@@ -1541,7 +1541,7 @@
       "id": "opb0",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 336
       },
       "label": "B0",
@@ -1551,7 +1551,7 @@
       "id": "opb1",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 352
       },
       "label": "B1",
@@ -1561,7 +1561,7 @@
       "id": "opb2",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 368
       },
       "label": "B2",
@@ -1571,7 +1571,7 @@
       "id": "opb3",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 384
       },
       "label": "B3",
@@ -1581,7 +1581,7 @@
       "id": "opb4",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 400
       },
       "label": "B4",
@@ -1591,7 +1591,7 @@
       "id": "opb5",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 416
       },
       "label": "B5",
@@ -1601,7 +1601,7 @@
       "id": "opb6",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 432
       },
       "label": "B6",
@@ -1611,7 +1611,7 @@
       "id": "opb7",
       "kind": "netlabel",
       "pos": {
-        "x": 436,
+        "x": 440,
         "y": 448
       },
       "label": "B7",
@@ -1621,7 +1621,7 @@
       "id": "opa0",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 112
       },
       "label": "A0"
@@ -1630,7 +1630,7 @@
       "id": "opa1",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 128
       },
       "label": "A1"
@@ -1639,7 +1639,7 @@
       "id": "opa2",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 144
       },
       "label": "A2"
@@ -1648,7 +1648,7 @@
       "id": "opa3",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 160
       },
       "label": "A3"
@@ -1657,7 +1657,7 @@
       "id": "opa4",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 176
       },
       "label": "A4"
@@ -1666,7 +1666,7 @@
       "id": "opa5",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 192
       },
       "label": "A5"
@@ -1675,7 +1675,7 @@
       "id": "opa6",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 208
       },
       "label": "A6"
@@ -1684,7 +1684,7 @@
       "id": "opa7",
       "kind": "netlabel",
       "pos": {
-        "x": 1470,
+        "x": 1472,
         "y": 224
       },
       "label": "A7"
@@ -1693,8 +1693,8 @@
       "id": "lt244",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 974
+        "x": 1776,
+        "y": 976
       },
       "label": "A0",
       "mirror": true
@@ -1703,8 +1703,8 @@
       "id": "lt245",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 890
+        "x": 1536,
+        "y": 888
       },
       "label": "B0",
       "mirror": true
@@ -1713,8 +1713,8 @@
       "id": "lt246",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
-        "y": 942
+        "x": 1776,
+        "y": 944
       },
       "label": "A1",
       "mirror": true
@@ -1723,8 +1723,8 @@
       "id": "lt247",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
-        "y": 938
+        "x": 1536,
+        "y": 936
       },
       "label": "B1",
       "mirror": true
@@ -1733,8 +1733,8 @@
       "id": "lt248",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 942
+        "x": 1936,
+        "y": 944
       },
       "label": "A2"
     },
@@ -1742,8 +1742,8 @@
       "id": "lt249",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 970
+        "x": 1696,
+        "y": 968
       },
       "label": "B2"
     },
@@ -1751,8 +1751,8 @@
       "id": "lt250",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
-        "y": 974
+        "x": 1936,
+        "y": 976
       },
       "label": "A3"
     },
@@ -1760,8 +1760,8 @@
       "id": "lt251",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
-        "y": 922
+        "x": 1696,
+        "y": 920
       },
       "label": "B3"
     },
@@ -1769,7 +1769,7 @@
       "id": "lt252",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 784
       },
       "label": "A4",
@@ -1779,7 +1779,7 @@
       "id": "lt253",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 720
       },
       "label": "B4",
@@ -1789,7 +1789,7 @@
       "id": "lt254",
       "kind": "netlabel",
       "pos": {
-        "x": 1772,
+        "x": 1776,
         "y": 752
       },
       "label": "A5",
@@ -1799,7 +1799,7 @@
       "id": "lt255",
       "kind": "netlabel",
       "pos": {
-        "x": 1532,
+        "x": 1536,
         "y": 768
       },
       "label": "B5",
@@ -1809,7 +1809,7 @@
       "id": "lt256",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 752
       },
       "label": "A6"
@@ -1818,7 +1818,7 @@
       "id": "lt257",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 800
       },
       "label": "B6"
@@ -1827,7 +1827,7 @@
       "id": "lt258",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 784
       },
       "label": "A7"
@@ -1836,7 +1836,7 @@
       "id": "lt259",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 752
       },
       "label": "B7"
@@ -1845,7 +1845,7 @@
       "id": "vio",
       "kind": "vcc",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 64
       },
       "group": "gin"
@@ -1854,7 +1854,7 @@
       "id": "gio",
       "kind": "gnd",
       "pos": {
-        "x": 420,
+        "x": 424,
         "y": 144
       },
       "group": "gin"
@@ -1863,7 +1863,7 @@
       "id": "gbh",
       "kind": "gnd",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 456
       },
       "group": "grb"
@@ -1872,7 +1872,7 @@
       "id": "vbo",
       "kind": "vcc",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 496
       },
       "group": "grb"
@@ -1881,7 +1881,7 @@
       "id": "gbo",
       "kind": "gnd",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 696
       },
       "group": "grb"
@@ -1890,7 +1890,7 @@
       "id": "vbl",
       "kind": "vcc",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 704
       },
       "group": "grb"
@@ -1899,7 +1899,7 @@
       "id": "gah",
       "kind": "gnd",
       "pos": {
-        "x": 1188,
+        "x": 1192,
         "y": 208
       },
       "group": "gra"
@@ -1908,7 +1908,7 @@
       "id": "vao",
       "kind": "vcc",
       "pos": {
-        "x": 1020,
+        "x": 1024,
         "y": 248
       },
       "group": "gra"
@@ -1917,7 +1917,7 @@
       "id": "gao",
       "kind": "gnd",
       "pos": {
-        "x": 1188,
+        "x": 1192,
         "y": 448
       },
       "group": "gra"
@@ -1926,7 +1926,7 @@
       "id": "val",
       "kind": "vcc",
       "pos": {
-        "x": 1020,
+        "x": 1024,
         "y": 472
       },
       "group": "gra"
@@ -1935,7 +1935,7 @@
       "id": "geo",
       "kind": "gnd",
       "pos": {
-        "x": 1188,
+        "x": 1192,
         "y": 880
       },
       "group": "galu"
@@ -1944,7 +1944,7 @@
       "id": "gxh",
       "kind": "gnd",
       "pos": {
-        "x": 1524,
+        "x": 1528,
         "y": 832
       },
       "group": "galu"
@@ -1953,8 +1953,8 @@
       "id": "vxl",
       "kind": "vcc",
       "pos": {
-        "x": 1692,
-        "y": 850
+        "x": 1696,
+        "y": 848
       },
       "group": "galu"
     },
@@ -1962,8 +1962,8 @@
       "id": "gxl",
       "kind": "gnd",
       "pos": {
-        "x": 1524,
-        "y": 1002
+        "x": 1528,
+        "y": 1000
       },
       "group": "galu"
     },
@@ -1971,7 +1971,7 @@
       "id": "gsh",
       "kind": "gnd",
       "pos": {
-        "x": 1764,
+        "x": 1768,
         "y": 848
       },
       "group": "galu"
@@ -1980,8 +1980,8 @@
       "id": "vsl",
       "kind": "vcc",
       "pos": {
-        "x": 1932,
-        "y": 870
+        "x": 1936,
+        "y": 872
       },
       "group": "galu"
     },
@@ -1989,8 +1989,8 @@
       "id": "gsl",
       "kind": "gnd",
       "pos": {
-        "x": 1764,
-        "y": 1038
+        "x": 1768,
+        "y": 1040
       },
       "group": "galu"
     },
@@ -1998,7 +1998,7 @@
       "id": "vnor",
       "kind": "vcc",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 1080
       },
       "group": "galu"
@@ -2007,7 +2007,7 @@
       "id": "gnor",
       "kind": "gnd",
       "pos": {
-        "x": 1524,
+        "x": 1528,
         "y": 1232
       },
       "group": "galu"
@@ -2016,7 +2016,7 @@
       "id": "vand",
       "kind": "vcc",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 1080
       },
       "group": "galu"
@@ -2025,7 +2025,7 @@
       "id": "gand",
       "kind": "gnd",
       "pos": {
-        "x": 1764,
+        "x": 1768,
         "y": 1232
       },
       "group": "galu"
@@ -2034,7 +2034,7 @@
       "id": "vfl",
       "kind": "vcc",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1080
       },
       "group": "galu"
@@ -2043,7 +2043,7 @@
       "id": "gfl",
       "kind": "gnd",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1248
       },
       "group": "galu"
@@ -2071,7 +2071,7 @@
       "id": "lt318",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 104
       },
       "group": "gin",
@@ -2082,8 +2082,8 @@
       "id": "tvgrb1",
       "kind": "vcc",
       "pos": {
-        "x": 60,
-        "y": 436
+        "x": 64,
+        "y": 440
       },
       "group": "grb"
     },
@@ -2091,8 +2091,8 @@
       "id": "tlvgrb1",
       "kind": "netlabel",
       "pos": {
-        "x": 108,
-        "y": 452
+        "x": 112,
+        "y": 456
       },
       "group": "grb",
       "label": "VCC"
@@ -2101,7 +2101,7 @@
       "id": "lt321",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 536
       },
       "group": "grb",
@@ -2113,7 +2113,7 @@
       "kind": "gnd",
       "pos": {
         "x": 64,
-        "y": 516
+        "y": 520
       },
       "group": "grb"
     },
@@ -2122,7 +2122,7 @@
       "kind": "netlabel",
       "pos": {
         "x": 112,
-        "y": 500
+        "y": 504
       },
       "group": "grb",
       "label": "GND"
@@ -2131,7 +2131,7 @@
       "id": "lt329",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 328
       },
       "group": "grb",
@@ -2142,7 +2142,7 @@
       "id": "lt330",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 344
       },
       "group": "grb",
@@ -2153,7 +2153,7 @@
       "id": "lt331",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 744
       },
       "group": "grb",
@@ -2164,7 +2164,7 @@
       "id": "lt332",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 760
       },
       "group": "grb",
@@ -2175,7 +2175,7 @@
       "id": "tggra4",
       "kind": "gnd",
       "pos": {
-        "x": 1620,
+        "x": 1624,
         "y": 224
       },
       "group": "gra"
@@ -2184,7 +2184,7 @@
       "id": "tlggra4",
       "kind": "netlabel",
       "pos": {
-        "x": 1668,
+        "x": 1672,
         "y": 208
       },
       "group": "gra",
@@ -2194,7 +2194,7 @@
       "id": "lt335",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 80
       },
       "group": "gra",
@@ -2204,7 +2204,7 @@
       "id": "lt336",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 96
       },
       "group": "gra",
@@ -2214,7 +2214,7 @@
       "id": "lt337",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 512
       },
       "group": "gra",
@@ -2224,7 +2224,7 @@
       "id": "lt338",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 528
       },
       "group": "gra",
@@ -2253,7 +2253,7 @@
       "id": "lt354",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 288
       },
       "group": "gra",
@@ -2282,7 +2282,7 @@
       "id": "lt357",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1184
       },
       "group": "galu",
@@ -2292,7 +2292,7 @@
       "id": "lt358",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1200
       },
       "group": "galu",
@@ -2302,7 +2302,7 @@
       "id": "lt359",
       "kind": "netlabel",
       "pos": {
-        "x": 2172,
+        "x": 2176,
         "y": 1216
       },
       "group": "galu",
@@ -2312,7 +2312,7 @@
       "id": "lt360",
       "kind": "netlabel",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1120
       },
       "group": "galu",
@@ -2323,7 +2323,7 @@
       "id": "lt361",
       "kind": "netlabel",
       "pos": {
-        "x": 2004,
+        "x": 2008,
         "y": 1136
       },
       "group": "galu",
@@ -2353,7 +2353,7 @@
       "id": "lt364",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 720
       },
       "group": "galu",
@@ -2363,7 +2363,7 @@
       "id": "lvbh",
       "kind": "netlabel",
       "pos": {
-        "x": 812,
+        "x": 816,
         "y": 328
       },
       "group": "grb",
@@ -2373,7 +2373,7 @@
       "id": "lgbl",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 856
       },
       "group": "grb",
@@ -2384,7 +2384,7 @@
       "id": "lvah",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 80
       },
       "group": "gra",
@@ -2395,7 +2395,7 @@
       "id": "lgal",
       "kind": "netlabel",
       "pos": {
-        "x": 1172,
+        "x": 1176,
         "y": 624
       },
       "group": "gra",
@@ -2405,7 +2405,7 @@
       "id": "lveo",
       "kind": "netlabel",
       "pos": {
-        "x": 1004,
+        "x": 1008,
         "y": 720
       },
       "group": "galu",
@@ -2416,7 +2416,7 @@
       "id": "lvxh",
       "kind": "netlabel",
       "pos": {
-        "x": 1692,
+        "x": 1696,
         "y": 720
       },
       "group": "galu",
@@ -2426,7 +2426,7 @@
       "id": "lvsh",
       "kind": "netlabel",
       "pos": {
-        "x": 1932,
+        "x": 1936,
         "y": 720
       },
       "group": "galu",
@@ -2436,7 +2436,7 @@
       "id": "lgio",
       "kind": "netlabel",
       "pos": {
-        "x": 644,
+        "x": 648,
         "y": 248
       },
       "group": "gin",
@@ -2447,7 +2447,7 @@
       "id": "tlgio",
       "kind": "netlabel",
       "pos": {
-        "x": 468,
+        "x": 472,
         "y": 128
       },
       "group": "gin",
@@ -4791,16 +4791,16 @@
       },
       "points": [
         {
-          "x": 580,
-          "y": 92
+          "x": 576,
+          "y": 88
         },
         {
-          "x": 580,
-          "y": 108
+          "x": 576,
+          "y": 104
         },
         {
-          "x": 556,
-          "y": 108
+          "x": 552,
+          "y": 104
         }
       ]
     },
@@ -4832,15 +4832,15 @@
       },
       "points": [
         {
-          "x": 100,
+          "x": 104,
           "y": 464
         },
         {
-          "x": 100,
+          "x": 104,
           "y": 480
         },
         {
-          "x": 76,
+          "x": 80,
           "y": 480
         }
       ]
@@ -4874,7 +4874,7 @@
       "points": [
         {
           "x": 80,
-          "y": 508
+          "y": 512
         }
       ]
     },
@@ -5023,16 +5023,16 @@
       },
       "points": [
         {
-          "x": 1124,
-          "y": 252
+          "x": 1120,
+          "y": 248
         },
         {
-          "x": 1124,
-          "y": 268
+          "x": 1120,
+          "y": 264
         },
         {
-          "x": 1100,
-          "y": 268
+          "x": 1096,
+          "y": 264
         }
       ]
     },
@@ -5153,16 +5153,16 @@
       },
       "points": [
         {
-          "x": 1268,
-          "y": 772
+          "x": 1264,
+          "y": 768
         },
         {
-          "x": 1268,
-          "y": 788
+          "x": 1264,
+          "y": 784
         },
         {
-          "x": 1244,
-          "y": 788
+          "x": 1240,
+          "y": 784
         }
       ]
     },
@@ -6513,7 +6513,7 @@
       },
       "points": [
         {
-          "x": 1326,
+          "x": 1328,
           "y": 120
         }
       ]
@@ -6594,7 +6594,7 @@
       },
       "points": [
         {
-          "x": 1342,
+          "x": 1344,
           "y": 136
         }
       ]
@@ -6675,7 +6675,7 @@
       },
       "points": [
         {
-          "x": 1278,
+          "x": 1280,
           "y": 152
         }
       ]
@@ -6756,7 +6756,7 @@
       },
       "points": [
         {
-          "x": 1246,
+          "x": 1248,
           "y": 168
         }
       ]
@@ -6837,7 +6837,7 @@
       },
       "points": [
         {
-          "x": 1230,
+          "x": 1232,
           "y": 168
         }
       ]
@@ -6918,7 +6918,7 @@
       },
       "points": [
         {
-          "x": 1262,
+          "x": 1264,
           "y": 152
         }
       ]
@@ -6999,7 +6999,7 @@
       },
       "points": [
         {
-          "x": 1294,
+          "x": 1296,
           "y": 136
         }
       ]
@@ -7080,7 +7080,7 @@
       },
       "points": [
         {
-          "x": 1310,
+          "x": 1312,
           "y": 120
         }
       ]
@@ -7162,7 +7162,7 @@
       },
       "points": [
         {
-          "x": 436,
+          "x": 440,
           "y": 136
         }
       ]
@@ -7716,7 +7716,7 @@
       },
       "points": [
         {
-          "x": 964,
+          "x": 968,
           "y": 256
         }
       ],
@@ -7735,7 +7735,7 @@
       },
       "points": [
         {
-          "x": 980,
+          "x": 984,
           "y": 240
         }
       ],
@@ -7754,7 +7754,7 @@
       },
       "points": [
         {
-          "x": 900,
+          "x": 904,
           "y": 224
         }
       ],
@@ -7773,7 +7773,7 @@
       },
       "points": [
         {
-          "x": 932,
+          "x": 936,
           "y": 208
         }
       ],
@@ -7792,7 +7792,7 @@
       },
       "points": [
         {
-          "x": 916,
+          "x": 920,
           "y": 168
         }
       ],
@@ -7811,7 +7811,7 @@
       },
       "points": [
         {
-          "x": 868,
+          "x": 872,
           "y": 152
         }
       ],
@@ -7830,7 +7830,7 @@
       },
       "points": [
         {
-          "x": 884,
+          "x": 888,
           "y": 136
         }
       ],
@@ -7849,7 +7849,7 @@
       },
       "points": [
         {
-          "x": 948,
+          "x": 952,
           "y": 120
         }
       ],
@@ -7908,308 +7908,308 @@
     {
       "id": "b0j688",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 688
       }
     },
     {
       "id": "b0j848",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 832
       }
     },
     {
       "id": "b0j888",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 440
       }
     },
     {
       "id": "b0j1048",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 600
       }
     },
     {
       "id": "b0j1320",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 872
       }
     },
     {
       "id": "b0j1984",
       "pos": {
-        "x": 964,
+        "x": 968,
         "y": 1104
       }
     },
     {
       "id": "b1j672",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 672
       }
     },
     {
       "id": "b1j832",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 816
       }
     },
     {
       "id": "b1j872",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 424
       }
     },
     {
       "id": "b1j1032",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 584
       }
     },
     {
       "id": "b1j1304",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 856
       }
     },
     {
       "id": "b1j1960",
       "pos": {
-        "x": 980,
+        "x": 984,
         "y": 1080
       }
     },
     {
       "id": "b2j656",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 656
       }
     },
     {
       "id": "b2j816",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 800
       }
     },
     {
       "id": "b2j856",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 408
       }
     },
     {
       "id": "b2j1016",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 568
       }
     },
     {
       "id": "b2j1288",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 840
       }
     },
     {
       "id": "b2j1936",
       "pos": {
-        "x": 900,
+        "x": 904,
         "y": 1056
       }
     },
     {
       "id": "b3j640",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 640
       }
     },
     {
       "id": "b3j800",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 784
       }
     },
     {
       "id": "b3j840",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 392
       }
     },
     {
       "id": "b3j1000",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 552
       }
     },
     {
       "id": "b3j1272",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 824
       }
     },
     {
       "id": "b3j1912",
       "pos": {
-        "x": 932,
+        "x": 936,
         "y": 1032
       }
     },
     {
       "id": "b4j416",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 416
       }
     },
     {
       "id": "b4j624",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 624
       }
     },
     {
       "id": "b4j824",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 376
       }
     },
     {
       "id": "b4j1256",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 808
       }
     },
     {
       "id": "b4j1888",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 1008
       }
     },
     {
       "id": "b5j400",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 400
       }
     },
     {
       "id": "b5j608",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 608
       }
     },
     {
       "id": "b5j808",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 360
       }
     },
     {
       "id": "b5j1240",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 792
       }
     },
     {
       "id": "b5j1864",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 984
       }
     },
     {
       "id": "b6j384",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 384
       }
     },
     {
       "id": "b6j592",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 592
       }
     },
     {
       "id": "b6j792",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 344
       }
     },
     {
       "id": "b6j1224",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 776
       }
     },
     {
       "id": "b6j1840",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 960
       }
     },
     {
       "id": "b7j368",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 368
       }
     },
     {
       "id": "b7j576",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 576
       }
     },
     {
       "id": "b7j776",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 328
       }
     },
     {
       "id": "b7j1208",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 760
       }
     },
     {
       "id": "b7j1816",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 936
       }
     },
@@ -8384,196 +8384,196 @@
     {
       "id": "qa0j872",
       "pos": {
-        "x": 1326,
+        "x": 1328,
         "y": 424
       }
     },
     {
       "id": "qa0j984",
       "pos": {
-        "x": 1326,
+        "x": 1328,
         "y": 536
       }
     },
     {
       "id": "qa0j1048",
       "pos": {
-        "x": 1326,
+        "x": 1328,
         "y": 600
       }
     },
     {
       "id": "qa1j856",
       "pos": {
-        "x": 1342,
+        "x": 1344,
         "y": 408
       }
     },
     {
       "id": "qa1j960",
       "pos": {
-        "x": 1342,
+        "x": 1344,
         "y": 512
       }
     },
     {
       "id": "qa1j1032",
       "pos": {
-        "x": 1342,
+        "x": 1344,
         "y": 584
       }
     },
     {
       "id": "qa2j840",
       "pos": {
-        "x": 1278,
+        "x": 1280,
         "y": 392
       }
     },
     {
       "id": "qa2j936",
       "pos": {
-        "x": 1278,
+        "x": 1280,
         "y": 488
       }
     },
     {
       "id": "qa2j1016",
       "pos": {
-        "x": 1278,
+        "x": 1280,
         "y": 568
       }
     },
     {
       "id": "qa3j824",
       "pos": {
-        "x": 1246,
+        "x": 1248,
         "y": 376
       }
     },
     {
       "id": "qa3j912",
       "pos": {
-        "x": 1246,
+        "x": 1248,
         "y": 464
       }
     },
     {
       "id": "qa3j1000",
       "pos": {
-        "x": 1246,
+        "x": 1248,
         "y": 552
       }
     },
     {
       "id": "qa4j632",
       "pos": {
-        "x": 1230,
+        "x": 1232,
         "y": 184
       }
     },
     {
       "id": "qa4j808",
       "pos": {
-        "x": 1230,
+        "x": 1232,
         "y": 360
       }
     },
     {
       "id": "qa4j888",
       "pos": {
-        "x": 1230,
+        "x": 1232,
         "y": 440
       }
     },
     {
       "id": "qa5j648",
       "pos": {
-        "x": 1262,
+        "x": 1264,
         "y": 200
       }
     },
     {
       "id": "qa5j792",
       "pos": {
-        "x": 1262,
+        "x": 1264,
         "y": 344
       }
     },
     {
       "id": "qa5j864",
       "pos": {
-        "x": 1262,
+        "x": 1264,
         "y": 416
       }
     },
     {
       "id": "qa6j664",
       "pos": {
-        "x": 1294,
+        "x": 1296,
         "y": 216
       }
     },
     {
       "id": "qa6j776",
       "pos": {
-        "x": 1294,
+        "x": 1296,
         "y": 328
       }
     },
     {
       "id": "qa6j840",
       "pos": {
-        "x": 1294,
+        "x": 1296,
         "y": 392
       }
     },
     {
       "id": "qa7j680",
       "pos": {
-        "x": 1310,
+        "x": 1312,
         "y": 232
       }
     },
     {
       "id": "qa7j760",
       "pos": {
-        "x": 1310,
+        "x": 1312,
         "y": 312
       }
     },
     {
       "id": "qa7j816",
       "pos": {
-        "x": 1310,
+        "x": 1312,
         "y": 368
       }
     },
     {
       "id": "b4j824t1",
       "pos": {
-        "x": 916,
+        "x": 920,
         "y": 192
       }
     },
     {
       "id": "b5j808t2",
       "pos": {
-        "x": 868,
+        "x": 872,
         "y": 176
       }
     },
     {
       "id": "b6j792t3",
       "pos": {
-        "x": 884,
+        "x": 888,
         "y": 160
       }
     },
     {
       "id": "b7j776t4",
       "pos": {
-        "x": 948,
+        "x": 952,
         "y": 144
       }
     }

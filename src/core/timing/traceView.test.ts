@@ -72,6 +72,33 @@ describe('trackList', () => {
     expect(timer?.net).toBe(led?.net);
   });
 
+  it('a pattern gets a track on its output at full width, clocked or not, even unnamed', () => {
+    for (const clocked of [false, true]) {
+      const b = board({
+        components: [comp('ck', 'clock'), comp('p', 'pattern', { width: 4, clocked })],
+        wires: clocked ? [wire('w1', ['ck', 'y'], ['p', 'clk'])] : [],
+      });
+      const c = compile(b, new Map());
+      const tr = trackList(b, c).find((t) => t.path === 'main/p');
+      const pi = c.componentToPrimitive.get('main/p')!;
+      expect(tr?.kind).toBe('pattern');
+      expect(tr?.width).toBe(4);
+      expect(tr?.net).toBe(c.primitives[pi]!.outputs[0]);
+    }
+  });
+
+  it('never flags a fast pattern step as a glitch, since it is a source', () => {
+    const b = board({ components: [comp('p', 'pattern', { values: '0 1 0' })], wires: [] });
+    const c = compile(b, new Map());
+    const net = trackList(b, c)[0]!.net;
+    const records = [
+      rec(0, net, bv.known(0, 1)),
+      rec(100_000, net, bv.known(1, 1)),
+      rec(105_000, net, bv.known(0, 1)),
+    ];
+    expect(buildTraceView(b, c, records, { column: 'typ' }).glitches).toEqual([]);
+  });
+
   it('an SPDT gets a track per throw, even unnamed', () => {
     const b = board({ components: [comp('s', 'spdt')], wires: [] });
     const tracks = trackList(b, compile(b, new Map()));

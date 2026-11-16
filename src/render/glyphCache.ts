@@ -61,6 +61,7 @@ let tileCount = 0;
 let maxTiles = MIN_TILES;
 let buildMsLeft = Infinity;
 let buildsDeferred = false;
+let bypass = false;
 
 export function clearGlyphCache(): void {
   cache.clear();
@@ -91,6 +92,23 @@ export function drawWithGlyphBudget(draw: () => void, budgetMs = BUILD_BUDGET_MS
 // starts with an empty cache anyway.
 if (import.meta.hot) import.meta.hot.on('vite:beforeUpdate', clearGlyphCache);
 
+/**
+ * Runs `draw` with every glyph painted straight to its context, so a one-off
+ * picture (an example thumbnail) neither evicts the open board's tiles nor
+ * leaves the cap sized to its own part count.
+ */
+export function paintWithoutGlyphCache<T>(draw: () => T): T {
+  const outer = bypass;
+  const cap = maxTiles;
+  bypass = true;
+  try {
+    return draw();
+  } finally {
+    bypass = outer;
+    maxTiles = cap;
+  }
+}
+
 export function glyphCacheSize(): number {
   return tileCount;
 }
@@ -117,6 +135,10 @@ export function drawCachedGlyph(
   paint: (c: CanvasRenderingContext2D) => void,
   pad = SCRATCH_PAD,
 ): void {
+  if (bypass) {
+    paint(ctx);
+    return;
+  }
   const bucket = zoomBucket(scale);
   let tiles = cache.get(key);
   if (tiles) {

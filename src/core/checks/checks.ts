@@ -5,6 +5,7 @@ import type { ChipLibrary, Circuit, Component } from '../model/types';
 import type { CompiledCircuit } from '../model/compile';
 import { componentPaths } from '../model/compile';
 import { pinNet } from '../model/pinNet';
+import { getPackage } from '../parts/packages';
 import {
   circuitNets,
   componentNetPins,
@@ -25,19 +26,22 @@ export type CheckKind =
   | 'power'
   | 'float'
   | 'unused'
+  | 'spare'
   | 'compile'
   | 'fight'
   | 'oscillation';
 
 /** One hideable fact: a pin, or a net keyed by its lowest pin. */
 export interface CheckFinding {
-  kind: Extract<CheckKind, 'unwired' | 'undriven' | 'power' | 'float' | 'unused'>;
+  kind: Extract<CheckKind, 'unwired' | 'undriven' | 'power' | 'float' | 'unused' | 'spare'>;
   /** `kind:component.pin`, the form `hiddenChecks` stores. */
   key: string;
   component: string;
   pin: string;
   /** The finding's net; a float finding is about the whole net. */
   net: CheckNet;
+  /** A spare finding's package section. */
+  section?: number;
 }
 
 export interface CheckRow {
@@ -66,6 +70,7 @@ const SEVERITY: Record<CheckKind, CheckSeverity> = {
   fight: 'warning',
   oscillation: 'warning',
   unused: 'info',
+  spare: 'info',
 };
 
 const SEVERITY_ORDER: Record<CheckSeverity, number> = { error: 0, warning: 1, info: 2 };
@@ -88,6 +93,8 @@ const UNUSED_EXEMPT = new Set([
  *  every enable tied to GND they drive like plain outputs. */
 const ENABLE_ONLY_FLOAT = new Set(['74LS173', '74LS374']);
 
+const GATE_PRIMITIVES = new Set(['nand2', 'nor2', 'not', 'and2', 'or2', 'xor2']);
+
 export const checkKey = (kind: string, component: string, pin: string) =>
   `${kind}:${pinRef(component, pin)}`;
 
@@ -100,23 +107,52 @@ function anchorPin(net: CheckNet): NetPin | undefined {
   return best;
 }
 
+/** Pins of the package sections nobody touched, each with its section: every
+ *  pin the section owns alone is alone on its net. A pin shared by several
+ *  sections (a select, a clock) never makes one spare, and neither does a
+ *  single-section part, which would just be an unused chip. */
+function sparePins(
+  comp: Component,
+  lib: ChipLibrary,
+  byPin: ReadonlyMap<string, CheckNet>,
+): Map<string, number> {
+  const spare = new Map<string, number>();
+  const pkg = comp.kind === 'chip' && comp.defId ? packagePins(lib.get(comp.defId)) : undefined;
+  if (!pkg) return spare;
+  const owned = new Map<number, string[]>();
+  for (const [name, p] of pkg)
+    if (typeof p.gate === 'number') owned.set(p.gate, [...(owned.get(p.gate) ?? []), name]);
+  if (owned.size < 2) return spare;
+  for (const [section, names] of owned)
+    if (names.every((n) => byPin.get(pinRef(comp.id, n))?.pins.length === 1))
+      for (const n of names) spare.set(n, section);
+  return spare;
+}
+
 /** Every static finding on one circuit level, hidden or not. */
 export function staticFindings(circuit: Circuit, lib: ChipLibrary): CheckFinding[] {
   const { nets, byPin } = circuitNets(circuit, lib);
   const out: CheckFinding[] = [];
-  const add = (kind: CheckFinding['kind'], p: NetPin, net: CheckNet) =>
+  const add = (kind: CheckFinding['kind'], p: NetPin, net: CheckNet, section?: number) =>
     out.push({
       kind,
       key: checkKey(kind, p.component, p.pin),
       component: p.component,
       pin: p.pin,
       net,
+      ...(section !== undefined ? { section } : {}),
     });
   const byId = new Map(circuit.components.map((c) => [c.id, c]));
 
   for (const comp of circuit.components) {
+    const spare = sparePins(comp, lib, byPin);
     for (const p of componentNetPins(comp, lib)) {
       const net = byPin.get(pinRef(comp.id, p.pin))!;
+      const section = spare.get(p.pin);
+      if (section !== undefined) {
+        if (p.dir === 'in') add('spare', p, net, section);
+        continue;
+      }
       const others = net.pins.filter((o) => o.component !== p.component || o.pin !== p.pin);
       if (p.supply) {
         if (!others.some(isDriver)) add('power', p, net);
@@ -196,9 +232,16 @@ function namer(circuit: Circuit, lib: ChipLibrary): Namer {
   };
 }
 
+/** The one part owning every driver pin on a net, if there is one. */
+function soleDriver(net: CheckNet): string | undefined {
+  const parts = new Set(net.pins.filter(isDriver).map((p) => p.component));
+  return parts.size === 1 ? [...parts][0] : undefined;
+}
+
 /** Findings minus the hidden ones, grouped into rows: one per component per
- *  kind, one per net for floats. Hidden findings come back as rows of their
- *  own, for the Show hidden list. */
+ *  kind; floats one per net, or one per part when that part is each net's only
+ *  driver. Hidden findings come back as rows of their own, for the Show hidden
+ *  list. */
 export function checkRows(
   findings: readonly CheckFinding[],
   hidden: ReadonlySet<string>,
@@ -206,10 +249,15 @@ export function checkRows(
   lib: ChipLibrary,
 ): { shown: CheckRow[]; hidden: CheckRow[] } {
   const name = namer(circuit, lib);
+  const rowId = (f: CheckFinding) => {
+    if (f.kind !== 'float') return `${f.kind}:${f.component}`;
+    const driver = soleDriver(f.net);
+    return driver ? `float:${driver}` : f.key;
+  };
   const group = (list: readonly CheckFinding[]): CheckRow[] => {
     const rows = new Map<string, CheckFinding[]>();
     for (const f of list) {
-      const id = f.kind === 'float' ? f.key : `${f.kind}:${f.component}`;
+      const id = rowId(f);
       const row = rows.get(id);
       if (row) row.push(f);
       else rows.set(id, [f]);
@@ -236,15 +284,37 @@ function findingRow(
   const onPins = fs.map((x) => ({ component: x.component, pin: x.pin }));
   const isPackage = !!packagePins(componentDef(circuit, lib, f.component));
   switch (f.kind) {
-    case 'float':
+    case 'float': {
+      const driver = fs.length > 1 ? soleDriver(f.net) : undefined;
+      const driven = fs.flatMap((x) =>
+        x.net.pins.filter((p) => isDriver(p) && p.component === driver).map((p) => p.pin),
+      );
       return {
         ...base,
-        title: `Net ${name.net(f.net)} can float`,
+        title: driver
+          ? `${name.part(driver)}: ${name.pins(driver, driven)} can float`
+          : `Net ${name.net(f.net)} can float`,
         detail: 'Only three-state drivers. Add a pull-up or pull-down.',
         components: [],
-        wires: f.net.wires,
+        wires: fs.flatMap((x) => x.net.wires),
         pins: [],
       };
+    }
+    case 'spare': {
+      const sections = [...new Set(fs.map((x) => x.section!))].sort((a, b) => a - b);
+      const def = componentDef(circuit, lib, f.component);
+      const noun = GATE_PRIMITIVES.has(getPackage(def?.id ?? '')?.primitive ?? '')
+        ? 'gate'
+        : 'section';
+      return {
+        ...base,
+        title: `${name.part(f.component)}: ${noun}${sections.length > 1 ? 's' : ''} ${sections.join(', ')} spare`,
+        detail: 'Inputs open. On a breadboard tie them to VCC or GND.',
+        components: [f.component],
+        wires: [],
+        pins: onPins,
+      };
+    }
     case 'power': {
       const pkg = packagePins(componentDef(circuit, lib, f.component));
       const rails = fs.map((x) => `${x.pin} (pin ${pkg?.get(x.pin)?.number ?? '?'})`).join(', ');

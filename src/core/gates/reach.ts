@@ -67,6 +67,8 @@ export interface TerminalRef {
   group?: string;
   /** What a message calls the terminal, never a path. */
   name?: string;
+  /** Reads the complement of its net: an active-low LED's column is its lit state. */
+  inverted?: boolean;
 }
 
 /** One representative terminal per resolved net: labeled first, then pure
@@ -78,16 +80,17 @@ export function dedupTerminals(
 ): TerminalRef[] {
   const rank = (t: TerminalRef): number =>
     (t.labeled ? 0 : 2) + (t.kind === 'inport' || t.kind === 'outport' ? 0 : 1);
-  const byNet = new Map<number, TerminalRef>();
-  const order: number[] = [];
+  // Keyed by polarity too: a net and its complement are two functions.
+  const byNet = new Map<string, TerminalRef>();
+  const order: string[] = [];
   for (const t of terminals) {
-    const net = resolve(circuit, t.path);
-    const cur = byNet.get(net);
+    const key = `${resolve(circuit, t.path)}${t.inverted ? '~' : ''}`;
+    const cur = byNet.get(key);
     if (!cur) {
-      byNet.set(net, t);
-      order.push(net);
+      byNet.set(key, t);
+      order.push(key);
     } else if (rank(t) < rank(cur)) {
-      byNet.set(net, t);
+      byNet.set(key, t);
     }
   }
   return order.map((n) => byNet.get(n)!);
