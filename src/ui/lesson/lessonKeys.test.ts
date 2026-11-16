@@ -93,3 +93,13 @@ describe('lesson keys', () => {
     expect(press('PageDown', 'TEXTAREA').taken).toBe(false);
   });
 });
+
+describe('Esc and autoplay', () => {
+  it("stops autoplay and takes the key; with autoplay off Esc is not the lesson's", () => {
+    useLessonStore.getState().open(lesson);
+    expect(press('Escape').taken).toBe(false);
+    useLessonStore.getState().startAutoplay();
+    expect(press('Escape')).toEqual({ taken: true, prevented: true });
+    expect(useLessonStore.getState().autoplay).toBe(false);
+  });
+});

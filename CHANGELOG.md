@@ -5,6 +5,25 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
 updating for, the patch digit is reserved for a critical one-off fix).
 
+## [0.8.1] - 2026-11-16
+
+### Added
+
+- Save Chip: on a chip tab, Save and Ctrl+S write the chip back to its own
+  `.lcirc` with the same id, and Save Chip As picks a new file.
+- Lesson autoplay, started from the lesson panel or the Lesson menu, with a
+  pace setting and an option to wait on questions.
+- Seven new lessons: basic gates, De Morgan, adders, propagation delay,
+  multiplexers, decoders and the SR latch.
+- In presentation mode, a tab on the board's left edge opens the parts.
+
+### Fixed
+
+- Unsaved chip edits now warn before a tab closes, a board is replaced or
+  the page is left.
+- The File menu no longer reorders itself while you edit.
+- A lesson opened after a reload no longer shows its example's chips as "?".
+
 ## [0.8.0] - 2026-11-16
 
 ### Added

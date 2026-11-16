@@ -46,7 +46,7 @@ export function newLesson(boardId: string, takenIds: ReadonlySet<string>): Lesso
   const title = 'Untitled lesson';
   return {
     format: 'lcir.lesson',
-    formatVersion: 3,
+    formatVersion: 4,
     id: uniqueId(slugify(title), takenIds),
     title,
     workbench: 'circuit',

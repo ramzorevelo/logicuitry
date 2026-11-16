@@ -10,6 +10,7 @@ import { useModalKeys } from '../modalKeys';
 import { useCircuitStore } from './circuitStore';
 import { useShellStore } from '../store';
 import { exportDoc, pickDirectory, writeDoc } from '../../io/fsAccess';
+import { rememberChipSource } from '../document/chipSave';
 import { CHIP_TINTS, colorName, schematicTheme, type ChipTint } from '../../render/theme';
 import {
   cloneCircuit,
@@ -207,8 +208,10 @@ export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
           dir = null;
         }
       }
-      if (dir) await writeDoc(dir, 'chips', `${id}${CHIP_EXT}`, def);
-      else exportDoc(def, `${id}${CHIP_EXT}`);
+      if (dir) {
+        await writeDoc(dir, 'chips', `${id}${CHIP_EXT}`, def);
+        rememberChipSource(id, { kind: 'library', dir, name: `${id}${CHIP_EXT}` });
+      } else exportDoc(def, `${id}${CHIP_EXT}`);
     } catch {
       exportDoc(def, `${id}${CHIP_EXT}`);
     } finally {

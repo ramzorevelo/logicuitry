@@ -353,11 +353,13 @@ export interface LessonStep {
   annots?: LessonAnnotation[];
   /** Predict only: a student alone may reveal without picking a choice. */
   revealFreely?: boolean;
+  /** Autoplay time on this step, seconds; absent means the reading-speed default. */
+  seconds?: number;
 }
 
 export interface Lesson {
   format: 'lcir.lesson';
-  formatVersion: 3;
+  formatVersion: 4;
   id: string;
   title: string;
   workbench: 'numbers' | 'gates' | 'circuit' | 'devicelab';

@@ -215,6 +215,8 @@ export type Tab =
        *  cloned (`cloneCircuit`) so it never aliases the live, editable def.
        *  Restored verbatim on Discard. */
       baseline: ChipDef;
+      /** The live def as last opened or saved: any other def object is unsaved work. */
+      saved: ChipDef;
     };
 
 // One counter PER PREFIX, seeded past whatever ids the board already carries.
@@ -234,6 +236,10 @@ const idPrefix = (kind: string) => ID_PREFIX[kind] ?? kind;
 const sameBody = (a: Circuit, b: Circuit) =>
   JSON.stringify([a.components, a.wires, a.junctions, a.groups ?? []]) ===
   JSON.stringify([b.components, b.wires, b.junctions, b.groups ?? []]);
+
+// An undo back to the saved state still bumps `version`; that alone is nothing to save.
+const sameDefIgnoringVersion = (a: ChipDef, b: ChipDef) =>
+  JSON.stringify({ ...a, version: 0 }) === JSON.stringify({ ...b, version: 0 });
 
 export const seedNextId = (board: Board) => {
   const ids = [
@@ -437,10 +443,10 @@ interface CircuitState {
    *  keeping a param overlay's other edits, and close. */
   cancelLabelConflict: () => void;
 
-  /** Id of a def tab whose close was deferred because it has uncommitted
-   *  history -- the save/discard/cancel dialog is showing for it. */
+  /** Id of a def tab whose close was deferred because it has unsaved edits:
+   *  the save/discard/cancel dialog is showing for it. */
   pendingTabClose: string | null;
-  /** Save: close exactly as if the tab were clean (edits already live in
+  /** Save: close once the caller has written the chip (edits stay live in
    *  chipLib). Discard: restore the def to its baseline (running it back
    *  through commitDefEdit so pin re-derivation, renamePinRefs, and
    *  detachRemovedPins all apply symmetrically to a forward edit) before
@@ -457,11 +463,15 @@ interface CircuitState {
   /** Whether the active tab's history has a step to undo or redo. Read on render, which `rev` drives. */
   canUndo: () => boolean;
   canRedo: () => boolean;
-  /** Some open chip tab holds edits its history could undo; replacing the board closes them all. */
+  /** Some open chip tab holds unsaved edits; replacing the board closes them all. */
   hasTabEdits: () => boolean;
+  /** The tab is a chip tab whose def changed since it opened or was last saved. */
+  chipTabDirty: (tabId: string) => boolean;
+  /** `written` (default: the def as it is now) is on disk: it becomes the tabs' clean mark and
+   *  their Discard point. */
+  markChipSaved: (defId: string, written?: ChipDef) => void;
   openDefTab: (defId: string, prefix: string, breadcrumb: string) => void;
-  /** No-op (dialog opens instead) when the tab's own undo history has at
-   *  least one committed command -- see `resolveTabClose`. */
+  /** No-op (dialog opens instead) when the chip has unsaved edits; see `resolveTabClose`. */
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   /** Replaces the working board wholesale (session restore, File > Open, New).
@@ -2784,8 +2794,23 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     activeCircuit,
     canUndo: () => historyFor(activeTab().id).canUndo,
     canRedo: () => historyFor(activeTab().id).canRedo,
-    hasTabEdits: () =>
-      get().tabs.some((t) => t.kind === 'def' && historyByTab.get(t.id)?.canUndo === true),
+    hasTabEdits: () => get().tabs.some((t) => get().chipTabDirty(t.id)),
+    chipTabDirty: (tabId) => {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      if (tab?.kind !== 'def') return false;
+      const def = get().chipLib.get(tab.defId);
+      return def !== undefined && def !== tab.saved && !sameDefIgnoringVersion(def, tab.saved);
+    },
+    markChipSaved: (defId, written) => {
+      const def = written ?? get().chipLib.get(defId);
+      if (!def) return;
+      const baseline: ChipDef = { ...def, ...cloneCircuit(def) };
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.kind === 'def' && t.defId === defId ? { ...t, saved: def, baseline } : t,
+        ),
+      }));
+    },
 
     openDefTab: (defId, prefix, breadcrumb) => {
       const existing = get().tabs.find(
@@ -2798,7 +2823,15 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const def = get().chipLib.get(defId);
       if (!def) return;
       const baseline: ChipDef = { ...def, ...cloneCircuit(def) };
-      const tab: Tab = { id: genId('tab'), kind: 'def', defId, prefix, breadcrumb, baseline };
+      const tab: Tab = {
+        id: genId('tab'),
+        kind: 'def',
+        defId,
+        prefix,
+        breadcrumb,
+        baseline,
+        saved: def,
+      };
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
@@ -2813,7 +2846,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const def = tab?.kind === 'def' ? get().chipLib.get(tab.defId) : undefined;
       // A hide alone is no edit to save or discard: Discard would cost a powered board.
       const onlyHides = tab?.kind === 'def' && def !== undefined && sameBody(def, tab.baseline);
-      if (historyByTab.get(id)?.canUndo && !onlyHides) {
+      if (get().chipTabDirty(id) && !onlyHides) {
         set({ pendingTabClose: id });
         return;
       }

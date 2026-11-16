@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 7,
+  "formatVersion": 15,
   "id": "two-to-one-multiplexer",
   "name": "Two-to-one multiplexer",
   "components": [
@@ -243,6 +243,90 @@
   },
   "timing": {
     "mode": "ideal",
-    "datasheet": "typ"
+    "datasheet": "typ",
+    "vendor": "ti"
+  },
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "d0",
+      "s",
+      "d1"
+    ],
+    "expect": [
+      "y"
+    ],
+    "rows": [
+      {
+        "set": [
+          1,
+          0,
+          0
+        ],
+        "expect": [
+          1
+        ],
+        "note": "S = 0 picks D0"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1
+        ],
+        "expect": [
+          0
+        ],
+        "note": "D1 is ignored when S = 0"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1
+        ],
+        "expect": [
+          1
+        ],
+        "note": "S = 1 picks D1"
+      },
+      {
+        "set": [
+          1,
+          1,
+          0
+        ],
+        "expect": [
+          0
+        ],
+        "note": "D0 is ignored when S = 1"
+      },
+      {
+        "set": [
+          1,
+          0,
+          1
+        ],
+        "expect": [
+          1
+        ],
+        "note": "both data high, Y = 1"
+      },
+      {
+        "set": [
+          0,
+          1,
+          0
+        ],
+        "expect": [
+          0
+        ],
+        "note": "both data low, Y = 0"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
   }
 }

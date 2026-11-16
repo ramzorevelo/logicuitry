@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 7,
+  "formatVersion": 15,
   "id": "demultiplexer-on-a-74ls138",
   "name": "Demultiplexer on a 74LS138",
   "components": [
@@ -541,6 +541,127 @@
   },
   "timing": {
     "mode": "ideal",
-    "datasheet": "typ"
+    "datasheet": "typ",
+    "vendor": "ti"
+  },
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "c",
+      "b",
+      "a",
+      "data"
+    ],
+    "expect": [
+      "l0",
+      "l1",
+      "l2",
+      "l3",
+      "l4",
+      "l5",
+      "l6",
+      "l7"
+    ],
+    "rows": [
+      {
+        "set": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "expect": [
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "note": "/Y0 selected"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "expect": [
+          1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "note": "/Y3 selected"
+      },
+      {
+        "set": [
+          1,
+          0,
+          1,
+          0
+        ],
+        "expect": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "/Y5 selected"
+      },
+      {
+        "set": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "expect": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "note": "/Y7 selected"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1,
+          1
+        ],
+        "expect": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "note": "disabled: nothing selected"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
   }
 }

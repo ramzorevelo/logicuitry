@@ -1,10 +1,20 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { isSeparator, isSubmenu, type Menu, type MenuCommand, type MenuId } from './menuModel';
 
 type Contributions = Record<string, readonly Menu[]>;
 
 interface MenuContext {
   contributions: Contributions;
+  /** Sources in the order they first contributed. */
+  order: readonly string[];
   contribute: (source: string, menus: readonly Menu[] | null) => void;
 }
 
@@ -15,7 +25,11 @@ const Ctx = createContext<MenuContext | null>(null);
  *  the shell knowing anything about boards. */
 export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [contributions, setContributions] = useState<Contributions>({});
+  // A rebuilt contribution is removed then re-added by its effect; without a fixed order it
+  // would move to the end and the File menu's sections would swap places.
+  const order = useRef<string[]>([]);
   const contribute = useCallback((source: string, menus: readonly Menu[] | null) => {
+    if (menus !== null && !order.current.includes(source)) order.current.push(source);
     setContributions((prev) => {
       if (menus === null) {
         if (!(source in prev)) return prev;
@@ -26,13 +40,22 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, [source]: menus };
     });
   }, []);
-  const value = useMemo(() => ({ contributions, contribute }), [contributions, contribute]);
+  const value = useMemo(
+    () => ({ contributions, order: order.current, contribute }),
+    [contributions, contribute],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useMenuContributions(): readonly (readonly Menu[])[] {
   const ctx = useContext(Ctx);
-  return useMemo(() => Object.values(ctx?.contributions ?? {}), [ctx?.contributions]);
+  return useMemo(() => {
+    const contributions = ctx?.contributions ?? {};
+    const rank = (s: string) => ctx?.order.indexOf(s) ?? 0;
+    return Object.keys(contributions)
+      .sort((a, b) => rank(a) - rank(b))
+      .map((s) => contributions[s]!);
+  }, [ctx?.contributions, ctx?.order]);
 }
 
 /** Publishes `menus` for as long as the calling component is mounted. Rebuild

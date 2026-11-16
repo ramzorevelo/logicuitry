@@ -6,7 +6,7 @@ export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
   'lcir.chip': 8,
   'lcir.board': 15,
-  'lcir.lesson': 3,
+  'lcir.lesson': 4,
 };
 
 type Migration = (doc: Record<string, unknown>) => Record<string, unknown>;
@@ -199,6 +199,9 @@ registerMigration('lcir.lesson', 1, (doc) => {
 // Lesson v2 -> v3: optional notes, headline, narration placement, annotations
 // and revealFreely per step, absent before.
 registerMigration('lcir.lesson', 2, (doc) => doc);
+
+// Lesson v3 -> v4: an optional autoplay `seconds` per step, absent before.
+registerMigration('lcir.lesson', 3, (doc) => doc);
 
 // Board v13 -> v14: an LED may carry `activeLow`, absent before. A bump, not a
 // silent param, so an older app refuses the file instead of lighting it wrong.

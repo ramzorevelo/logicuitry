@@ -1,0 +1,80 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "adders",
+  "title": "Adders: sum and carry",
+  "workbench": "circuit",
+  "board": "full-adder",
+  "steps": [
+    {
+      "kind": "narrate",
+      "prose": "A **half adder** adds two bits. The **sum** is A XOR B and the **carry** is A AND B. The full adder here is two half adders and an OR gate.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["ha1"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "1 + 0 + 0. One input is high, so **SUM** = 1 and **COUT** = 0. There is nothing to carry.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [1, 0, 0], "when": "open" },
+        { "kind": "highlight", "components": ["a", "b", "cin", "lsum", "lcout"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now 1 + 1 + 0. What do **SUM** and **COUT** show?",
+      "choices": [
+        { "text": "SUM = 1, COUT = 0" },
+        { "text": "SUM = 0, COUT = 1", "right": true },
+        { "text": "SUM = 1, COUT = 1" },
+        { "text": "SUM = 0, COUT = 0" }
+      ],
+      "answer": "1 + 1 = 10 in binary. The low bit is 0 (XOR of two equal inputs) and the 1 is the carry (AND of two ones).",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [1, 1, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["ha1", "lsum", "lcout"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now 1 + 1 + 1, with a carry coming in. What do **SUM** and **COUT** show?",
+      "choices": [
+        { "text": "SUM = 0, COUT = 1" },
+        { "text": "SUM = 1, COUT = 1", "right": true },
+        { "text": "SUM = 1, COUT = 0" }
+      ],
+      "answer": "1 + 1 + 1 = 11 in binary, so both bits are 1. SUM is the XOR of all three inputs, and COUT is 1 when at least two inputs are 1.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [1, 1, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["lsum", "lcout"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "How it got there: the first half adder turns 1 + 1 into sum 0, carry 1. The second adds **CIN** to that sum, giving sum 1, carry 0. The OR gate merges the two carries.",
+      "actions": [{ "kind": "highlight", "components": ["ha1", "ha2", "orc"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Last case, 0 + 1 + 1. Which outputs are 1?",
+      "choices": [
+        { "text": "SUM only" },
+        { "text": "COUT only", "right": true },
+        { "text": "Both" },
+        { "text": "Neither" }
+      ],
+      "answer": "Two ones add to 10: SUM = 0 and COUT = 1. The carry out is the majority of A, B and CIN, whichever two of them are high.",
+      "actions": [
+        { "kind": "row", "index": 4, "set": [0, 1, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["lsum", "lcout"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Remember the two rules: **SUM** = A XOR B XOR CIN (an odd number of ones), **COUT** = majority of A, B, CIN. Play the rest of the sequence with `]` and predict each row first.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    }
+  ]
+}

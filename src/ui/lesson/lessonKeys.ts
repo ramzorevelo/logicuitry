@@ -33,6 +33,12 @@ export function handleLessonKey(e: LessonKeyEvent): boolean {
   if (!run.lesson || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return false;
   const tag = (e.target as { tagName?: string } | null)?.tagName?.toUpperCase() ?? '';
   if (EDITABLE.has(tag)) return false;
+  // While autoplay runs, Esc stops it first; a second Esc reaches the board.
+  if (e.key === 'Escape' && run.autoplay) {
+    e.preventDefault();
+    run.stopAutoplay();
+    return true;
+  }
   if (e.key === 'PageDown' || e.key === 'PageUp') {
     e.preventDefault();
     if (e.key === 'PageDown') run.pageDown();

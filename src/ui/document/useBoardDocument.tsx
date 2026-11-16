@@ -53,8 +53,16 @@ import { LessonUnsavedDialog } from '../lesson/LessonEditor';
 import { lessonFileName } from '../lesson/lessonSave';
 import { newLesson } from '../../core/lesson';
 import { BUILTIN_LESSONS } from '../../examples/lessons';
+import { isBuiltinChipDef } from '../../core/parts/packages';
+import { rememberChipSource, saveOpenChip } from './chipSave';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
+
+export function unsavedDetail(boardDirty: boolean, chipsDirty: boolean): string {
+  if (boardDirty && chipsDirty) return 'This board and an open chip have unsaved changes.';
+  if (chipsDirty) return 'An open chip has unsaved changes.';
+  return 'This board has unsaved changes.';
+}
 
 const editor = () => useLessonEditorStore.getState();
 
@@ -88,6 +96,16 @@ export function useBoardDocument(): BoardDocument {
   // The library root: chips/, boards/ and lessons/ live under it.
   const libraryDir = useShellStore((st) => st.chipsDir);
   const compact = useCompact();
+  // Save and Save As follow the tab in front: a chip tab saves its chip, the board tab the board.
+  const chipTabDefId = useCircuitStore((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    return tab?.kind === 'def' ? tab.defId : null;
+  });
+  const chipDirty = useCircuitStore((s) => s.chipTabDirty(s.activeTabId));
+  const chipReadOnly = useCircuitStore((s) => {
+    const def = chipTabDefId ? s.chipLib.get(chipTabDefId) : undefined;
+    return def !== undefined && isBuiltinChipDef(def);
+  });
 
   // The file this board came from (Save writes back here) and whether it has
   // edits since the last save/load. Both ride along in the autosave so a
@@ -314,11 +332,15 @@ export function useBoardDocument(): BoardDocument {
         useCircuitStore.setState({ error: 'open: This lesson names no board' });
         return;
       }
+      const example = EXAMPLES.find((e) => e.id === id);
       if (store.getState().board.id === id) {
+        // A restored session keeps the board but not an example's own chips.
+        const lib = store.getState().chipLib;
+        const missing = (example?.chips ?? []).filter((c) => !lib.has(c.id));
+        if (missing.length > 0) store.getState().loadChipDefs(structuredClone(missing));
         playLesson(lesson);
         return;
       }
-      const example = EXAMPLES.find((e) => e.id === id);
       if (example) {
         openExampleRef.current(example, () => playLesson(lesson));
         return;
@@ -458,14 +480,27 @@ export function useBoardDocument(): BoardDocument {
   };
 
   const openAsChip = (def: ChipDef, file: DocFile) => {
+    const st = store.getState();
+    const unsavedTab = st.tabs.some(
+      (t) => t.kind === 'def' && t.defId === def.id && st.chipTabDirty(t.id),
+    );
+    if (unsavedTab) {
+      useCircuitStore.setState({
+        error: `open: ${def.name} has unsaved edits in its tab; save or close it first`,
+      });
+      return;
+    }
     const result = store.getState().loadChipDefs([def]);
     if (!result.ok) {
       useCircuitStore.setState({ error: `open: ${result.error}` });
       return;
     }
-    // Same flow as double-clicking an instance; the board tab is untouched, so
-    // Ctrl+S keeps targeting the board.
+    // Same flow as double-clicking an instance. The board tab is untouched; Save
+    // follows whichever tab is in front.
     store.getState().openDefTab(def.id, `${def.id}/`, def.name);
+    store.getState().markChipSaved(def.id);
+    // Kept even for a read-only upload: the save routing is what tells the two apart.
+    rememberChipSource(def.id, { kind: 'file', file });
     if (!docFileWritable(file)) return;
     void rememberRecentBoard({ name: file.name, file, openedAt: Date.now() }).catch(() => {
       // Convenience only.
@@ -540,11 +575,50 @@ export function useBoardDocument(): BoardDocument {
     }
   };
 
-  const fileSaveRef = useRef(fileSave);
-  const fileSaveAsRef = useRef(fileSaveAs);
+  const saveChipDef = (defId: string, saveAs: boolean): Promise<boolean> =>
+    saveOpenChip(defId, { saveAs, startIn: libraryDir ?? boardsDir ?? undefined });
+
+  const activeChipId = () => {
+    const st = store.getState();
+    const tab = st.tabs.find((t) => t.id === st.activeTabId);
+    return tab?.kind === 'def' ? tab.defId : null;
+  };
+  const saveFront = async () => {
+    const chip = activeChipId();
+    if (chip) await saveChipDef(chip, false);
+    else await fileSave();
+  };
+  const saveFrontAs = async () => {
+    const chip = activeChipId();
+    if (chip) await saveChipDef(chip, true);
+    else await fileSaveAs();
+  };
+
+  /** The board if it has edits, then every chip tab that has: what a replace would lose. */
+  const saveEverything = async () => {
+    const unsavedBoard = () => {
+      const clean = cleanRef.current;
+      return clean === null || isDirtyAgainst(store.getState().board, clean);
+    };
+    if (unsavedBoard()) {
+      await fileSave();
+      // A declined picker: asking again for every chip would only pile up pickers.
+      if (unsavedBoard()) return;
+    }
+    const st = store.getState();
+    const dirtyChips = new Set(
+      st.tabs.flatMap((t) => (t.kind === 'def' && st.chipTabDirty(t.id) ? [t.defId] : [])),
+    );
+    for (const id of dirtyChips) await saveChipDef(id, false);
+  };
+  const saveEverythingRef = useRef(saveEverything);
+  saveEverythingRef.current = saveEverything;
+
+  const fileSaveRef = useRef(saveFront);
+  const fileSaveAsRef = useRef(saveFrontAs);
   const fileOpenRef = useRef(fileOpen);
-  fileSaveRef.current = fileSave;
-  fileSaveAsRef.current = fileSaveAs;
+  fileSaveRef.current = saveFront;
+  fileSaveAsRef.current = saveFrontAs;
   fileOpenRef.current = fileOpen;
 
   // A greyed menu item and a live shortcut for the same command would be a
@@ -579,7 +653,8 @@ export function useBoardDocument(): BoardDocument {
   // A browser offers only its own Leave or Stay here, never Save.
   useEffect(() => {
     const onUnload = (e: BeforeUnloadEvent) => {
-      if (!lessonDirty(editor())) return;
+      // A chip lives only in its file; the board at least has its autosave.
+      if (!lessonDirty(editor()) && !useCircuitStore.getState().hasTabEdits()) return;
       e.preventDefault();
       e.returnValue = '';
     };
@@ -588,6 +663,7 @@ export function useBoardDocument(): BoardDocument {
   }, []);
 
   const openLessonId = useLessonStore((s) => s.lesson?.id);
+  const autoplaying = useLessonStore((s) => s.autoplay);
   const editingId = useLessonEditorStore((s) => s.draft?.id);
   const menus = useMemo<Menu[]>(() => {
     const pickers = filePickersSupported();
@@ -640,20 +716,40 @@ export function useBoardDocument(): BoardDocument {
               ]
             : []),
           { separator: true },
-          {
-            id: 'save',
-            label: dirty ? 'Save *' : 'Save',
-            shortcut: SHORTCUTS.save,
-            disabled: !onBoard,
-            run: () => void fileSave(),
-          },
-          {
-            id: 'saveAs',
-            label: 'Save As...',
-            shortcut: SHORTCUTS.saveAs,
-            disabled: !onBoard || !pickers,
-            run: () => void fileSaveAs(),
-          },
+          ...(chipTabDefId
+            ? [
+                {
+                  id: 'save',
+                  label: chipDirty ? 'Save Chip *' : 'Save Chip',
+                  shortcut: SHORTCUTS.save,
+                  disabled: !onBoard || chipReadOnly,
+                  ...(chipReadOnly ? { title: 'Built-in parts are read-only' } : {}),
+                  run: () => void saveChipDef(chipTabDefId, false),
+                },
+                {
+                  id: 'saveAs',
+                  label: 'Save Chip As...',
+                  shortcut: SHORTCUTS.saveAs,
+                  disabled: !onBoard || !pickers || chipReadOnly,
+                  run: () => void saveChipDef(chipTabDefId, true),
+                },
+              ]
+            : [
+                {
+                  id: 'save',
+                  label: dirty ? 'Save *' : 'Save',
+                  shortcut: SHORTCUTS.save,
+                  disabled: !onBoard,
+                  run: () => void fileSave(),
+                },
+                {
+                  id: 'saveAs',
+                  label: 'Save As...',
+                  shortcut: SHORTCUTS.saveAs,
+                  disabled: !onBoard || !pickers,
+                  run: () => void fileSaveAs(),
+                },
+              ]),
         ],
       },
       {
@@ -709,6 +805,16 @@ export function useBoardDocument(): BoardDocument {
             },
           },
           {
+            id: 'autoplay',
+            label: autoplaying ? 'Pause autoplay' : 'Autoplay',
+            disabled: !onBoard || !running,
+            run: () => {
+              const run = useLessonStore.getState();
+              if (run.autoplay) run.stopAutoplay();
+              else run.startAutoplay();
+            },
+          },
+          {
             id: 'closeLesson',
             label: 'Close lesson',
             disabled: !running && !draft,
@@ -721,6 +827,9 @@ export function useBoardDocument(): BoardDocument {
     // read that actually change the menu are listed here.
   }, [
     dirty,
+    chipTabDefId,
+    chipDirty,
+    chipReadOnly,
     recents,
     currentFile,
     boardsDir,
@@ -728,6 +837,7 @@ export function useBoardDocument(): BoardDocument {
     board.id,
     libraryLessons,
     openLessonId,
+    autoplaying,
     editingId,
     compact,
     playLesson,
@@ -752,15 +862,18 @@ export function useBoardDocument(): BoardDocument {
         {pendingDiscard && (
           <UnsavedChangesDialog
             action={pendingDiscard.action}
-            hasFile={!!currentFile}
+            hasFile={!!currentFile || !dirty}
+            detail={unsavedDetail(dirty, store.getState().hasTabEdits())}
             onSave={() => {
               const next = pendingDiscard.run;
               void (async () => {
-                await fileSaveRef.current();
+                await saveEverythingRef.current();
                 // markClean() sets cleanRef synchronously; `dirty` state has
                 // not re-rendered yet, so read the ref, not the flag. A declined
                 // picker or a failed write leaves the dialog up.
-                if (cleanRef.current !== store.getState().board) return;
+                const clean = cleanRef.current;
+                if (clean === null || isDirtyAgainst(store.getState().board, clean)) return;
+                if (store.getState().hasTabEdits()) return;
                 setPendingDiscard(null);
                 next();
               })();

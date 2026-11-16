@@ -1,0 +1,218 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "multiplexers",
+  "title": "Multiplexers: S picks the data",
+  "workbench": "circuit",
+  "board": "two-to-one-multiplexer",
+  "steps": [
+    {
+      "kind": "narrate",
+      "prose": "A **multiplexer** (mux) passes one of its data inputs to the output. The select input **S** chooses which. This 2:1 mux is built from one NOT, two AND gates and one OR gate.",
+      "actions": [
+        {
+          "kind": "power",
+          "on": true
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "d0",
+            "s",
+            "d1",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Set **S** = 0 and **D0** = 1, **D1** = 0. **Y** follows **D0**.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 0,
+          "set": [
+            1,
+            0,
+            0
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "d0",
+            "s",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now **D0** = 0, **D1** = 1, **S** = 0. What is **Y**?",
+      "choices": [
+        {
+          "text": "Y = 1, because D1 is 1"
+        },
+        {
+          "text": "Y = 0, because S = 0 picks D0",
+          "right": true
+        }
+      ],
+      "answer": "**S** = 0 picks **D0**, which is 0. **D1** = 1 is ignored, so **Y** = 0.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 1,
+          "set": [
+            0,
+            0,
+            1
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "d0",
+            "d1",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Flip **S** to 1 with **D0** = 0 and **D1** = 1. What is **Y**?",
+      "choices": [
+        {
+          "text": "Y = 0, because D0 is 0"
+        },
+        {
+          "text": "Y = 1, because S = 1 picks D1",
+          "right": true
+        }
+      ],
+      "answer": "**S** = 1 picks **D1**, which is 1. **D0** is ignored, so **Y** = 1.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 2,
+          "set": [
+            0,
+            1,
+            1
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "s",
+            "d1",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Why it works: the NOT gate makes **NOT S** for the upper AND, so AND0 passes **D0** only when **S** = 0. The lower AND passes **D1** only when **S** = 1. The OR gate merges them. As an equation, **Y** = **NOT S**·**D0** + **S**·**D1**.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": [
+            "ns",
+            "and0",
+            "and1",
+            "or"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "**D0** = 1, **S** = 1, **D1** = 0. What is **Y**?",
+      "choices": [
+        {
+          "text": "Y = 1, because D0 is 1"
+        },
+        {
+          "text": "Y = 0, because S = 1 picks D1",
+          "right": true
+        }
+      ],
+      "answer": "**S** = 1 selects **D1** = 0. The 1 on **D0** is blocked by AND0, whose other input is **NOT S** = 0.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 3,
+          "set": [
+            1,
+            1,
+            0
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "and0",
+            "and1",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Both data inputs are 1: **D0** = 1, **D1** = 1, **S** = 0. Does **S** change **Y**?",
+      "choices": [
+        {
+          "text": "No, Y = 1 for either S",
+          "right": true
+        },
+        {
+          "text": "Yes, Y = 0 when S = 0"
+        },
+        {
+          "text": "Yes, Y = 0 when S = 1"
+        }
+      ],
+      "answer": "Whichever input **S** picks, it is a 1, so **Y** = 1. The select only matters when **D0** and **D1** differ.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 4,
+          "set": [
+            1,
+            0,
+            1
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "d0",
+            "d1",
+            "s",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "A mux is also a lookup table: **S** is the address and each data input holds a stored bit. A bigger mux with n select lines picks one of 2^n stored bits. Step through the rest of the rows with `]`.",
+      "actions": [
+        {
+          "kind": "tab",
+          "tab": "sequence"
+        }
+      ]
+    }
+  ]
+}

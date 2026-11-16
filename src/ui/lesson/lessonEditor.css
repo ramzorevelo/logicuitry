@@ -303,6 +303,11 @@
   font-family: var(--font-mono);
 }
 
+.lesson-seconds {
+  width: 7ch;
+  font-family: var(--font-mono);
+}
+
 .lesson-act {
   display: grid;
   gap: calc(var(--space-unit) * 1.5);

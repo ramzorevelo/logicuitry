@@ -1,0 +1,92 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 4,
+  "id": "sr-latch",
+  "title": "SR latch: a circuit that remembers",
+  "workbench": "circuit",
+  "board": "sr-latch",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Two NOR gates, cross-coupled",
+      "prose": "Each **NOR** output feeds the other gate's input. That loop is feedback, so the circuit can hold a bit. **S** sets **Q** to 1. **R** resets **Q** to 0.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["n1", "n2"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Set: S = 1, R = 0",
+      "prose": "Hold **S** down with **R** released. **S** forces one NOR output low, and that low feeds back to let the other NOR go high. **Q** = 1 and **Q NOT** = 0.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [1, 0], "when": "open" },
+        { "kind": "highlight", "components": ["set", "lq", "lqn"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now let go of **S**, so **S** = 0 and **R** = 0. What does **Q** do?",
+      "choices": [
+        { "text": "Falls back to 0" },
+        { "text": "Stays at 1", "right": true },
+        { "text": "Becomes unknown" }
+      ],
+      "answer": "**Q** stays at 1. The feedback wire still carries the value that makes **Q** high, so removing **S** changes nothing. The loop holds its own value.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["lq", "lqn"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Reset: S = 0, R = 1",
+      "prose": "Press **R** with **S** released. Now **R** forces the other NOR output low, which flips the loop the other way. **Q** = 0 and **Q NOT** = 1.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [0, 1], "when": "open" },
+        { "kind": "highlight", "components": ["reset", "lq", "lqn"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Release **R** too, so both inputs are 0 again. Which output is high?",
+      "choices": [
+        { "text": "**Q**" },
+        { "text": "**Q NOT**", "right": true },
+        { "text": "Both" },
+        { "text": "Neither" }
+      ],
+      "answer": "**Q NOT** stays high. With **S** = 0 and **R** = 0 the same inputs give two different outputs: this circuit remembers what came before. Compare with the last hold, where **Q** was high.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["lq", "lqn"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Bistable",
+      "prose": "With **S** = 0 and **R** = 0 the loop has two stable states, **Q** = 1 or **Q** = 0, and it stays in whichever it was last driven to. One stored bit is the idea behind all memory in chapter 3.",
+      "actions": [{ "kind": "highlight", "components": ["n1", "n2"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Press both **S** and **R**, so **S** = 1 and **R** = 1. What do the outputs show?",
+      "choices": [
+        { "text": "**Q** = 1 and **Q NOT** = 0" },
+        { "text": "**Q** = 0 and **Q NOT** = 1" },
+        { "text": "Both outputs are 0", "right": true }
+      ],
+      "answer": "Each NOR sees a 1 on one input, so both outputs go to 0. **Q** and **Q NOT** are no longer opposites, which breaks what a latch is supposed to mean.",
+      "actions": [
+        { "kind": "row", "index": 4, "set": [1, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["lq", "lqn"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Why S = R = 1 is forbidden",
+      "prose": "Releasing both at the same moment sends both gates toward 1 together, and which one wins depends on tiny delay differences. The next state is unpredictable. The **D latch** avoids it by building **S** and **R** from one data input, so they can never both be 1.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    }
+  ]
+}

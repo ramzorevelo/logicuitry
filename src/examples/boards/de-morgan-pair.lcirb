@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 7,
+  "formatVersion": 15,
   "id": "de-morgan-pair",
   "name": "De Morgan pair",
   "components": [
@@ -265,6 +265,68 @@
   },
   "timing": {
     "mode": "ideal",
-    "datasheet": "typ"
+    "datasheet": "typ",
+    "vendor": "ti"
+  },
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "a",
+      "b"
+    ],
+    "expect": [
+      "l1",
+      "l2"
+    ],
+    "rows": [
+      {
+        "set": [
+          0,
+          0
+        ],
+        "expect": [
+          1,
+          1
+        ],
+        "note": "A=0, B=0"
+      },
+      {
+        "set": [
+          0,
+          1
+        ],
+        "expect": [
+          1,
+          1
+        ],
+        "note": "A=0, B=1"
+      },
+      {
+        "set": [
+          1,
+          0
+        ],
+        "expect": [
+          1,
+          1
+        ],
+        "note": "A=1, B=0"
+      },
+      {
+        "set": [
+          1,
+          1
+        ],
+        "expect": [
+          0,
+          0
+        ],
+        "note": "A=1, B=1"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
   }
 }

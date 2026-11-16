@@ -8,6 +8,7 @@ import { useModalKeys } from '../modalKeys';
 export function UnsavedChangesDialog({
   action,
   hasFile,
+  detail = 'This board has unsaved changes.',
   onSave,
   onDiscard,
   onCancel,
@@ -16,6 +17,8 @@ export function UnsavedChangesDialog({
   action: string;
   /** False when the board has never been saved, so Save opens a picker. */
   hasFile: boolean;
+  /** Names what is unsaved: the board, an open chip, or both. */
+  detail?: string;
   onSave: () => void;
   onDiscard: () => void;
   onCancel: () => void;
@@ -29,7 +32,7 @@ export function UnsavedChangesDialog({
     >
       <div className="package-dialog close-tab-dialog">
         <h3>{action}</h3>
-        <p className="label-conflict-hint">This board has unsaved changes.</p>
+        <p className="label-conflict-hint">{detail}</p>
         <div className="label-conflict-buttons">
           <button type="button" className="tool-btn" autoFocus onClick={onSave}>
             {hasFile ? 'Save' : 'Save as\u2026'}

@@ -1,10 +1,23 @@
 import './lesson.css';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { announceStep, hasReveal, lessonWarnings, warningText } from '../../core/lesson';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import { renderMarkdown } from './markdown';
 import { useLessonStore } from './lessonStore';
 import { useLessonEditorStore } from './lessonEditorStore';
+
+export const AUTOPLAY_PACES = [0, 5, 10, 20] as const;
+
+/** Re-renders a few times a second while `active`, for a countdown that reads the clock. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return now;
+}
 
 /** The lesson runner: right of the board on a desktop, a bottom sheet on a phone. */
 export function LessonPanel() {
@@ -14,6 +27,12 @@ export function LessonPanel() {
   const picked = useLessonStore((s) => s.picked);
   const notes = useLessonStore((s) => s.notes);
   const fromEditor = useLessonStore((s) => s.fromEditor);
+  const autoplay = useLessonStore((s) => s.autoplay);
+  const pace = useLessonStore((s) => s.autoplayPace);
+  const wait = useLessonStore((s) => s.autoplayWait);
+  const deadline = useLessonStore((s) => s.autoplayDeadline);
+  const totalMs = useLessonStore((s) => s.autoplayTotalMs);
+  const now = useNow(autoplay && deadline !== null);
   const board = useCircuitStore((s) => s.board);
 
   const warnings = useMemo(() => {
@@ -35,6 +54,18 @@ export function LessonPanel() {
   const choices = current.choices ?? [];
   const right = choices.find((c) => c.right);
   const announced = [...announceStep(current, board.sequence), ...notes];
+  const leftMs = deadline === null ? 0 : Math.max(0, deadline - now);
+  const leftS = Math.ceil(leftMs / 1000);
+  const status = !autoplay
+    ? ''
+    : deadline === null
+      ? 'Waiting for Reveal'
+      : predict && !shown
+        ? `Answer in ${leftS} s`
+        : step === count - 1
+          ? `Ends in ${leftS} s`
+          : `Next in ${leftS} s`;
+  const fill = autoplay && totalMs > 0 ? 1 - leftMs / totalMs : 0;
 
   return (
     <aside className="lesson-panel" aria-label="Lesson">
@@ -120,6 +151,14 @@ export function LessonPanel() {
       </div>
 
       <footer className="lesson-panel__foot">
+        {autoplay && (
+          <span
+            className={`lesson-panel__status${deadline === null ? ' lesson-panel__status--wait' : ''}`}
+            aria-live="polite"
+          >
+            {status}
+          </span>
+        )}
         <button type="button" className="tool-btn" disabled={step === 0} onClick={run.pageUp}>
           Back <kbd>PgUp</kbd>
         </button>
@@ -131,9 +170,49 @@ export function LessonPanel() {
         >
           Reveal <kbd>Enter</kbd>
         </button>
-        <button type="button" className="tool-btn" disabled={step === count - 1} onClick={run.next}>
+        <button
+          type="button"
+          className="tool-btn lesson-panel__next"
+          disabled={step === count - 1}
+          onClick={run.next}
+        >
           Next <kbd>PgDn</kbd>
+          {autoplay && (
+            <span
+              className="lesson-panel__fill"
+              style={{ transform: `scaleX(${fill})` }}
+              aria-hidden="true"
+            />
+          )}
         </button>
+        <div className="lesson-panel__auto">
+          <button
+            type="button"
+            className="tool-btn"
+            aria-pressed={autoplay}
+            onClick={autoplay ? run.stopAutoplay : run.startAutoplay}
+          >
+            {autoplay ? 'Pause' : 'Autoplay'}
+          </button>
+          <label className="lesson-panel__pace">
+            <span>Pace</span>
+            <select value={pace} onChange={(e) => run.setAutoplayPace(Number(e.target.value))}>
+              {AUTOPLAY_PACES.map((p) => (
+                <option key={p} value={p}>
+                  {p === 0 ? 'As authored' : `${p} s a step`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="lesson-panel__wait">
+            <input
+              type="checkbox"
+              checked={wait}
+              onChange={(e) => run.setAutoplayWait(e.target.checked)}
+            />
+            <span>Wait on questions</span>
+          </label>
+        </div>
       </footer>
     </aside>
   );

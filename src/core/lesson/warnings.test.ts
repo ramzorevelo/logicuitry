@@ -20,7 +20,7 @@ const step = (kind: LessonStep['kind'], ...actions: LessonAction[]): LessonStep 
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 3,
+  formatVersion: 4,
   id: 'l',
   title: 'L',
   workbench: 'circuit',

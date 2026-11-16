@@ -1,0 +1,75 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "propagation-delay",
+  "title": "Propagation delay in a full adder",
+  "workbench": "circuit",
+  "board": "full-adder-propagation-delay",
+  "steps": [
+    {
+      "kind": "narrate",
+      "prose": "A gate does not answer at once. **Propagation delay** is the time from an input change to the output change. This full adder is built from five gates, each with its own delay.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "row", "index": 0, "set": [0, 0, 1], "when": "open" },
+        { "kind": "highlight", "components": ["x1", "a1", "x2", "a2", "o1"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Timing is set to **datasheet**, so each gate uses its 74LS part's published delay, the max column here. Low to high, a 74LS86 XOR can take up to 23 ns with its other input low and 30 ns with it high, a 74LS08 AND up to 15 ns and a 74LS32 OR up to 22 ns. The Waveform tab will show it.",
+      "actions": [
+        { "kind": "timing", "mode": "datasheet" },
+        { "kind": "tab", "tab": "waveform" }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Count the gates on each path from **A**. To **S**: XOR, then XOR, two gates. To **Cout** through the middle: XOR, AND, OR, three gates.",
+      "actions": [{ "kind": "highlight", "components": ["x1", "x2", "a2", "o1"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "A is about to go from 0 to 1, with B = 0 and Cin = 1. Both outputs will change. Which output settles last?",
+      "choices": [
+        { "text": "S" },
+        { "text": "Cout", "right": true },
+        { "text": "They settle together" }
+      ],
+      "answer": "Cout. Its slowest path goes through three gates, S only through two, and each gate adds its own delay.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [1, 0, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["s", "cout"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "To watch it happen, press `[` to go back a row and `]` to play it again. Press `.` to advance one gate delay (a Gate step) and see one layer of gates change. The **Settle** button finishes the rest at once.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Which path is the **critical path**, the slowest one from an input to an output?",
+      "choices": [
+        { "text": "A, XOR, XOR, S" },
+        { "text": "A, XOR, AND, OR, Cout", "right": true },
+        { "text": "A, AND, OR, Cout" }
+      ],
+      "answer": "The longest chain of gates, A through x1, a2 and o1 to Cout. The other two have only two gates, so they are done sooner.",
+      "actions": [{ "kind": "highlight", "components": ["x1", "a2", "o1", "cout"] }]
+    },
+    {
+      "kind": "narrate",
+      "prose": "The critical path sets how long the adder takes to be trustworthy. Add up the delays along it and you have the worst case, the figure a clock period must exceed.",
+      "actions": [{ "kind": "highlight", "components": ["x1", "a2", "o1"] }]
+    },
+    {
+      "kind": "narrate",
+      "prose": "The shortest path is A, AND, OR, Cout, two gates. Cout can start to change before the critical path finishes, so an output can be wrong, or glitch, until the slowest path settles. Read the outputs only after everything has settled.",
+      "actions": [
+        { "kind": "highlight", "components": ["a1", "o1"] },
+        { "kind": "tab", "tab": "waveform" }
+      ]
+    }
+  ]
+}

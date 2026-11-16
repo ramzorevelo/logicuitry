@@ -1,0 +1,84 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "de-morgan",
+  "title": "De Morgan: NAND is OR of inverses",
+  "workbench": "circuit",
+  "board": "de-morgan-pair",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Two circuits, one pair of inputs",
+      "prose": "**A** and **B** feed two circuits. The top one is a single **NAND** gate. The bottom one inverts each input first, then combines them with an **OR** gate.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["g_nand", "n_a", "n_b", "g_or"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **A** = 1 and **B** = 1. Which LEDs light?",
+      "choices": [
+        { "text": "Both" },
+        { "text": "Only NAND" },
+        { "text": "Only OR of inverses" },
+        { "text": "Neither", "right": true }
+      ],
+      "answer": "NAND of 1 and 1 is 0. In the bottom circuit both inverters output 0, and 0 OR 0 is 0. Both LEDs stay off.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [1, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["l1", "l2"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "A = 0, B = 0",
+      "prose": "With both inputs 0, **NAND** gives 1. The inverters give 1 and 1, so the **OR** gives 1 as well. Both LEDs light.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [0, 0], "when": "open" },
+        { "kind": "highlight", "components": ["l1", "l2"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **A** = 0 and **B** = 1. Do the two LEDs agree?",
+      "choices": [
+        { "text": "Both light", "right": true },
+        { "text": "Only NAND lights" },
+        { "text": "Only OR of inverses lights" },
+        { "text": "Neither lights" }
+      ],
+      "answer": "NAND of 0 and 1 is 1, because the AND inside it is 0. Inverting A gives 1, so the OR gives 1 whatever B is. One 0 on an AND input is enough to make NAND true.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [0, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["l1", "l2"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "De Morgan's theorem",
+      "prose": "The two circuits are the same function: **NOT (A AND B) = (NOT A) OR (NOT B)**. Bubble pushing says the same thing: move the bubble from the NAND output to its inputs, and the AND shape becomes an OR shape.",
+      "actions": [{ "kind": "highlight", "components": ["g_nand", "n_a", "n_b", "g_or"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Is there any input combination where the two LEDs disagree?",
+      "choices": [
+        { "text": "Yes, when exactly one input is 1" },
+        { "text": "Yes, when both inputs are 0" },
+        { "text": "No, they always agree", "right": true }
+      ],
+      "answer": "They match on every row, which is what De Morgan promises. Take **A** = 1 and **B** = 0: NAND is 1, and in the bottom circuit the inverted A is 0 but the inverted B is 1, so the OR is 1.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [1, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["l1", "l2"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "The dual law",
+      "prose": "The other form of the theorem swaps the gates: **NOT (A OR B) = (NOT A) AND (NOT B)**, so a NOR is an AND of inverses. Check the whole table with `]` and compare the two LEDs on each row.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    }
+  ]
+}

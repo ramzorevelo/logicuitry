@@ -1,0 +1,104 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "basic-gates",
+  "title": "The basic gates",
+  "workbench": "circuit",
+  "board": "basic-gates",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Two inputs, seven gates",
+      "prose": "One pair of inputs, **A** and **B**, feeds every gate on this board. Each gate drives its own LED, so you can read the truth table straight off the lamps.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["a", "b"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Three groups",
+      "prose": "**AND**, **OR** and **XOR** are the true-output gates. **NAND**, **NOR** and **XNOR** are the same three with an inverter on the output. The **NOT** gate is the odd one out: it takes **A** only.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": ["g_and", "g_or", "g_xor", "g_nand", "nor27", "xnor24", "g_not"]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **A** = 1 and **B** = 1. Which LEDs light?",
+      "choices": [
+        { "text": "AND, OR, NAND" },
+        { "text": "AND, OR, XNOR", "right": true },
+        { "text": "OR, XOR, NAND" },
+        { "text": "NOT A, NOR, XNOR" }
+      ],
+      "answer": "AND is 1 only when both inputs are 1. OR is 1 when at least one is. XOR is 1 only when the inputs differ, so it is off here, and its inverse **XNOR** is on. NAND and NOR are off, and **NOT A** is off because A = 1.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [1, 1], "when": "reveal" },
+        {
+          "kind": "highlight",
+          "components": ["l_and", "l_or", "l_xor", "l_nand", "l_not", "led28", "led29"]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "A = 0, B = 1",
+      "prose": "Now **A** = 0 and **B** = 1. AND goes dark, but OR and XOR stay lit. **NOT A** lights because it only looks at **A**.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [0, 1], "when": "open" },
+        { "kind": "highlight", "components": ["l_and", "l_or", "l_xor", "l_not"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set both inputs to 0. Which LEDs light?",
+      "choices": [
+        { "text": "None of them" },
+        { "text": "NOT A, NAND, NOR, XNOR", "right": true },
+        { "text": "NOT A, AND, OR" }
+      ],
+      "answer": "With both inputs 0, AND, OR and XOR are all 0, so their inverted partners **NAND**, **NOR** and **XNOR** are all 1. **NOT A** is 1 because A = 0.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["l_nand", "led28", "led29", "l_not"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Each inverted gate is its partner's complement",
+      "prose": "Compare the pairs down all four input rows. **NAND** is always the opposite of **AND**, **NOR** the opposite of **OR**, and **XNOR** the opposite of **XOR**. Only **XOR** and **XNOR** care whether the inputs are equal.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": ["l_and", "l_nand", "l_or", "led28", "l_xor", "led29"]
+        },
+        { "kind": "tab", "tab": "sequence" }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "The board shows **A** = 0, **B** = 1. Swap the inputs to **A** = 1, **B** = 0. Which LEDs change?",
+      "choices": [
+        { "text": "Only NOT A", "right": true },
+        { "text": "AND and OR" },
+        { "text": "Every LED" }
+      ],
+      "answer": "AND, OR, XOR and their inverses give the same result when you swap A and B, so none of them change. Only **NOT A** changes, from 1 to 0, because it reads **A** alone.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [0, 1], "when": "open" },
+        { "kind": "row", "index": 2, "set": [1, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["l_not"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Walk the whole table",
+      "prose": "Step through all four rows with `]` and `[`. Say each LED pattern aloud before the next row.",
+      "actions": [{ "kind": "tab", "tab": "sequence" }]
+    }
+  ]
+}

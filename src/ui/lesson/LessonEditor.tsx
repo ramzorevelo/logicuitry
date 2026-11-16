@@ -20,6 +20,8 @@ import {
   rowAction,
   stepOps,
   warningText,
+  AUTOPLAY_MAX_SECONDS,
+  autoplaySeconds,
   type LessonWarning,
   type NewActionKind,
 } from '../../core/lesson';
@@ -447,6 +449,12 @@ function ActionFields({
   }
 }
 
+function withoutSeconds(step: LessonStep): LessonStep {
+  const copy = { ...step };
+  delete copy.seconds;
+  return copy;
+}
+
 /** Right pane: the selected step, in the lesson panel's place. */
 export function LessonInspector() {
   const draft = useLessonEditorStore((s) => s.draft);
@@ -666,6 +674,36 @@ export function LessonInspector() {
             </div>
           </>
         )}
+
+        <div className="lesson-field">
+          <label className="lesson-field__label" htmlFor="lesson-seconds">
+            Autoplay seconds
+            <span>
+              {predict
+                ? `empty reads it: ${autoplaySeconds(withoutSeconds(step), 'question')} s question, ${autoplaySeconds(withoutSeconds(step), 'answer')} s answer`
+                : `empty reads it: ${autoplaySeconds(withoutSeconds(step), 'question')} s`}
+            </span>
+          </label>
+          <input
+            id="lesson-seconds"
+            className="lesson-seconds"
+            type="number"
+            min={1}
+            max={AUTOPLAY_MAX_SECONDS}
+            step={1}
+            value={step.seconds ?? ''}
+            placeholder={String(autoplaySeconds(withoutSeconds(step), 'question'))}
+            onFocus={ed.beginText}
+            onChange={(e) => {
+              const n = Math.round(Number(e.target.value));
+              editStep((s) =>
+                e.target.value === '' || !Number.isFinite(n)
+                  ? withoutSeconds(s)
+                  : { ...s, seconds: Math.min(AUTOPLAY_MAX_SECONDS, Math.max(1, n)) },
+              );
+            }}
+          />
+        </div>
 
         <div className="lesson-field">
           <span className="lesson-field__label">

@@ -19,23 +19,27 @@ export interface ChipLibraryReader {
 export async function loadChipLibraryWith(
   fs: ChipLibraryReader,
   root: LibraryDir,
-): Promise<{ chips: ChipDef[]; skipped: string[] }> {
+): Promise<{ chips: ChipDef[]; skipped: string[]; fileNames: Map<string, string> }> {
   let names: string[];
   try {
     names = await fs.listFiles(root, 'chips');
   } catch {
-    return { chips: [], skipped: [] };
+    return { chips: [], skipped: [], fileNames: new Map() };
   }
   const chips: ChipDef[] = [];
   const skipped: string[] = [];
+  // By chip id: Save Chip writes a library chip back under the name it was read from.
+  const fileNames = new Map<string, string>();
   for (const name of names) {
     try {
       const doc = await fs.readDoc(root, 'chips', name);
-      if (doc.format === 'lcir.chip') chips.push(doc);
-      else skipped.push(name);
+      if (doc.format === 'lcir.chip') {
+        chips.push(doc);
+        fileNames.set(doc.id, name);
+      } else skipped.push(name);
     } catch {
       skipped.push(name);
     }
   }
-  return { chips, skipped };
+  return { chips, skipped, fileNames };
 }

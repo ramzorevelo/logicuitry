@@ -24,7 +24,7 @@ const step = (extra: Partial<LessonStep>, ...actions: LessonAction[]): LessonSte
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 3,
+  formatVersion: 4,
   id: 'l',
   title: 'L',
   workbench: 'circuit',

@@ -35,9 +35,11 @@ interface Props {
   paletteRef: React.RefObject<HTMLElement>;
   /** null = the CSS default width. */
   width: number | null;
+  /** Presentation mode hides the rail; true floats it over the board until a part is picked. */
+  shown?: boolean;
 }
 
-export function PaletteRail({ paletteRef, width }: Props) {
+export function PaletteRail({ paletteRef, width, shown = false }: Props) {
   const store = useCircuitStore;
   const tool = useCircuitStore((s) => s.tool);
   const mode = useCircuitStore((s) => s.mode);
@@ -290,7 +292,7 @@ export function PaletteRail({ paletteRef, width }: Props) {
 
   return (
     <aside
-      className="circuit-palette"
+      className={shown ? 'circuit-palette circuit-palette--shown' : 'circuit-palette'}
       ref={paletteRef}
       style={width === null ? undefined : { width: `${width}px` }}
     >

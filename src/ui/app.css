@@ -269,6 +269,63 @@ h3 {
   display: none;
 }
 
+/* The way back to the parts: a tab on the board's left edge, presentation mode only. The
+   palette then floats over the board so the canvas keeps its width. A phone never offers
+   presentation mode, but one launched into it keeps its own strip. */
+.palette-tab {
+  display: none;
+}
+:root.presentation .circuit-body {
+  position: relative;
+}
+:root.presentation .palette-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 4;
+  width: calc(var(--space-unit) * 6);
+  min-height: var(--touch-target);
+  height: 5rem;
+  transform: translateY(-50%);
+  padding: 0;
+  border: var(--chrome-border);
+  border-left: 0;
+  border-radius: 0 var(--chrome-radius) var(--chrome-radius) 0;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+:root.presentation .palette-tab:hover {
+  background: var(--accent-fill);
+}
+:root.presentation .palette-tab:focus-visible {
+  outline: var(--stroke-min) solid var(--accent);
+}
+:root.presentation .circuit-palette.circuit-palette--shown {
+  display: flex;
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 5;
+  /* Rem, so it grows with presentation type: the docked rail's px width clips the labels. */
+  width: 13rem;
+  background: var(--surface);
+  border-right: var(--chrome-border);
+}
+:root.presentation .app-shell--compact .circuit-palette {
+  display: flex;
+}
+:root.presentation .app-shell--compact .palette-tab {
+  display: none;
+}
+:root.presentation .circuit-palette__resize {
+  display: none;
+}
+
 /* The menu bar deliberately survives presentation mode: it is the only
    pointer route to the commands that left the toolbar. */
 :root.presentation .workbench-tab__label,
@@ -335,6 +392,8 @@ h3 {
   left: 0;
   z-index: 40;
   min-width: 220px;
+  /* Shrink-to-fit inside the narrow title would wrap a label like "Save Chip As...". */
+  width: max-content;
   /* A long menu scrolls itself. Without this it simply grew past the shell,
      and since the shell is the viewport's height, the document grew with it:
      opening Edit put scrollbars on the whole app. */
@@ -1134,6 +1193,7 @@ h3 {
   left: 0;
   right: 0;
   top: 100%;
+  width: auto;
   min-width: 0;
   max-width: none;
 }

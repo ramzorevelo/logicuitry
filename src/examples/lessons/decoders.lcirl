@@ -1,0 +1,215 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 3,
+  "id": "decoders",
+  "title": "Decoders: one output per minterm",
+  "workbench": "circuit",
+  "board": "demultiplexer-on-a-74ls138",
+  "steps": [
+    {
+      "kind": "narrate",
+      "prose": "A **decoder** turns an n-bit input into one-hot outputs: exactly one of 2^n outputs is selected. The 74LS138 decodes **C B A** (C is the MSB) into eight outputs, **/Y0** to **/Y7**.",
+      "actions": [
+        {
+          "kind": "power",
+          "on": true
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "u1",
+            "c",
+            "b",
+            "a"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "The outputs are active low: the selected output goes **low**, the other seven stay high. Each LED lights when its pin is high, so the **dark** LED is the selected one. With **C B A** = 000, **/Y0** is dark.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 0,
+          "set": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "l0"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **C B A** = 011, which is 3. Which LED is dark?",
+      "choices": [
+        {
+          "text": "/Y3",
+          "right": true
+        },
+        {
+          "text": "/Y6"
+        },
+        {
+          "text": "/Y0"
+        }
+      ],
+      "answer": "011 is binary 3, so **/Y3** goes low and the other seven stay high. Read the bits MSB first: C = 0, B = 1, A = 1.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 1,
+          "set": [
+            0,
+            1,
+            1,
+            0
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "l3"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now **C B A** = 101. Which LED is dark?",
+      "choices": [
+        {
+          "text": "/Y3"
+        },
+        {
+          "text": "/Y5",
+          "right": true
+        },
+        {
+          "text": "/Y4"
+        }
+      ],
+      "answer": "101 is 4 + 1 = 5, so **/Y5** goes low.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 2,
+          "set": [
+            1,
+            0,
+            1,
+            0
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "l5"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Each output is one minterm, inverted. **/Y5** = NOT (**C** **NOT B** **A**), which is 0 only when **C B A** = 101. Only one minterm is true at a time, which is why the output is one-hot. 111 selects the last output, **/Y7**.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 3,
+          "set": [
+            1,
+            1,
+            1,
+            0
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "u1",
+            "l7"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "The chip has three enable inputs: **G1** must be 1, and **/G2A** and **/G2B** must be 0. Here **G1** is tied to VCC, **/G2B** to ground, and **/G2A** comes from the **DATA** switch, so DATA = 0 enables the chip.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": [
+            "data",
+            "u1"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Keep **C B A** = 011 but set **DATA** = 1. What do the outputs do?",
+      "choices": [
+        {
+          "text": "/Y3 stays low"
+        },
+        {
+          "text": "All eight outputs go high",
+          "right": true
+        },
+        {
+          "text": "All eight outputs go low"
+        }
+      ],
+      "answer": "With **DATA** = 1 the chip is disabled. No output is selected, so all eight stay high and no LED is dark.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 4,
+          "set": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "data",
+            "l0",
+            "l1",
+            "l2",
+            "l3",
+            "l4",
+            "l5",
+            "l6",
+            "l7"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "prose": "Because each output is an inverted minterm, a decoder plus a NAND gate builds any function as a sum of minterms. Step through the rest of the rows with `]`.",
+      "actions": [
+        {
+          "kind": "tab",
+          "tab": "sequence"
+        }
+      ]
+    }
+  ]
+}

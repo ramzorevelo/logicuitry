@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { Lesson, LessonDockTab } from '../../core/model/types';
 import {
+  autoplayMove,
+  autoplayPhase,
+  autoplaySeconds,
   advanceOps,
   hasReveal,
   pageDownAction,
@@ -29,6 +32,19 @@ interface LessonState {
   analyzePending: boolean;
   /** Started by the editor's Play: Esc and Close go back to it. */
   fromEditor: boolean;
+  /** Autoplay is running. Pace and the question wait outlive a closed lesson, for the session. */
+  autoplay: boolean;
+  /** Seconds a step, overriding each step's own time; 0 = as authored. */
+  autoplayPace: number;
+  /** Autoplay holds on a question until a person reveals it. */
+  autoplayWait: boolean;
+  /** Wall-clock ms when the countdown runs out, and its length; null while holding. */
+  autoplayDeadline: number | null;
+  autoplayTotalMs: number;
+  startAutoplay: () => void;
+  stopAutoplay: () => void;
+  setAutoplayPace: (seconds: number) => void;
+  setAutoplayWait: (wait: boolean) => void;
   analyzeServed: () => void;
   /** `keepDock`: handed over from the editor, so its dock at start stays the one Back rebuilds. */
   open: (
@@ -77,7 +93,16 @@ const CLOSED = {
   notes: [],
   analyzePending: false,
   fromEditor: false,
+  autoplay: false,
+  autoplayDeadline: null,
+  autoplayTotalMs: 0,
 } as const;
+
+let autoplayTimer: ReturnType<typeof setTimeout> | undefined;
+const clearAutoplayTimer = () => {
+  if (autoplayTimer !== undefined) clearTimeout(autoplayTimer);
+  autoplayTimer = undefined;
+};
 
 function applyOp(op: BoardOp, notes: string[]): void {
   const c = circuit();
@@ -164,6 +189,31 @@ export const useLessonStore = create<LessonState>((set, get) => {
     set({ step: k, revealed, notes });
   };
 
+  /** (Re)starts the countdown for where the lesson now stands. */
+  const armAutoplay = () => {
+    clearAutoplayTimer();
+    const { lesson, step, revealed, autoplay, autoplayPace, autoplayWait } = get();
+    const current = lesson?.steps[step];
+    if (!autoplay || !lesson || !current) return;
+    const shown = revealed.has(step);
+    const move = autoplayMove(lesson, step, shown, autoplayWait);
+    if (move === 'hold') {
+      set({ autoplayDeadline: null, autoplayTotalMs: 0 });
+      return;
+    }
+    const ms = autoplaySeconds(current, autoplayPhase(current, shown), autoplayPace) * 1000;
+    set({ autoplayDeadline: Date.now() + ms, autoplayTotalMs: ms });
+    autoplayTimer = setTimeout(() => {
+      autoplayTimer = undefined;
+      const st = get();
+      if (!st.autoplay || !st.lesson) return;
+      const now = autoplayMove(st.lesson, st.step, st.revealed.has(st.step), st.autoplayWait);
+      if (now === 'reveal') st.reveal();
+      else if (now === 'next') st.next();
+      else if (now === 'end') st.stopAutoplay();
+    }, ms);
+  };
+
   return {
     lesson: null,
     step: 0,
@@ -172,19 +222,44 @@ export const useLessonStore = create<LessonState>((set, get) => {
     notes: [],
     analyzePending: false,
     fromEditor: false,
+    autoplay: false,
+    autoplayPace: 0,
+    autoplayWait: false,
+    autoplayDeadline: null,
+    autoplayTotalMs: 0,
     analyzeServed: () => set({ analyzePending: false }),
+
+    startAutoplay: () => {
+      if (!get().lesson) return;
+      set({ autoplay: true });
+      armAutoplay();
+    },
+    stopAutoplay: () => {
+      clearAutoplayTimer();
+      set({ autoplay: false, autoplayDeadline: null, autoplayTotalMs: 0 });
+    },
+    setAutoplayPace: (seconds) => {
+      set({ autoplayPace: seconds });
+      armAutoplay();
+    },
+    setAutoplayWait: (wait) => {
+      set({ autoplayWait: wait });
+      armAutoplay();
+    },
 
     open: (lesson, start = 0, opts) => {
       if (lesson.steps.length === 0) return;
       const k = Math.max(0, Math.min(start, lesson.steps.length - 1));
       // From the editor, the editor's own start is the one Back rebuilds to.
       if (!opts?.fromEditor && !opts?.keepDock) rememberDockAtStart();
+      get().stopAutoplay();
       set({ lesson, picked: new Map(), fromEditor: opts?.fromEditor ?? false });
       replayTo(lesson, k, false);
     },
 
     close: () => {
       if (!get().lesson) return;
+      clearAutoplayTimer();
       set(CLOSED);
       restoreBoardAfterLesson();
     },
@@ -200,6 +275,7 @@ export const useLessonStore = create<LessonState>((set, get) => {
       openDockTab(stepDockTab(target));
       if (stepTab(target) === 'analyze') openDockTab('analyze');
       set({ step: step + 1, notes });
+      armAutoplay();
     },
 
     back: () => {
@@ -210,6 +286,7 @@ export const useLessonStore = create<LessonState>((set, get) => {
     jump: (k) => {
       const { lesson, revealed } = get();
       if (!lesson || k < 0 || k >= lesson.steps.length) return;
+      get().stopAutoplay();
       circuit().clearTransientError();
       replayTo(lesson, k, revealed.has(k));
       // A compile error raised by the replay says why the board is off; keep it.
@@ -226,6 +303,7 @@ export const useLessonStore = create<LessonState>((set, get) => {
       onBoardTab();
       const skipped = applyOps(stepOps(current, 'reveal'));
       set({ revealed: new Set([...revealed, step]), notes: [...notes, ...skipped] });
+      armAutoplay();
     },
 
     pageDown: () => {
@@ -252,5 +330,6 @@ export const useLessonStore = create<LessonState>((set, get) => {
 // touching that board's own timing, which loadBoard has just set.
 useCircuitStore.subscribe((s, prev) => {
   if (s.boardLoads === prev.boardLoads || !useLessonStore.getState().lesson) return;
+  clearAutoplayTimer();
   useLessonStore.setState(CLOSED);
 });

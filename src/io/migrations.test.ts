@@ -554,7 +554,7 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       ],
     };
     const out = migrate(structuredClone(v2));
-    expect(out).toEqual({ ...v2, formatVersion: 3 });
+    expect(out).toEqual({ ...v2, formatVersion: 4 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
@@ -582,9 +582,30 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       ],
     };
     const out = migrate(structuredClone(v3));
-    expect(out).toEqual(v3);
+    expect(out).toEqual({ ...v3, formatVersion: 4 });
     expect(validateDocument(out)).toEqual({ valid: true });
-    expect(JSON.parse(JSON.stringify(out))).toEqual(v3);
+    expect(JSON.parse(JSON.stringify(out))).toEqual({ ...v3, formatVersion: 4 });
+  });
+
+  it('keeps a v4 step autoplay seconds', () => {
+    const v4 = {
+      ...lessonV1([]),
+      formatVersion: 4,
+      board: 'b1',
+      steps: [{ kind: 'narrate', prose: 'Hi', actions: [], seconds: 12 }],
+    };
+    const out = migrate(structuredClone(v4));
+    expect(out).toEqual(v4);
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('rejects autoplay seconds out of range', () => {
+    const bad = {
+      ...lessonV1([]),
+      formatVersion: 4,
+      steps: [{ kind: 'narrate', prose: 'Hi', actions: [], seconds: 0 }],
+    };
+    expect(validateDocument(bad).valid).toBe(false);
   });
 });
 

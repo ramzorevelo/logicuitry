@@ -55,6 +55,7 @@ import { CircuitWorkbench } from './workbench-circuit/CircuitWorkbench';
 import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
 import { modalKeysHeld } from './modalKeys';
 import { isSelectTarget } from './panelKeys';
+import { rememberChipSource } from './document/chipSave';
 
 // Gates workbench retired: bubble pushing is the Circuit workbench's locked
 // bubble mode now (B key / mode bar).
@@ -102,8 +103,9 @@ export function App() {
     async (dir: LibraryDir) => {
       setChipsDir(dir);
       setPending(null);
-      const { chips, skipped } = await loadChipLibrary(dir);
+      const { chips, skipped, fileNames } = await loadChipLibrary(dir);
       const result = useCircuitStore.getState().loadChipDefs(chips);
+      for (const [id, name] of fileNames) rememberChipSource(id, { kind: 'library', dir, name });
       setLibraryNote(
         !result.ok
           ? result.error

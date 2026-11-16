@@ -206,6 +206,57 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* Autoplay: status above the buttons, controls below, both full width. */
+.lesson-panel__status,
+.lesson-panel__auto {
+  grid-column: 1 / -1;
+}
+.lesson-panel__status {
+  color: var(--accent-2);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.lesson-panel__status--wait {
+  color: var(--warn);
+}
+.lesson-panel__auto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit) calc(var(--space-unit) * 2);
+  font-size: 0.85rem;
+}
+.lesson-panel__pace,
+.lesson-panel__wait {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+}
+.lesson-panel__pace select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+}
+.lesson-panel__next {
+  position: relative;
+  overflow: hidden;
+}
+/* Scaled, not resized: the countdown repaints four times a second without a layout. */
+.lesson-panel__fill {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left;
+}
+.app-shell--compact .lesson-panel__auto .tool-btn,
+.app-shell--compact .lesson-panel__pace select,
+.app-shell--compact .lesson-panel__wait {
+  min-height: var(--touch-target);
+}
+
 .app-shell--compact .lesson-panel__foot .tool-btn,
 .app-shell--compact .lesson-panel__chip,
 .app-shell--compact .lesson-panel__close {

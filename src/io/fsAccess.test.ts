@@ -48,8 +48,18 @@ describe('loadChipLibrary', () => {
     expect(skipped).toEqual([]);
   });
 
+  it('names the file each chip came from, by chip id', async () => {
+    const root = fakeRoot({ 'renamed.lcirc': serializeDocument(chip('a')) });
+    const { fileNames } = await loadChipLibrary(root);
+    expect(fileNames).toEqual(new Map([['a', 'renamed.lcirc']]));
+  });
+
   it('treats a library with no chips/ folder as empty, not an error', async () => {
-    await expect(loadChipLibrary(fakeRoot(null))).resolves.toEqual({ chips: [], skipped: [] });
+    await expect(loadChipLibrary(fakeRoot(null))).resolves.toEqual({
+      chips: [],
+      skipped: [],
+      fileNames: new Map(),
+    });
   });
 
   it('skips an unreadable file instead of losing the whole library', async () => {

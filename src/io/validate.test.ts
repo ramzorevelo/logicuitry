@@ -29,7 +29,7 @@ const board = {
 
 const lesson = {
   format: 'lcir.lesson',
-  formatVersion: 3,
+  formatVersion: 4,
   id: 'l1',
   title: 'Noise margins',
   workbench: 'devicelab',

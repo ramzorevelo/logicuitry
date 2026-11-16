@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Lesson, LessonStep } from '../../core/model/types';
 import { rowMissingText } from '../../core/lesson';
 import { EXAMPLES } from '../../examples';
@@ -19,7 +19,7 @@ function loadAlu() {
 
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 3,
+  formatVersion: 4,
   id: 'test',
   title: 'Test',
   workbench: 'circuit',
@@ -282,5 +282,107 @@ describe('lesson timing and skipped rows', () => {
     ls().next();
     expect(ls().step).toBe(3);
     expect(ls().notes).toEqual([]);
+  });
+});
+
+describe('autoplay', () => {
+  const steps = lessonOf(
+    { kind: 'narrate', prose: 'One.', actions: [], seconds: 3 },
+    {
+      kind: 'predict',
+      prose: 'Two?',
+      actions: [],
+      choices: [{ text: 'a', right: true }, { text: 'b' }],
+      answer: 'A.',
+      seconds: 5,
+    },
+    { kind: 'narrate', prose: 'Three.', actions: [], seconds: 2 },
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ls().setAutoplayPace(0);
+    ls().setAutoplayWait(false);
+  });
+  afterEach(() => {
+    ls().stopAutoplay();
+    vi.useRealTimers();
+  });
+
+  it('does nothing until started', () => {
+    ls().open(steps);
+    vi.advanceTimersByTime(60_000);
+    expect(ls().step).toBe(0);
+  });
+
+  it('plays through: question, its own reveal, the answer, then on to the end', () => {
+    ls().open(steps);
+    ls().startAutoplay();
+    vi.advanceTimersByTime(2_999);
+    expect(ls().step).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(ls().step).toBe(1);
+    vi.advanceTimersByTime(5_000);
+    expect(ls().revealed.has(1)).toBe(true);
+    expect(ls().step).toBe(1);
+    vi.advanceTimersByTime(5_000);
+    expect(ls().step).toBe(2);
+    vi.advanceTimersByTime(2_000);
+    expect(ls().autoplay).toBe(false);
+    expect(ls().step).toBe(2);
+  });
+
+  it('Wait on questions holds until a person reveals, then counts the answer', () => {
+    ls().setAutoplayWait(true);
+    ls().open(steps, 1);
+    ls().startAutoplay();
+    expect(ls().autoplayDeadline).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    expect(ls().revealed.has(1)).toBe(false);
+    ls().reveal();
+    vi.advanceTimersByTime(5_000);
+    expect(ls().step).toBe(2);
+  });
+
+  it('a pace overrides every step', () => {
+    ls().setAutoplayPace(10);
+    ls().open(steps);
+    ls().startAutoplay();
+    vi.advanceTimersByTime(9_999);
+    expect(ls().step).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(ls().step).toBe(1);
+  });
+
+  it('Next restarts the countdown; Back, a jump and closing stop it', () => {
+    ls().open(steps);
+    ls().startAutoplay();
+    vi.advanceTimersByTime(2_000);
+    ls().next();
+    vi.advanceTimersByTime(4_999);
+    expect(ls().revealed.has(1)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(ls().revealed.has(1)).toBe(true);
+    ls().back();
+    expect(ls().autoplay).toBe(false);
+    ls().startAutoplay();
+    ls().jump(2);
+    expect(ls().autoplay).toBe(false);
+    ls().startAutoplay();
+    ls().close();
+    vi.advanceTimersByTime(60_000);
+    expect(ls().autoplay).toBe(false);
+  });
+
+  it('keeps pace and wait across lessons, not the running state', () => {
+    ls().setAutoplayPace(20);
+    ls().setAutoplayWait(true);
+    ls().open(steps);
+    ls().startAutoplay();
+    ls().close();
+    ls().open(steps);
+    expect(ls().autoplay).toBe(false);
+    expect(ls().autoplayPace).toBe(20);
+    expect(ls().autoplayWait).toBe(true);
   });
 });

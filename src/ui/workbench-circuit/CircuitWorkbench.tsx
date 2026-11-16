@@ -805,6 +805,36 @@ export function CircuitWorkbench() {
   // board state. `null` = the CSS default.
   const [paletteW, setPaletteW] = useState<number | null>(null);
   const paletteRef = useRef<HTMLElement>(null);
+  // Presentation mode only: the left-edge tab floats the hidden palette over the board.
+  const [partsShown, setPartsShown] = useState(false);
+  useEffect(() => {
+    if (!partsShown) return;
+    const onDown = (e: PointerEvent) => {
+      if (!paletteRef.current?.contains(e.target as Node)) setPartsShown(false);
+    };
+    // Capture, so this Esc closes the parts and leaves an armed tool armed.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Left presentation mode with the parts open: they are no longer floating, so Esc is not theirs.
+      if (!document.documentElement.classList.contains('presentation')) {
+        setPartsShown(false);
+        return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      setPartsShown(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [partsShown]);
+  // Every pick sets a new tool object, so a re-pick over an armed part still closes the parts.
+  useEffect(() => {
+    if (tool.kind === 'place') setPartsShown(false);
+  }, [tool]);
   const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
   const paletteDragW = useRef<number | null>(null);
   const paletteDragFrame = useRef<number | null>(null);
@@ -6769,7 +6799,24 @@ export function CircuitWorkbench() {
         {editingLesson ? (
           <LessonStepList />
         ) : (
-          <PaletteRail paletteRef={paletteRef} width={paletteW} />
+          <>
+            <PaletteRail
+              paletteRef={paletteRef}
+              width={partsShown ? null : paletteW}
+              shown={partsShown}
+            />
+            {!partsShown && (
+              <button
+                type="button"
+                className="palette-tab"
+                aria-label="Open parts"
+                title="Parts"
+                onClick={() => setPartsShown(true)}
+              >
+                ›
+              </button>
+            )}
+          </>
         )}
         <div
           hidden={editingLesson}
