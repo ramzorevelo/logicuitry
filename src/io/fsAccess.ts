@@ -36,6 +36,8 @@ export const exportDoc: typeof browser.exportDoc = (doc, filename) => fs().expor
 
 export const pickDocumentFile: typeof browser.pickDocumentFile = (startIn) =>
   fs().pickDocumentFile(startIn);
+export const pickDocumentFiles: typeof browser.pickDocumentFiles = (startIn, accept) =>
+  fs().pickDocumentFiles(startIn, accept);
 export const pickSavePath: typeof browser.pickSavePath = (name, startIn) =>
   fs().pickSavePath(name, startIn);
 export const saveBlob: typeof browser.saveBlob = (blob, name, kind) =>

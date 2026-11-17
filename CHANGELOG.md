@@ -5,6 +5,27 @@ All notable changes to Logicuitry are documented here. Format follows
 [SemVer](https://semver.org/) (pre-1.0: the minor digit marks a big release, the
 patch digit a small feature, fix or follow-up).
 
+## [Unreleased]
+
+## [0.8.3] - 2026-11-18
+
+### Added
+
+- A welcome card on the first launch, and a tutorial (Help > Tutorial).
+- Boards save with the chips they use, so one file opens anywhere.
+- Parts list tab: the parts a board needs, with Copy as text and Save CSV.
+- Open Chip opens several chip files at once.
+
+### Changed
+
+- Import circuit and Package as chip ask first on a chip file or chip tab.
+  Boards saved now need 0.8.3.
+
+### Fixed
+
+- On a phone: the palette's group tabs, Back during the tutorial, and the menu
+  bar on one row.
+
 ## [0.8.2] - 2026-11-17
 
 ### Added

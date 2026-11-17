@@ -2596,3 +2596,133 @@
   min-width: var(--touch-h);
   min-height: var(--touch-h);
 }
+
+.wave-panel__body--parts {
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.parts-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.parts-panel__table th,
+.parts-panel__table td {
+  padding: 3px var(--space-unit);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.parts-panel__table th {
+  color: var(--muted);
+  font-size: var(--text-secondary);
+  font-weight: 600;
+}
+
+.parts-panel__table .parts-panel__num {
+  text-align: right;
+  font-family: var(--font-mono);
+  /* A phone's overlay scrollbar sits on the last column. */
+  padding-right: calc(var(--space-unit) * 3);
+}
+
+.parts-panel__part {
+  font-family: var(--font-mono);
+}
+
+.parts-panel__sub {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-secondary);
+}
+
+.parts-panel__gate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit) calc(var(--space-unit) * 3);
+  padding: 3px var(--space-unit);
+  border-bottom: 1px solid var(--line);
+}
+
+.parts-panel__gate-name {
+  min-width: 10em;
+  font-weight: 600;
+}
+
+.parts-panel__select {
+  max-width: 100%;
+  font: inherit;
+}
+
+.parts-panel__problem {
+  padding: 4px var(--space-unit);
+  border-bottom: 1px solid var(--line);
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.parts-panel__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit) calc(var(--space-unit) * 3);
+  padding: 4px var(--space-unit);
+}
+
+.parts-panel__foot .parts-panel__sub {
+  display: inline;
+}
+
+.parts-panel__total {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.parts-panel__status--error {
+  color: var(--warn);
+}
+
+/* The dock grows with its content up to its cap, so on a phone every row's height is board lost. */
+.app-shell--compact .parts-panel {
+  font-size: var(--text-secondary);
+  line-height: 1.25;
+}
+
+.app-shell--compact .parts-panel__table th,
+.app-shell--compact .parts-panel__table td {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+/* A fixed height that scrolls: a package choice adds a line, and the board must not jump. */
+.app-shell--compact .wave-panel__body--parts {
+  flex: 0 0 32dvh;
+}
+
+.app-shell--compact .parts-panel__gate {
+  gap: 2px calc(var(--space-unit) * 2);
+  padding: 2px var(--space-unit);
+}
+
+.app-shell--compact .parts-panel__gate > .parts-panel__sub {
+  flex-basis: 100%;
+}
+
+.app-shell--compact .parts-panel__gate-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell--compact .parts-panel__gate-name .parts-panel__sub {
+  display: inline;
+  margin-left: var(--space-unit);
+  font-weight: 400;
+}
+
+.app-shell--compact .parts-panel__foot {
+  gap: 2px calc(var(--space-unit) * 2);
+  padding: 2px var(--space-unit);
+}

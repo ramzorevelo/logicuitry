@@ -91,6 +91,7 @@ import {
   type SequenceHolder,
 } from './history';
 import { paramLiveness } from './paramLiveness';
+import { withPartChoice } from './partsView';
 import type { WireEnd } from '../../core/model/types';
 import { canFloat, isOutputSlot, mayShareNet } from '../../core/model/pinSlots';
 import { cloneCircuit, derivePins, detachRemovedPins, findCycle, renamePinRefs } from './packaging';
@@ -348,7 +349,7 @@ const snapPoint = (p: Point, g: number): Point => ({
 export function starterBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'scratch',
     name: 'Untitled board',
     components: [
@@ -385,6 +386,11 @@ export function starterBoard(): Board {
   };
 }
 
+/** Nothing on it: the starter board's settings without its circuit. */
+export function emptyBoard(id: string): Board {
+  return { ...starterBoard(), id, components: [], wires: [], junctions: [] };
+}
+
 interface SimState {
   sim: Simulator;
   compiled: CompiledCircuit;
@@ -405,6 +411,8 @@ interface CircuitState {
    *  frames (it ships no meaningful camera), the user's own boards follow the
    *  `fitOnOpen` preference. */
   fitRequest: number;
+  /** Something over the canvas's lower part (a phone's tutorial card) starts at this client y. */
+  revealAbove: { aboveY: number; seq: number } | null;
   rev: number; // bumped on any board/sim mutation to force a redraw
   powered: boolean;
   running: boolean;
@@ -483,6 +491,8 @@ interface CircuitState {
   loadBoard: (board: Board) => void;
   /** Ask the workbench to fit the board to the viewport, as Home does. */
   requestFit: () => void;
+  /** Brings the whole circuit above `aboveY` if part of it is hidden; never zooms in. */
+  requestRevealAbove: (aboveY: number) => void;
   /** Adds a freshly built def to the in-memory library; rejects a cycle. */
   commitNewChip: (def: ChipDef) => { ok: true } | { ok: false; error: string };
   /** Bulk-load defs read from the library folder. Merges over what is already
@@ -729,6 +739,8 @@ interface CircuitState {
   /** Sim ps per wall second while running. Saved with the board, so it
    *  dirties the document, but pacing alone never powers the sim off. */
   setRunSpeed: (psPerSecond: number) => void;
+  /** Pick the 74LS package for one loose-gate key, or clear it with undefined; not an undo step. */
+  setPartChoice: (key: string, part: string | undefined) => void;
   power: () => void;
   /** One gate delay while paused; see pressGateStep. */
   gateStep: () => void;
@@ -1008,7 +1020,7 @@ function shadowNotice(ids: readonly string[]): { error?: string } {
   return { error: `chips: your ${ids.join(', ')} replaces the built-in part of the same name` };
 }
 
-export type DockTab = 'waves' | 'memory' | 'checks' | 'sequence' | 'challenge';
+export type DockTab = 'waves' | 'memory' | 'checks' | 'sequence' | 'challenge' | 'parts';
 
 export interface LastRun {
   board: Board;
@@ -2814,6 +2826,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     tool: { kind: 'select' },
     selection: new Set(),
     fitRequest: 0,
+    revealAbove: null,
     rev: 0,
     powered: false,
     running: false,
@@ -2968,6 +2981,8 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     requestFit: () => set((st) => ({ fitRequest: st.fitRequest + 1 })),
+    requestRevealAbove: (aboveY) =>
+      set((st) => ({ revealAbove: { aboveY, seq: (st.revealAbove?.seq ?? 0) + 1 } })),
 
     commitNewChip: (def) => {
       const candidateLib = new Map(get().chipLib);
@@ -4147,6 +4162,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     setRunSpeed: (psPerSecond) => {
       if (get().board.runSpeed === psPerSecond) return;
       set((s) => ({ board: { ...s.board, runSpeed: psPerSecond }, rev: s.rev + 1 }));
+    },
+
+    setPartChoice: (key, part) => {
+      if (get().board.partChoices?.[key] === part) return;
+      set((s) => {
+        const next = withPartChoice(s.board.partChoices, key, part);
+        const board = { ...s.board };
+        if (next) board.partChoices = next;
+        else delete board.partChoices;
+        return { board, rev: s.rev + 1 };
+      });
     },
 
     power: () => {

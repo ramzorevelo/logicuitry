@@ -24,6 +24,8 @@ interface Props {
   source: Circuit;
   selection: ReadonlySet<string>;
   chipLib: ChipLibrary;
+  /** Set when the source is an open chip's tab. */
+  openChip?: { name: string; onSaveChip: () => void };
   onClose: () => void;
 }
 
@@ -134,8 +136,10 @@ function SwatchRow({
   );
 }
 
-export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
+export function PackageDialog({ source, selection, chipLib, openChip, onClose }: Props) {
   useModalKeys(onClose);
+  // Packaging a whole open chip mints a second chip; the usual intent is Save Chip.
+  const [packageAnyway, setPackageAnyway] = useState(false);
   const chipsDir = useShellStore((s) => s.chipsDir);
   const setChipsDir = useShellStore((s) => s.setChipsDir);
 
@@ -219,6 +223,42 @@ export function PackageDialog({ source, selection, chipLib, onClose }: Props) {
       onClose();
     }
   };
+
+  if (openChip && selection.size === 0 && !packageAnyway) {
+    return (
+      <div
+        className="package-overlay"
+        onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div className="package-dialog close-tab-dialog">
+          <h3>Package as chip</h3>
+          <p className="label-conflict-hint">
+            This makes a new chip with its own identity. Boards that use {openChip.name} keep the
+            old one. To update {openChip.name}, use Save Chip.
+          </p>
+          <div className="label-conflict-buttons">
+            <button
+              type="button"
+              className="tool-btn"
+              autoFocus
+              onClick={() => {
+                onClose();
+                openChip.onSaveChip();
+              }}
+            >
+              Save Chip instead
+            </button>
+            <button type="button" className="tool-btn" onClick={() => setPackageAnyway(true)}>
+              Package anyway
+            </button>
+            <button type="button" className="tool-btn" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

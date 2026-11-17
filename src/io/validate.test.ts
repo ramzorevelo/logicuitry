@@ -15,7 +15,7 @@ const chip = {
 
 const board = {
   format: 'lcir.board',
-  formatVersion: 15,
+  formatVersion: 16,
   id: 'b1',
   name: 'demo',
   components: [],

@@ -13,6 +13,7 @@ import { requestOf } from './handleStore';
 import {
   PermissionLapsedError,
   pickDocumentFile as pickFile,
+  pickDocumentFiles as pickFiles,
   pickSavePath,
   readDocFile,
   sameFile,
@@ -76,6 +77,14 @@ export async function openBoardFile(
  *  Save writes back to. */
 export function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | undefined> {
   return pickFile(startIn);
+}
+
+/** Several handles at once, empty if dismissed. `accept` narrows to extensions with the dot. */
+export function pickDocumentFiles(
+  startIn?: LibraryDir,
+  accept?: readonly string[],
+): Promise<DocFile[]> {
+  return pickFiles(startIn, accept);
 }
 
 /**

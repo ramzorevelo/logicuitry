@@ -47,6 +47,7 @@ import { MemoryPanel, useMemoryAvailable } from './MemoryPanel';
 import { clampPopupToCanvas } from './paramEdit';
 import type { DockTab } from './circuitStore';
 import { CheckCounts, ChecksPanel, useChecksView } from './ChecksPanel';
+import { PartsPanel } from './PartsPanel';
 import { SequencePanel, useSequenceAvailable } from './SequencePanel';
 import {
   ChallengeMark,
@@ -136,6 +137,7 @@ export function WaveformPanel({
   const memoryAvailable = useMemoryAvailable();
   const memoryShown = dockOpen && memoryAvailable && dockTab === 'memory';
   const checksShown = dockOpen && dockTab === 'checks';
+  const partsShown = dockOpen && dockTab === 'parts';
   const sequenceAvailable = useSequenceAvailable();
   const sequenceShown = dockOpen && sequenceAvailable && dockTab === 'sequence';
   const challengeAvailable = useChallengeApplies();
@@ -145,7 +147,8 @@ export function WaveformPanel({
   const [showHiddenChecks, setShowHiddenChecks] = useState(false);
   // `open` is the waveform view's own: the other tabs hide it but keep this
   // component, and with it the track order, hiding and window, mounted.
-  const open = dockOpen && !memoryShown && !checksShown && !sequenceShown && !challengeShown;
+  const open =
+    dockOpen && !memoryShown && !checksShown && !sequenceShown && !challengeShown && !partsShown;
   // Memory can also appear without a tab click (back on the board tab, a RAM placed).
   useEffect(() => {
     if (memoryShown) store.getState().setDockTab('memory');
@@ -958,6 +961,7 @@ export function WaveformPanel({
             <DockTabButton tab="sequence" label="Sequence" shown={sequenceShown} />
           )}
           {!compact && challengeTab}
+          <DockTabButton tab="parts" label="Parts list" shown={partsShown} />
           {memoryAvailable && <DockTabButton tab="memory" label="Memory" shown={memoryShown} />}
         </span>
         {checksShown && (
@@ -1143,6 +1147,15 @@ export function WaveformPanel({
           style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
         >
           <ChecksPanel view={checks} viewOnly={viewOnly} showHidden={showHiddenChecks} />
+        </div>
+      )}
+      {partsShown && (
+        <div
+          className="wave-panel__body wave-panel__body--parts"
+          ref={wrapRef}
+          style={panelH !== null ? { height: panelH, maxHeight: panelH } : undefined}
+        >
+          <PartsPanel viewOnly={viewOnly} />
         </div>
       )}
       {sequenceShown && (

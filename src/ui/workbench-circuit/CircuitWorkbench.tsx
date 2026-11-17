@@ -88,6 +88,7 @@ import { WaveformPanel } from './WaveformPanel';
 import { ChallengePill, ViewOnlyChallenge, useLessonOpen } from './ChallengePanel';
 import { ChallengeDialog } from './ChallengeDialog';
 import { useChallengeStore } from './challengeStore';
+import { useOnboardingStore } from '../onboarding/onboardingStore';
 import { challengeMenuItems } from './challengeMenu';
 import { buildStaOverlay } from './staOverlay';
 import { activeChecks, checksTabShown, revealViewport } from './checksView';
@@ -173,6 +174,11 @@ import {
 } from '../../render/hitTest';
 import { PreviewController } from '../../render/ghostPreview';
 import { PackageDialog } from './PackageDialog';
+import { ImportChipDialog } from './ImportChipDialog';
+import { openChipFile, type PickedChip } from '../document/openChips';
+import { planEmbedded } from '../document/embeddedChips';
+import { saveOpenChip } from '../document/chipSave';
+import { isBuiltinChipDef } from '../../core/parts/packages';
 import { BuildCircuitDialog } from './BuildCircuitDialog';
 import { componentPaths } from '../../core/model/compile';
 import { keyBelongsElsewhere } from '../panelKeys';
@@ -905,6 +911,8 @@ export function CircuitWorkbench() {
     drawRef.current();
   };
 
+  const [importingChip, setImportingChip] = useState<PickedChip | null>(null);
+
   /** Merge another document's contents into THIS board instead of replacing
    *  it. Board or chip alike -- both are circuits. The slice goes through the
    *  paste path, so ids are remapped, labels advance clear of the board's own,
@@ -918,7 +926,25 @@ export function CircuitWorkbench() {
         useCircuitStore.setState({ error: 'import: that file is a lesson, not a circuit' });
         return;
       }
-      const circuit: Circuit = doc.kind === 'board' ? doc.board : doc.def;
+      // Pasting a chip's insides loses its identity, which is rarely what was meant.
+      if (doc.kind === 'chip') {
+        setImportingChip({ def: doc.def, file });
+        return;
+      }
+      // Its own chips first, or the pasted instances arrive as "?"; loaded copies win.
+      const st = store.getState();
+      const missing = planEmbedded(doc.board, st.chipLib, new Set()).load;
+      const loaded = missing.length > 0 ? st.loadChipDefs(missing) : null;
+      pasteCircuit(doc.board);
+      if (loaded && !loaded.ok)
+        useCircuitStore.setState({ error: `import: the board's own chips: ${loaded.error}` });
+    } catch (e) {
+      useCircuitStore.setState({ error: `import: ${(e as Error).message}` });
+    }
+  };
+
+  const pasteCircuit = (circuit: Circuit) => {
+    try {
       const ids = new Set([
         ...circuit.components.map((c) => c.id),
         ...circuit.junctions.map((j) => j.id),
@@ -1719,6 +1745,30 @@ export function CircuitWorkbench() {
     fitRef.current();
   }, [fitRequest]);
 
+  const revealAbove = useCircuitStore((s) => s.revealAbove);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const theme = themeRef.current;
+    if (!revealAbove || !canvas || !theme) return;
+    const rect = canvas.getBoundingClientRect();
+    // The phone's floating Power/Run panel covers the canvas's top edge.
+    const quick = canvas.parentElement?.querySelector('.circuit-quick')?.getBoundingClientRect();
+    const top = quick && quick.height > 0 ? quick.bottom - rect.top : 0;
+    const bottom = Math.min(rect.height, revealAbove.aboveY - rect.top);
+    if (bottom - top <= 0) return;
+    const st = store.getState();
+    const bounds = circuitDrawnBounds(st.activeCircuit(), st.chipLib, theme);
+    if (!bounds) return;
+    const vp = viewportRef.current;
+    const tl = worldToScreen(vp, { x: bounds.x, y: bounds.y });
+    const br = worldToScreen(vp, { x: bounds.x + bounds.w, y: bounds.y + bounds.h });
+    if (tl.x >= 0 && tl.y >= top && br.x <= rect.width && br.y <= bottom) return;
+    // Capped at the current zoom: a reveal only ever pulls back, never jumps in.
+    const margin = 2 * theme.gridSchematic;
+    const fit = fitViewport(bounds, rect.width, bottom - top, margin, MIN_ZOOM, vp.zoom);
+    setViewport({ ...fit, panY: fit.panY - top / fit.zoom });
+  }, [revealAbove]);
+
   // The lesson's panels take the canvas's edges while the camera keeps its top-left, which
   // pushed a fitted board's right side out of view.
   const runnerOpen = useLessonStore((s) => s.lesson !== null);
@@ -1921,7 +1971,19 @@ export function CircuitWorkbench() {
         s.commitDuplicate(dup.base, dup.offset);
         drawRef.current();
       } else if (e.key === 'Escape') {
+        const nothingToCancel =
+          !wiringRef.current &&
+          !lassoRef.current &&
+          !cutRef.current &&
+          !smartConnectRef.current &&
+          !duplicateRef.current &&
+          // A toolbar or menu popup closes on this same Esc, in capture, but is still mounted.
+          !document.querySelector('.menubar__popup') &&
+          s.activeTabId === 'board' &&
+          s.tool.kind === 'select' &&
+          s.selection.size === 0;
         cancelPending();
+        if (nothingToCancel) useOnboardingStore.getState().idleEscape();
       } else if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
         // Plain `=`/`-` adjust pin count; `+`/`_` adjust width. On a US
         // keyboard `+` is Shift+`=` and `_` is Shift+`-`, so e.shiftKey can't
@@ -6494,7 +6556,7 @@ export function CircuitWorkbench() {
         )}
         {mode !== 'bubble' && (
           <>
-            <div className="tool-group">
+            <div className="tool-group" data-tour="tools">
               {/* Undo and redo were reachable only by Ctrl+Z and the Edit menu
                   outside bubble mode, which made them invisible on a phone and
                   easy to miss on a desktop. */}
@@ -6578,6 +6640,7 @@ export function CircuitWorkbench() {
                   being drawn. */}
               <ToolBtn
                 icon={wiring ? 'cancel' : 'wire'}
+                tool="wire"
                 active={tool.kind === 'wire'}
                 title={wiring ? 'Discard this wire' : `Draw wires${key('W')}`}
                 onClick={() =>
@@ -6645,9 +6708,10 @@ export function CircuitWorkbench() {
                 Analyze
               </ToolBtn>
             </div>
-            <div className="tool-group">
+            <div className="tool-group" data-tour="sim">
               <ToolBtn
                 icon="power"
+                tool="power"
                 quick
                 active={powered}
                 disabled={lessonPlaying}
@@ -6662,6 +6726,7 @@ export function CircuitWorkbench() {
               </ToolBtn>
               <ToolBtn
                 icon={running ? 'pause' : 'run'}
+                tool="run"
                 quick
                 active={running}
                 disabled={!powered}
@@ -6999,9 +7064,15 @@ export function CircuitWorkbench() {
               reach, and the toolbar is a scrolling row. Floating over the
               canvas costs no layout height. */}
           {compact && (
-            <div className="circuit-quick" role="toolbar" aria-label="Quick actions">
+            <div
+              className="circuit-quick"
+              role="toolbar"
+              aria-label="Quick actions"
+              data-tour="sim"
+            >
               <ToolBtn
                 icon="power"
+                tool="power"
                 active={powered}
                 disabled={lessonPlaying}
                 title={`${powered ? 'Power off' : 'Power on'}${key('Space')}`}
@@ -7011,6 +7082,7 @@ export function CircuitWorkbench() {
               </ToolBtn>
               <ToolBtn
                 icon={running ? 'pause' : 'run'}
+                tool="run"
                 active={running}
                 disabled={!powered}
                 title={running ? 'Pause' : 'Run'}
@@ -7860,7 +7932,34 @@ export function CircuitWorkbench() {
           source={store.getState().activeCircuit()}
           selection={selection}
           chipLib={chipLib}
+          {...(() => {
+            const st = store.getState();
+            const tab = st.tabs.find((t) => t.id === st.activeTabId);
+            const def = tab?.kind === 'def' ? chipLib.get(tab.defId) : undefined;
+            if (!def || isBuiltinChipDef(def)) return {};
+            const startIn = useShellStore.getState().chipsDir ?? boardsDir ?? undefined;
+            return {
+              openChip: {
+                name: def.name,
+                onSaveChip: () => void saveOpenChip(def.id, { startIn }),
+              },
+            };
+          })()}
           onClose={() => setPackaging(false)}
+        />
+      )}
+      {importingChip && (
+        <ImportChipDialog
+          def={importingChip.def}
+          onOpen={() => {
+            setImportingChip(null);
+            openChipFile(importingChip.def, importingChip.file);
+          }}
+          onPaste={() => {
+            setImportingChip(null);
+            pasteCircuit(importingChip.def);
+          }}
+          onCancel={() => setImportingChip(null)}
         />
       )}
       <LabelConflictDialog />
@@ -7885,6 +7984,8 @@ function ToolBtn(props: {
   labelled?: boolean;
   expanded?: boolean;
   className?: string;
+  /** The tutorial points at this control by name. */
+  tool?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -7895,6 +7996,7 @@ function ToolBtn(props: {
         .filter(Boolean)
         .join(' ')}
       data-quick={props.quick ? '' : undefined}
+      data-tool={props.tool}
       data-active={props.menu && props.active ? '' : undefined}
       aria-pressed={props.menu ? undefined : props.active}
       aria-haspopup={props.menu ? 'menu' : undefined}

@@ -14,7 +14,7 @@ import type { Board, ChipDef, Lesson } from '../core/model/types';
 
 const board = (name: string): Board => ({
   format: 'lcir.board',
-  formatVersion: 15,
+  formatVersion: 16,
   id: 'b1',
   name,
   components: [],
@@ -38,7 +38,7 @@ describe('parseBoard', () => {
       components: [{ id: 'i', kind: 'input', pos: { x: 0, y: 0 } }],
     };
     const out = parseBoard(JSON.stringify(v2));
-    expect(out.formatVersion).toBe(15);
+    expect(out.formatVersion).toBe(16);
     expect(out.components[0]!.kind).toBe('inport');
   });
 
@@ -49,8 +49,28 @@ describe('parseBoard', () => {
       components: [{ id: 'u', kind: 'timer555' as const, pos: { x: 0, y: 0 }, params }],
     };
     const out = parseBoard(serializeDocument(b));
-    expect(out.formatVersion).toBe(15);
+    expect(out.formatVersion).toBe(16);
     expect(out.components[0]!.params).toEqual(params);
+  });
+
+  it('round-trips nested embedded chips and part choices', () => {
+    const def = (id: string, uses?: string): ChipDef => ({
+      format: 'lcir.chip',
+      formatVersion: 8,
+      id,
+      name: id,
+      version: 2,
+      pins: [],
+      components: uses ? [{ id: 'u1', kind: 'chip', defId: uses, pos: { x: 0, y: 0 } }] : [],
+      wires: [],
+      junctions: [],
+    });
+    const b: Board = {
+      ...board('embed'),
+      chips: [def('outer', 'inner'), def('inner')],
+      partChoices: { 'and:2': '74LS08' },
+    };
+    expect(parseBoard(serializeDocument(b))).toEqual(b);
   });
 
   it('rejects a chip file by format rather than loading it as a board', () => {

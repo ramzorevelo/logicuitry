@@ -910,7 +910,7 @@ function bufDef(id: string): ChipDef {
 function emptyBoard(): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'test',
     name: 'test',
     components: [],
@@ -4838,7 +4838,7 @@ describe('loadBoard (session restore / File > Open)', () => {
 
   const loaded = (): Board => ({
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'opened',
     name: 'opened',
     components: [
@@ -5291,7 +5291,7 @@ describe('circuitStore label sharing across a buffer', () => {
 
   const chainBoard = (withBuffer: boolean): Board => ({
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'chain',
     name: 'chain',
     components: [
@@ -5338,7 +5338,7 @@ describe('circuitStore label sharing across a buffer', () => {
   /** sw -> chain of single-input parts -> led. */
   const throughBoard = (kinds: readonly string[]): Board => ({
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'chain',
     name: 'chain',
     components: [

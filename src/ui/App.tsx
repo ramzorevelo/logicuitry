@@ -51,6 +51,9 @@ import { isDesktop } from '../io/platform';
 const RELEASES_URL = 'https://github.com/ramzorevelo/logicuitry/releases/latest';
 import { ReferenceDrawer, ReferenceDrawerProvider } from './components/ReferenceDrawer';
 import { NumbersWorkbench } from './workbench-numbers/NumbersWorkbench';
+import { Onboarding, useTutorialAvailable } from './onboarding/Onboarding';
+import { useOnboardingStore } from './onboarding/onboardingStore';
+import { seenAtLaunch, shouldWelcome, takeWelcomeChance } from './onboarding/firstLaunch';
 import { CircuitWorkbench } from './workbench-circuit/CircuitWorkbench';
 import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
 import { modalKeysHeld } from './modalKeys';
@@ -310,6 +313,27 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [whatsNewDue, dismissWhatsNew] = useWhatsNew(presentation);
+  const tutorialAvailable = useTutorialAvailable(presentation);
+
+  // After the restore, so a returning session or a launched file is known by then.
+  const presentationRef = useRef(presentation);
+  presentationRef.current = presentation;
+  useEffect(() => {
+    if (seenAtLaunch() !== 'never') return;
+    let live = true;
+    void document_.whenStarted().then(() => {
+      const onboarding = useOnboardingStore.getState();
+      const facts = {
+        seen: seenAtLaunch(),
+        documentOpened: onboarding.documentOpened,
+        presentation: presentationRef.current,
+      };
+      if (live && shouldWelcome(facts) && takeWelcomeChance()) onboarding.showWelcome();
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Rebuilt whenever the state its handlers read changes: a menu item is a
   // closure, and a stale one acts on a stale value.
@@ -391,6 +415,15 @@ export function App() {
                 { separator: true } as const,
               ]
             : []),
+          {
+            id: 'tutorial',
+            label: 'Tutorial',
+            disabled: !tutorialAvailable,
+            run: () => {
+              setWorkbench('circuit');
+              useOnboardingStore.getState().startTour();
+            },
+          },
           { id: 'keys', label: 'Keys and gestures', shortcut: '?', run: () => setHelpOpen(true) },
           { id: 'whatsNew', label: "What's new", run: () => setWhatsNewOpen(true) },
           ...(isDesktop()
@@ -407,7 +440,17 @@ export function App() {
         ],
       },
     ],
-    [presentation, compact, chipsDir, libraryNote, pending, boardsDir, setBoardsDir],
+    [
+      presentation,
+      compact,
+      chipsDir,
+      libraryNote,
+      pending,
+      boardsDir,
+      setBoardsDir,
+      tutorialAvailable,
+      setWorkbench,
+    ],
   );
   useContributeMenus('shell', shellMenus);
   useContributeMenus('document', document_.menus);
@@ -434,7 +477,7 @@ export function App() {
         <header className="app-toolbar" aria-label="Logicuitry">
           <ThemeMark theme={theme} />
           <MenuBar menus={menus} />
-          <nav className="workbench-switcher">
+          <nav className="workbench-switcher" data-tour="workbenches">
             {WORKBENCHES.map((wb, i) => (
               <button
                 key={wb.id}
@@ -501,6 +544,11 @@ export function App() {
           />
         ) : null}
         {reportOpen ? <BugReportDialog onClose={() => setReportOpen(false)} /> : null}
+        <Onboarding
+          presentation={presentation}
+          {...document_.onboarding}
+          openKeys={() => setHelpOpen(true)}
+        />
         <HoldTip />
         <UpdateBanner presentation={presentation} />
         <DesktopUpdateBanner presentation={presentation} />

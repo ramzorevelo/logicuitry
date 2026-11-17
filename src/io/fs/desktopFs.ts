@@ -146,6 +146,28 @@ export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | 
   return file;
 }
 
+/** `accept` lists extensions with the dot; omitted means every document type. Empty when dismissed. */
+export async function pickDocumentFiles(
+  startIn?: LibraryDir,
+  accept?: readonly string[],
+): Promise<DocFile[]> {
+  const { open } = await dialog();
+  const picked = await open({
+    multiple: true,
+    filters: [
+      {
+        name: 'Logicuitry document',
+        extensions: accept ? accept.map((e) => e.slice(1)) : OPEN_EXTENSIONS,
+      },
+    ],
+    ...(startIn ? { defaultPath: located(startIn).path } : {}),
+  });
+  const paths = picked === null ? [] : Array.isArray(picked) ? picked : [picked];
+  const files: Located[] = [];
+  for (const path of paths) files.push({ name: await basename(path), path });
+  return files;
+}
+
 const SAVE_KINDS: Record<string, string> = {
   [BOARD_EXT]: 'Logicuitry board',
   [CHIP_EXT]: 'Logicuitry chip',

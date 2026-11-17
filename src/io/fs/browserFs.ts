@@ -172,7 +172,7 @@ export function filePickersSupported(): boolean {
 
 export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | undefined> {
   const show = filePicker().showOpenFilePicker;
-  if (!show) return chooseUploadedFile();
+  if (!show) return (await chooseUploadedFiles(false))[0];
   try {
     const handles = await show({ types: DOC_TYPES, ...(startIn ? { startIn } : {}) });
     return handles[0];
@@ -181,20 +181,39 @@ export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | 
   }
 }
 
+/** `accept` lists extensions with the dot; omitted means every document type. Empty when dismissed. */
+export async function pickDocumentFiles(
+  startIn?: LibraryDir,
+  accept?: readonly string[],
+): Promise<DocFile[]> {
+  const show = filePicker().showOpenFilePicker;
+  if (!show) return chooseUploadedFiles(true, accept);
+  const types = accept
+    ? DOC_TYPES.filter((t) => accept.some((e) => t.accept['application/json'].includes(e)))
+    : DOC_TYPES;
+  try {
+    const handles = await show({ multiple: true, types, ...(startIn ? { startIn } : {}) });
+    return [...handles];
+  } catch {
+    return []; // dismissed
+  }
+}
+
 /** The browser's own chooser, for phones and non-Chromium. Must run inside the click that asked
  *  for it, so nothing may be awaited before `input.click()`. */
-function chooseUploadedFile(): Promise<DocFile | undefined> {
+function chooseUploadedFiles(multiple: boolean, accept?: readonly string[]): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = `${BOARD_EXT},${CHIP_EXT},${LESSON_EXT}`;
+    input.multiple = multiple;
+    input.accept = (accept ?? [BOARD_EXT, CHIP_EXT, LESSON_EXT]).join(',');
     input.hidden = true;
-    const done = (file?: File) => {
+    const done = (files: File[]) => {
       input.remove();
-      resolve(file);
+      resolve(files);
     };
-    input.addEventListener('change', () => done(input.files?.[0]));
-    input.addEventListener('cancel', () => done());
+    input.addEventListener('change', () => done(Array.from(input.files ?? [])));
+    input.addEventListener('cancel', () => done([]));
     // Older Safari ignores click() on an input that is not in the document.
     document.body.append(input);
     input.click();

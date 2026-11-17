@@ -164,6 +164,7 @@ export function SettingsDialog({ onClose }: Props) {
         {check('restoreLastBoard', 'Reopen the last board at launch')}
         {check('fitOnOpen', 'Fit the board to the window when it opens')}
         {check('confirmReplaceBoard', 'Ask before replacing a board with unsaved edits')}
+        {check('embedChips', 'Save boards with the chips they use')}
 
         {/* Meaningless in a browser, where updates come from the service
             worker, so they are not shown there at all. */}

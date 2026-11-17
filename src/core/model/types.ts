@@ -238,7 +238,7 @@ export const DEFAULT_RUN_SPEED = RUN_SPEEDS[0]!;
 
 export interface Board extends Circuit {
   format: 'lcir.board';
-  formatVersion: 15;
+  formatVersion: 16;
   id: string;
   name: string;
   /** Hierarchical net paths pinned to the waveform view. */
@@ -250,6 +250,10 @@ export interface Board extends Circuit {
   sequence?: BoardSequence | undefined;
   /** Absent means none; undefined is allowed so an undo can clear it through a spread. */
   challenge?: Challenge | undefined;
+  /** Transport copies of the user chips the board uses, resolved by id on load; never a second source of truth. */
+  chips?: ChipDef[];
+  /** Package part per gate shape, keyed `<gateKind>:<inputs>` (e.g. `and:2`), valued by part id (`74LS08`). */
+  partChoices?: Record<string, string>;
 }
 
 /** A row of 0/1 inputs then 0/1 outputs, in column order; a null output is don't care. */

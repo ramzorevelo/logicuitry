@@ -271,14 +271,15 @@ h3 {
 
 /* The way back to the parts: a tab on the board's left edge, presentation mode only. The
    palette then floats over the board so the canvas keeps its width. A phone never offers
-   presentation mode, but one launched into it keeps its own strip. */
-.palette-tab {
+   presentation mode, but one launched into it keeps its own strip. Scoped to the board's
+   child: the phone palette's group tabs share the class and must stay visible. */
+.circuit-body > .palette-tab {
   display: none;
 }
 :root.presentation .circuit-body {
   position: relative;
 }
-:root.presentation .palette-tab {
+:root.presentation .circuit-body > .palette-tab {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -300,10 +301,10 @@ h3 {
   font-size: 1.5rem;
   cursor: pointer;
 }
-:root.presentation .palette-tab:hover {
+:root.presentation .circuit-body > .palette-tab:hover {
   background: var(--accent-fill);
 }
-:root.presentation .palette-tab:focus-visible {
+:root.presentation .circuit-body > .palette-tab:focus-visible {
   outline: var(--stroke-min) solid var(--accent);
 }
 :root.presentation .circuit-palette.circuit-palette--shown {
@@ -319,7 +320,7 @@ h3 {
 :root.presentation .app-shell--compact .circuit-palette {
   display: flex;
 }
-:root.presentation .app-shell--compact .palette-tab {
+:root.presentation .app-shell--compact .circuit-body > .palette-tab {
   display: none;
 }
 :root.presentation .circuit-palette__resize {
@@ -874,7 +875,15 @@ h3 {
 }
 
 .app-shell--compact .menubar {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-shell--compact .menubar::-webkit-scrollbar {
+  display: none;
 }
 
 /* The palette used to be hidden here, because editing was desktop-only. It is
@@ -1179,9 +1188,9 @@ h3 {
    it wrapped, Help sat at the LEFT of row two and still opened leftwards,
    off the side of the screen.
 
-   Anchoring to the bar also means nothing here depends on where a title sits,
-   so wrapping to a second row costs only height. */
-.app-shell--compact .menubar {
+   The bar scrolls sideways on a narrow phone, and a scroller clips what is
+   anchored inside it, so the toolbar row holding the bar is the anchor. */
+.app-shell--compact .app-toolbar {
   position: relative;
 }
 

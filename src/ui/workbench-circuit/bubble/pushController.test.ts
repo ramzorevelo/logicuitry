@@ -6,7 +6,7 @@ import { commitPush, previewPush } from './pushController';
 function board(components: Component[], wires: Wire[]): Board {
   return {
     format: 'lcir.board',
-    formatVersion: 15,
+    formatVersion: 16,
     id: 'b',
     name: 'b',
     components,

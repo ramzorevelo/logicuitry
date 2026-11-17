@@ -16,7 +16,7 @@ import {
   boardFileName,
   loadRecentBoards,
   openBoardFile,
-  pickDocumentFile,
+  pickDocumentFiles,
   readDocumentFile,
   rememberRecentBoard,
   saveBoardAs,
@@ -27,7 +27,7 @@ import {
 import { parseDocument, serializeDocument } from '../../io/library';
 import { loadSession, saveSession } from '../../io/sessionStore';
 import { loadFileLessons, rememberFileLesson } from '../../io/lessonFiles';
-import { starterBoard, useCircuitStore } from '../workbench-circuit/circuitStore';
+import { emptyBoard, starterBoard, useCircuitStore } from '../workbench-circuit/circuitStore';
 import { OpenChipDialog } from '../workbench-circuit/OpenChipDialog';
 import { ExamplesDialog } from '../components/ExamplesDialog';
 import { isDesktop } from '../../io/platform';
@@ -55,8 +55,20 @@ import { lessonFileName } from '../lesson/lessonSave';
 import { newLesson } from '../../core/lesson';
 import { BUILTIN_LESSONS } from '../../examples/lessons';
 import { isBuiltinChipDef } from '../../core/parts/packages';
-import { rememberChipSource, saveOpenChip } from './chipSave';
+import { saveOpenChip } from './chipSave';
 import { chipTabsOf, openChipFileOf, restoreChipTabs } from './chipTabsSession';
+import { TUTORIAL_BOARD_ID, useOnboardingStore } from '../onboarding/onboardingStore';
+import type { OnboardingActions } from '../onboarding/Onboarding';
+import {
+  boardWithChips,
+  planEmbedded,
+  rememberChipCopyChoice,
+  rememberedChipCopyChoice,
+  type ChipCopyChoice,
+  type EmbeddedPlan,
+} from './embeddedChips';
+import { ChipsDifferDialog } from './ChipsDifferDialog';
+import { openChipFile, openChipFiles, type PickedChip } from './openChips';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -84,6 +96,9 @@ export interface BoardDocument {
   /** Rendered by the shell: both dialogs belong to the document, not a canvas. */
   dialogs: JSX.Element | null;
   dirty: boolean;
+  /** Settles once startup has restored the last session, if it was going to. */
+  whenStarted(): Promise<void>;
+  onboarding: Omit<OnboardingActions, 'openKeys'>;
 }
 
 export function useBoardDocument(): BoardDocument {
@@ -134,12 +149,48 @@ export function useBoardDocument(): BoardDocument {
     setDirty(isDirtyAgainst(board, cleanRef.current));
   }, [board]);
 
+  // Held until ChipsDifferDialog answers; `then` loads the board.
+  const [pendingChips, setPendingChips] = useState<{
+    plan: EmbeddedPlan;
+    then: () => void;
+  } | null>(null);
+
+  const applyEmbedded = (plan: EmbeddedPlan, choice: ChipCopyChoice, then: () => void) => {
+    const defs = choice === 'board' ? [...plan.load, ...plan.differ] : plan.load;
+    const result = defs.length > 0 ? store.getState().loadChipDefs(defs) : null;
+    then();
+    const notes = [
+      ...(result && !result.ok ? [`the board's own chips were not loaded: ${result.error}`] : []),
+      ...(plan.kept.length > 0
+        ? [`${plan.kept.join(', ')} kept the unsaved edits in its tab, not the board's copy`]
+        : []),
+    ];
+    // After the board loads, which clears the strip.
+    if (notes.length > 0) useCircuitStore.setState({ error: `open: ${notes.join('; ')}` });
+  };
+
+  /** Loads a board's own chips before the board, asking only when one differs from an open copy. */
+  const withEmbeddedChips = (board: Board, mode: 'ask' | 'quiet', then: () => void) => {
+    const st = store.getState();
+    const dirtyTabIds = new Set(
+      st.tabs.flatMap((t) => (t.kind === 'def' && st.chipTabDirty(t.id) ? [t.defId] : [])),
+    );
+    const plan = planEmbedded(board, st.chipLib, dirtyTabIds);
+    const choice = mode === 'quiet' ? 'open' : rememberedChipCopyChoice();
+    if (plan.differ.length === 0 || choice) applyEmbedded(plan, choice ?? 'open', then);
+    else setPendingChips({ plan, then });
+  };
+  const withEmbeddedChipsRef = useRef(withEmbeddedChips);
+  withEmbeddedChipsRef.current = withEmbeddedChips;
+
   // Restore once on mount, then autosave whenever the board settles. Both go
   // through the normal document pipeline: a restored board is migrated and
   // schema-validated like any file, never trusted just because we wrote it.
   const restoredRef = useRef(false);
   // Settles once the restore is done, so a file the app was launched with lands after it.
   const restoreDone = useRef<Promise<void>>(Promise.resolve());
+  // Settles once the desktop shell has said whether it was launched with a file.
+  const launchChecked = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
@@ -149,7 +200,9 @@ export function useBoardDocument(): BoardDocument {
         if (!session) return;
         const doc = parseDocument(serializeDocument(session.board));
         if (doc.format !== 'lcir.board') return;
-        useCircuitStore.getState().loadBoard(doc);
+        useOnboardingStore.getState().noteDocumentOpened();
+        // Startup never asks: whatever is already loaded wins.
+        withEmbeddedChipsRef.current(doc, 'quiet', () => useCircuitStore.getState().loadBoard(doc));
         if (getPrefs().fitOnOpen) useCircuitStore.getState().requestFit();
         setCurrentFile(session.file ?? null);
         cleanRef.current = restoredCleanMark(session.dirty, useCircuitStore.getState().board);
@@ -170,7 +223,8 @@ export function useBoardDocument(): BoardDocument {
         .then(() => {
           const st = store.getState();
           return saveSession({
-            board: st.board,
+            // Always with its chips, whatever the setting: a reload must find them.
+            board: boardWithChips(st.board, st.chipLib, true),
             ...chipTabsOf(st, openChipFileOf),
             ...(currentFile ? { file: currentFile } : {}),
             dirty,
@@ -369,12 +423,14 @@ export function useBoardDocument(): BoardDocument {
         });
         return;
       }
-      guardDiscardRef.current(`Open ${found.board.name}`, () => {
-        store.getState().loadBoard(found.board);
-        if (getPrefs().fitOnOpen) store.getState().requestFit();
-        adoptFile(found.file, found.board);
-        playLesson(lesson);
-      });
+      guardDiscardRef.current(`Open ${found.board.name}`, () =>
+        withEmbeddedChipsRef.current(found.board, 'ask', () => {
+          store.getState().loadBoard(found.board);
+          if (getPrefs().fitOnOpen) store.getState().requestFit();
+          adoptFile(found.file, found.board);
+          playLesson(lesson);
+        }),
+      );
     },
     [adoptFile, playLesson, store],
   );
@@ -390,6 +446,16 @@ export function useBoardDocument(): BoardDocument {
     });
   };
 
+  /** An empty board, through the same guard as New: the tutorial and the welcome's blank start. */
+  const startEmpty = (action: string, id: string, then?: () => void) => {
+    guardDiscard(action, () => {
+      store.getState().loadBoard(emptyBoard(id));
+      setCurrentFile(null);
+      markClean();
+      then?.();
+    });
+  };
+
   // A chip file is both a part and a circuit, so the choice is the user's:
   // held here until OpenChipDialog answers.
   const [pendingChip, setPendingChip] = useState<{
@@ -399,12 +465,15 @@ export function useBoardDocument(): BoardDocument {
 
   const acceptOpened = useCallback(
     (doc: OpenedDocument, file: DocFile) => {
+      useOnboardingStore.getState().noteDocumentOpened();
       if (doc.kind === 'board') {
-        guardDiscardRef.current('Open another board', () => {
-          store.getState().loadBoard(doc.board);
-          if (getPrefs().fitOnOpen) store.getState().requestFit();
-          adoptFile(file, doc.board);
-        });
+        guardDiscardRef.current('Open another board', () =>
+          withEmbeddedChipsRef.current(doc.board, 'ask', () => {
+            store.getState().loadBoard(doc.board);
+            if (getPrefs().fitOnOpen) store.getState().requestFit();
+            adoptFile(file, doc.board);
+          }),
+        );
         return;
       }
       if (doc.kind === 'lesson') {
@@ -427,10 +496,17 @@ export function useBoardDocument(): BoardDocument {
   // with the path as an argument; the shell hands it over once, at startup.
   useEffect(() => {
     if (!isDesktop()) return;
+    let launchPath: (path: string | null) => void = () => {};
+    launchChecked.current = new Promise<string | null>((resolve) => {
+      launchPath = resolve;
+    }).then((path) => {
+      if (path) useOnboardingStore.getState().noteDocumentOpened();
+    });
     void (async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         const path = await invoke<string | null>('launch_file');
+        launchPath(path);
         if (!path) return;
         const name = path.split(/[\/]/).pop() ?? path;
         const file = { name, path } as unknown as DocFile;
@@ -438,6 +514,7 @@ export function useBoardDocument(): BoardDocument {
         await restoreDone.current;
         acceptOpened(doc, file);
       } catch {
+        launchPath(null);
         // No argument, an unreadable file, or a document this app does not
         // open: the app is already running and usable, which is the point.
       }
@@ -451,6 +528,7 @@ export function useBoardDocument(): BoardDocument {
     queue?.setConsumer(({ files }) => {
       const handle = files.find((f) => f.kind === 'file');
       if (!handle) return;
+      useOnboardingStore.getState().noteDocumentOpened();
       const file = handle as unknown as DocFile;
       void (async () => {
         try {
@@ -489,35 +567,7 @@ export function useBoardDocument(): BoardDocument {
       });
       return;
     }
-    openAsChip(pending.def, pending.file);
-  };
-
-  const openAsChip = (def: ChipDef, file: DocFile) => {
-    const st = store.getState();
-    const unsavedTab = st.tabs.some(
-      (t) => t.kind === 'def' && t.defId === def.id && st.chipTabDirty(t.id),
-    );
-    if (unsavedTab) {
-      useCircuitStore.setState({
-        error: `open: ${def.name} has unsaved edits in its tab; save or close it first`,
-      });
-      return;
-    }
-    const result = store.getState().loadChipDefs([def]);
-    if (!result.ok) {
-      useCircuitStore.setState({ error: `open: ${result.error}` });
-      return;
-    }
-    // Same flow as double-clicking an instance. The board tab is untouched; Save
-    // follows whichever tab is in front.
-    store.getState().openDefTab(def.id, `${def.id}/`, def.name);
-    store.getState().markChipSaved(def.id);
-    // Kept even for a read-only upload: the save routing is what tells the two apart.
-    rememberChipSource(def.id, { kind: 'file', file });
-    if (!docFileWritable(file)) return;
-    void rememberRecentBoard({ name: file.name, file, openedAt: Date.now() }).catch(() => {
-      // Convenience only.
-    });
+    openChipFile(pending.def, pending.file);
   };
 
   const fileOpen = async () => {
@@ -533,18 +583,32 @@ export function useBoardDocument(): BoardDocument {
   // Open Chip skips OpenChipDialog: the menu item already said which of the
   // two a chip file should be opened as.
   const fileOpenChip = async () => {
+    let files: DocFile[];
     try {
-      const file = await pickDocumentFile(boardsDir ?? undefined);
-      if (!file) return;
-      const doc = await readDocumentFile(file);
-      if (doc.kind !== 'chip') {
-        useCircuitStore.setState({ error: `open: that file is a ${doc.kind}, not a chip` });
-        return;
-      }
-      openAsChip(doc.def, file);
+      files = await pickDocumentFiles(boardsDir ?? undefined);
     } catch (e) {
       useCircuitStore.setState({ error: `open: ${(e as Error).message}` });
+      return;
     }
+    if (files.length === 0) return;
+    const chips: PickedChip[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        const doc = await readDocumentFile(file);
+        if (doc.kind === 'chip') chips.push({ def: doc.def, file });
+        else failed.push(`${file.name} is a ${doc.kind}, not a chip`);
+      } catch (e) {
+        failed.push(`${file.name}: ${(e as Error).message}`);
+      }
+    }
+    const opened = openChipFiles(chips, failed);
+    if (files.length === 1 && failed.length === 0) return;
+    const parts = [
+      ...(opened.length > 0 ? [`opened ${opened.join(', ')}`] : []),
+      ...(failed.length > 0 ? [`not opened: ${failed.join('; ')}`] : []),
+    ];
+    useCircuitStore.setState({ error: `open: ${parts.join('. ')}` });
   };
 
   const openRecent = async (entry: RecentBoard) => {
@@ -556,8 +620,13 @@ export function useBoardDocument(): BoardDocument {
     }
   };
 
+  const boardToWrite = () => {
+    const st = store.getState();
+    return boardWithChips(st.pruneHiddenChecks(), st.chipLib, getPrefs().embedChips);
+  };
+
   const fileSaveAs = async () => {
-    const board = store.getState().pruneHiddenChecks();
+    const board = boardToWrite();
     try {
       const file = await saveBoardAs(board, boardFileName(board), boardsDir ?? undefined);
       if (!file) return;
@@ -568,7 +637,7 @@ export function useBoardDocument(): BoardDocument {
   };
 
   const fileSave = async () => {
-    const board = store.getState().pruneHiddenChecks();
+    const board = boardToWrite();
     if (!currentFile) {
       if (filePickersSupported()) await fileSaveAs();
       else {
@@ -881,9 +950,21 @@ export function useBoardDocument(): BoardDocument {
 
   const lessonPrompt = useLessonEditorStore((s) => s.pendingClose !== null);
   const dialogs =
-    pendingDiscard || pendingChip || examplesOpen || lessonPrompt ? (
+    pendingDiscard || pendingChip || pendingChips || examplesOpen || lessonPrompt ? (
       <>
         <LessonUnsavedDialog />
+        {pendingChips && (
+          <ChipsDifferDialog
+            chips={pendingChips.plan.differ}
+            onChoose={(choice, remember) => {
+              const { plan, then } = pendingChips;
+              setPendingChips(null);
+              if (remember) rememberChipCopyChoice(choice);
+              applyEmbedded(plan, choice, then);
+            }}
+            onCancel={() => setPendingChips(null)}
+          />
+        )}
         {examplesOpen && (
           <ExamplesDialog
             onOpen={openExample}
@@ -931,5 +1012,19 @@ export function useBoardDocument(): BoardDocument {
       </>
     ) : null;
 
-  return { menus, dialogs, dirty };
+  const basicGates = BUILTIN_LESSONS.find((l) => l.id === 'basic-gates');
+  return {
+    menus,
+    dialogs,
+    dirty,
+    whenStarted: () => Promise.all([restoreDone.current, launchChecked.current]).then(() => {}),
+    onboarding: {
+      startTutorialBoard: (then) => startEmpty('Start the tutorial', TUTORIAL_BOARD_ID, then),
+      startBlankBoard: () => startEmpty('Start a blank board', starterBoard().id),
+      openExamples: () => setExamplesOpen(true),
+      openBasicGatesLesson: () => {
+        if (basicGates) void openLesson(basicGates);
+      },
+    },
+  };
 }

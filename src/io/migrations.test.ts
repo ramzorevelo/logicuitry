@@ -219,8 +219,8 @@ describe('board v7 -> v8, chip v5 -> v6 (instance contents, inout pins)', () => 
   });
 
   it('refuses a file newer than this app, before any validation', () => {
-    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 16 })).toThrow(
-      'file is version 16, app supports up to 15',
+    expect(() => migrate({ ...structuredClone(boardV7), formatVersion: 17 })).toThrow(
+      'file is version 17, app supports up to 16',
     );
     expect(() => migrate({ ...structuredClone(chipV5), formatVersion: 9 })).toThrow(
       'file is version 9, app supports up to 8',
@@ -298,7 +298,7 @@ describe('board v9 -> v10 (timing vendor)', () => {
     const out = migrate(structuredClone(boardV9));
     expect(out).toEqual({
       ...boardV9,
-      formatVersion: 15,
+      formatVersion: 16,
       timing: { mode: 'datasheet', datasheet: 'max', vendor: 'ti' },
       runSpeed: 25_000,
     });
@@ -306,7 +306,7 @@ describe('board v9 -> v10 (timing vendor)', () => {
   });
 
   it('accepts the min column and the Fairchild vendor, and no other vendor', () => {
-    const v10 = { ...boardV9, formatVersion: 15, runSpeed: 25_000 };
+    const v10 = { ...boardV9, formatVersion: 16, runSpeed: 25_000 };
     const fairchild = {
       ...v10,
       timing: { mode: 'datasheet', datasheet: 'min', vendor: 'fairchild' },
@@ -332,12 +332,12 @@ describe('board v10 -> v11 (run speed)', () => {
 
   it('runs every older board at the first preset, 25 ns of sim time a second', () => {
     const out = migrate(structuredClone(boardV10));
-    expect(out).toEqual({ ...boardV10, formatVersion: 15, runSpeed: 25_000 });
+    expect(out).toEqual({ ...boardV10, formatVersion: 16, runSpeed: 25_000 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('refuses a run speed that is not a whole, positive ps count up to real time', () => {
-    const at = (runSpeed: unknown) => ({ ...boardV10, formatVersion: 15, runSpeed });
+    const at = (runSpeed: unknown) => ({ ...boardV10, formatVersion: 16, runSpeed });
     expect(validateDocument(at(1_000_000_000_000))).toEqual({ valid: true });
     for (const bad of [0, 2.5, 2_000_000_000_000, 'fast'])
       expect(validateDocument(at(bad)).valid).toBe(false);
@@ -357,13 +357,13 @@ describe('board v11 -> v12, chip v7 -> v8 (silenced checks)', () => {
 
   it('carries an older board through with no silenced checks', () => {
     const out = migrate(structuredClone(boardV11));
-    expect(out).toEqual({ ...boardV11, formatVersion: 15 });
+    expect(out).toEqual({ ...boardV11, formatVersion: 16 });
     expect(out['hiddenChecks']).toBeUndefined();
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('accepts a list of check keys on a board and a chip, and nothing else there', () => {
-    const board = { ...boardV11, formatVersion: 15, hiddenChecks: ['unwired:u1.a'] };
+    const board = { ...boardV11, formatVersion: 16, hiddenChecks: ['unwired:u1.a'] };
     expect(validateDocument(board)).toEqual({ valid: true });
     expect(validateDocument({ ...board, hiddenChecks: [3] }).valid).toBe(false);
     expect(validateDocument({ ...board, hiddenChecks: [''] }).valid).toBe(false);
@@ -409,12 +409,12 @@ describe('board v12 -> v13 (input sequence)', () => {
 
   it('carries an older board through with no sequence', () => {
     const out = migrate(structuredClone(boardV12));
-    expect(out).toEqual({ ...boardV12, formatVersion: 15 });
+    expect(out).toEqual({ ...boardV12, formatVersion: 16 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('accepts a sequence and refuses rows whose cells miss their columns', () => {
-    const board = { ...boardV12, formatVersion: 15, sequence };
+    const board = { ...boardV12, formatVersion: 16, sequence };
     expect(validateDocument(board)).toEqual({ valid: true });
     const short = { ...sequence, rows: [{ set: [1] }] };
     expect(validateDocument({ ...board, sequence: short }).valid).toBe(false);
@@ -646,14 +646,14 @@ describe('board v13 -> v14 (active-low LED)', () => {
 
   it('carries an older board through with its LEDs active high', () => {
     const out = migrate(structuredClone(boardV13));
-    expect(out).toEqual({ ...boardV13, formatVersion: 15 });
+    expect(out).toEqual({ ...boardV13, formatVersion: 16 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('accepts an active-low LED', () => {
     const board = {
       ...boardV13,
-      formatVersion: 15,
+      formatVersion: 16,
       components: [{ ...led, params: { activeLow: true } }],
     };
     expect(validateDocument(board)).toEqual({ valid: true });
@@ -684,18 +684,18 @@ describe('board v14 -> v15 (challenge)', () => {
 
   it('carries an older board through with no challenge', () => {
     const out = migrate(structuredClone(boardV14));
-    expect(out).toEqual({ ...boardV14, formatVersion: 15 });
+    expect(out).toEqual({ ...boardV14, formatVersion: 16 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
   it('accepts a challenge and round-trips it', () => {
-    const board = { ...boardV14, formatVersion: 15, challenge };
+    const board = { ...boardV14, formatVersion: 16, challenge };
     expect(validateDocument(board)).toEqual({ valid: true });
     expect(JSON.parse(JSON.stringify(migrate(structuredClone(board))))).toEqual(board);
   });
 
   it('refuses a bad block, naming the field', () => {
-    const at = (c: unknown) => validateDocument({ ...boardV14, formatVersion: 15, challenge: c });
+    const at = (c: unknown) => validateDocument({ ...boardV14, formatVersion: 16, challenge: c });
     const noTitle = at({ ...challenge, title: undefined });
     expect(noTitle.valid).toBe(false);
     const extra = at({ ...challenge, secret: 1 });
@@ -711,5 +711,62 @@ describe('board v14 -> v15 (challenge)', () => {
     });
     expect(badCell.valid).toBe(false);
     if (!badCell.valid) expect(badCell.errors[0]).toMatch(/^\/challenge\/truthTable\/rows\/0\/0/);
+  });
+});
+
+describe('board v15 -> v16 (embedded chips, part choices)', () => {
+  const boardV15 = {
+    ...structuredClone(boardV1),
+    formatVersion: 15,
+    runSpeed: 25_000,
+    timing: { mode: 'ideal', datasheet: 'typ', vendor: 'ti' },
+  };
+  const innerChip = {
+    format: 'lcir.chip',
+    formatVersion: 8,
+    id: 'inner',
+    name: 'inner',
+    version: 1,
+    pins: [],
+    components: [],
+    wires: [],
+    junctions: [],
+  };
+  const outerChip = {
+    ...innerChip,
+    id: 'outer',
+    name: 'outer',
+    components: [{ id: 'u1', kind: 'chip', defId: 'inner', pos: { x: 0, y: 0 } }],
+  };
+
+  it('passes through without adding fields', () => {
+    const out = migrate(structuredClone(boardV15));
+    expect(out).toEqual({ ...boardV15, formatVersion: 16 });
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('validates nested embedded chips and part choices', () => {
+    const doc = {
+      ...boardV15,
+      formatVersion: 16,
+      chips: [outerChip, innerChip],
+      partChoices: { 'and:2': '74LS08' },
+    };
+    expect(validateDocument(doc)).toEqual({ valid: true });
+  });
+
+  it('steps an embedded chip through the chip chain on its own version', () => {
+    const olderChip = { ...innerChip, formatVersion: 7 };
+    const out = migrate({ ...structuredClone(boardV15), formatVersion: 16, chips: [olderChip] });
+    expect((out['chips'] as { formatVersion: number }[])[0]!.formatVersion).toBe(8);
+    expect(validateDocument(out)).toEqual({ valid: true });
+  });
+
+  it('rejects an invalid embedded chip or part choice', () => {
+    const bad = { format: 'lcir.chip', formatVersion: 8, id: 'x' };
+    expect(validateDocument({ ...boardV15, formatVersion: 16, chips: [bad] }).valid).toBe(false);
+    expect(
+      validateDocument({ ...boardV15, formatVersion: 16, partChoices: { 'and:2': 3 } }).valid,
+    ).toBe(false);
   });
 });

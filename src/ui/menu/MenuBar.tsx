@@ -173,6 +173,7 @@ export function MenuBar({ menus }: Props) {
           <button
             type="button"
             className="menubar__title"
+            data-menu={menu.id}
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={openIndex === i}

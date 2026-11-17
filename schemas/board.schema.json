@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "format": { "const": "lcir.board" },
-    "formatVersion": { "const": 15 },
+    "formatVersion": { "const": 16 },
     "id": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1 },
     "components": {
@@ -108,6 +108,15 @@
       },
       "required": ["inputs", "expect", "rows", "advance", "hideExpected"],
       "additionalProperties": false
+    },
+    "chips": {
+      "description": "Copies of the user chips the board uses, resolved by id on load.",
+      "type": "array",
+      "items": { "$ref": "chip.schema.json" }
+    },
+    "partChoices": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
     },
     "challenge": {
       "description": "A brief, part constraints and behavior the board is checked against; names are labels.",

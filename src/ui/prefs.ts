@@ -48,6 +48,8 @@ export interface Prefs {
   fitOnOpen: boolean;
   autosave: boolean;
   confirmReplaceBoard: boolean;
+  /** Save a board with copies of the user chips it uses, so it opens elsewhere with no chip files. */
+  embedChips: boolean;
   /** Desktop only. Off: an available update is a passive indicator and nothing
    *  is fetched until asked. Hidden entirely in the browser build. */
   autoDownloadUpdates: boolean;
@@ -83,6 +85,7 @@ export const DEFAULT_PREFS: Prefs = {
   fitOnOpen: true,
   autosave: true,
   confirmReplaceBoard: true,
+  embedChips: true,
   autoDownloadUpdates: false,
   applyUpdatesOnClose: false,
   kmapCellNumbers: true,
@@ -135,6 +138,7 @@ export function mergePrefs(raw: unknown): Prefs {
     fitOnOpen: bool(r['fitOnOpen'], d.fitOnOpen),
     autosave: bool(r['autosave'], d.autosave),
     confirmReplaceBoard: bool(r['confirmReplaceBoard'], d.confirmReplaceBoard),
+    embedChips: bool(r['embedChips'], d.embedChips),
     autoDownloadUpdates: bool(r['autoDownloadUpdates'], d.autoDownloadUpdates),
     applyUpdatesOnClose: bool(r['applyUpdatesOnClose'], d.applyUpdatesOnClose),
     kmapCellNumbers: bool(r['kmapCellNumbers'], d.kmapCellNumbers),

@@ -1,0 +1,285 @@
+/* Welcome card: the shared dialog chrome plus a bench list and three choices. */
+.welcome-dialog {
+  max-width: min(480px, 90vw);
+}
+
+.welcome-dialog p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.welcome-benches {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-unit) calc(var(--space-unit) * 3);
+  margin: 0;
+}
+
+.welcome-benches dt {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.welcome-benches dd {
+  margin: 0;
+}
+
+.app-shell--compact .welcome-benches {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.app-shell--compact .welcome-benches dd {
+  margin-bottom: var(--space-unit);
+}
+
+.welcome-actions {
+  display: grid;
+  gap: var(--space-unit);
+}
+
+/* Doubled up to outrank the shared dialog button rule. */
+:root .welcome-dialog .welcome-actions button.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+}
+
+.welcome-actions small {
+  font-size: var(--text-secondary);
+  color: var(--muted);
+}
+
+:root .welcome-dialog .welcome-actions button.welcome-primary,
+:root .tour-card button.tour-primary {
+  background: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Chrome buttons paint their face on ::before and their ring on the element. */
+:root .welcome-dialog .welcome-actions button.welcome-primary::before,
+:root .tour-card button.tour-primary::before {
+  background: var(--accent-fill);
+}
+
+/* Tour and coach: one fixed layer over the whole app. Selector doubled to beat
+   `.app-shell > *`, which would make it a z-index:1 context under the toolbar. */
+.app-shell > .tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+}
+
+.app-shell > .tour-layer--passive {
+  pointer-events: none;
+  /* Under the dialogs (80): the unsaved-changes prompt or Keys and gestures opens over the coach. */
+  z-index: 75;
+}
+
+.tour-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+}
+
+/* The cutout is a ring whose spread shadow is the scrim, so the target shows through. */
+.tour-hole,
+.tour-ring {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--radius);
+  outline: 2px solid var(--warn);
+  pointer-events: none;
+}
+
+.tour-hole {
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 40%);
+  transition:
+    left 0.2s ease,
+    top 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease;
+}
+
+.tour-ring {
+  animation: tour-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tour-pulse {
+  50% {
+    outline-offset: 4px;
+    outline-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole {
+    transition: none;
+  }
+  .tour-ring {
+    animation: none;
+  }
+}
+
+.tour-card {
+  position: absolute;
+  box-sizing: border-box;
+  width: min(340px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 4);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 22%);
+  font-family: var(--font-ui);
+  pointer-events: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* With no target on screen the card sits in the middle. */
+.tour-layer > .tour-scrim + .tour-card {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tour-card h3 {
+  margin: 0;
+  text-wrap: balance;
+}
+
+.tour-card p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.tour-card__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-secondary);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-right: calc(var(--space-unit) * 5);
+}
+
+.tour-card__buttons,
+.tour-card__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-unit);
+  justify-content: flex-end;
+}
+
+.tour-card__links {
+  justify-content: flex-start;
+}
+
+:root .tour-card .tour-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--accent-2);
+}
+
+.tour-kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0 0.3em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.tour-close {
+  position: absolute;
+  top: var(--space-unit);
+  right: var(--space-unit);
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.tour-close:hover {
+  color: var(--ink);
+}
+
+/* The coach docks in a corner and leaves the board free. */
+.tour-coach {
+  right: calc(var(--space-unit) * 4);
+  bottom: calc(var(--space-unit) * 10);
+  width: min(320px, calc(100vw - 24px));
+}
+
+.app-shell--compact .tour-coach {
+  left: calc(var(--space-unit) * 2);
+  right: calc(var(--space-unit) * 2);
+  width: auto;
+  bottom: calc(var(--touch-h) + var(--space-unit) * 2 + env(safe-area-inset-bottom, 0px));
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  gap: var(--space-unit);
+}
+
+/* Landscape phone: the workbench bar is a column at the right edge. */
+.app-shell--landscape .tour-coach {
+  left: auto;
+  right: calc(72px + var(--space-unit) * 2);
+  bottom: calc(var(--space-unit) * 2);
+  width: min(320px, 45vw);
+}
+
+.tour-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.tour-checklist li {
+  display: grid;
+  grid-template-columns: 1.25em 1fr;
+  color: var(--muted);
+}
+
+.tour-checklist li.is-done {
+  color: var(--ok);
+}
+
+.tour-checklist li.is-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A phone has no room for the whole list: the current step and its how-to are enough. */
+.app-shell--compact .tour-checklist li:not(.is-current) {
+  display: none;
+}
+
+.tour-howto {
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border-left: 3px solid var(--warn);
+  background: var(--paper);
+  line-height: 1.45;
+}
+
+.tour-foot {
+  font-size: var(--text-secondary);
+  color: var(--muted);
+}
+
+.app-shell--compact .tour-card:not(.tour-coach) {
+  left: calc(var(--space-unit) * 2);
+  right: calc(var(--space-unit) * 2);
+  width: auto;
+}

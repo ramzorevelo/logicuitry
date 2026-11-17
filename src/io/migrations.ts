@@ -5,7 +5,7 @@ export type LcirFormat = 'lcir.chip' | 'lcir.board' | 'lcir.lesson';
 
 export const CURRENT_VERSION: Record<LcirFormat, number> = {
   'lcir.chip': 8,
-  'lcir.board': 15,
+  'lcir.board': 16,
   'lcir.lesson': 5,
 };
 
@@ -214,6 +214,9 @@ registerMigration('lcir.board', 13, (doc) => doc);
 // Board v14 -> v15: an optional challenge, absent before.
 registerMigration('lcir.board', 14, (doc) => doc);
 
+// Board v15 -> v16: optional embedded `chips` and `partChoices`, absent before.
+registerMigration('lcir.board', 15, (doc) => doc);
+
 // Files written under an earlier name carry an older format prefix: `logiclab.`
 // from the original name, `lcir.` from the Logic Design Workbench one. Rewriting
 // the prefix is not a formatVersion bump -- the shape is identical -- so it
@@ -242,6 +245,11 @@ export function migrate(input: Record<string, unknown>): Record<string, unknown>
     if (!fn) throw new Error(`no migration for ${format} v${version} -> v${version + 1}`);
     current = { ...fn(current), formatVersion: version + 1 };
     version += 1;
+  }
+  // A board's chip copies keep their own chip version, so they step through the chip chain.
+  const chips = current['chips'];
+  if (format === 'lcir.board' && Array.isArray(chips)) {
+    current = { ...current, chips: chips.map((c) => migrate(c as Record<string, unknown>)) };
   }
   return current;
 }

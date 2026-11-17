@@ -216,6 +216,7 @@ export function PaletteRail({ paletteRef, width, shown = false }: Props) {
         key={e.key}
         type="button"
         hidden={hidden}
+        data-part={e.defId ? undefined : e.kind}
         className={`palette-item${
           active ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}` : ''
         }${off ? ' palette-item--off' : ''}`}
@@ -296,6 +297,7 @@ export function PaletteRail({ paletteRef, width, shown = false }: Props) {
   return (
     <aside
       className={shown ? 'circuit-palette circuit-palette--shown' : 'circuit-palette'}
+      data-tour="parts"
       ref={paletteRef}
       style={width === null ? undefined : { width: `${width}px` }}
     >
@@ -309,6 +311,7 @@ export function PaletteRail({ paletteRef, width, shown = false }: Props) {
               key={group}
               type="button"
               role="tab"
+              data-group={group}
               className="palette-tab"
               aria-selected={openGroup === group}
               onClick={() => setOpenGroup((cur) => (cur === group ? '' : group))}
