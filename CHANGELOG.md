@@ -25,6 +25,7 @@ patch digit a small feature, fix or follow-up).
 
 - On a phone: the palette's group tabs, Back during the tutorial, and the menu
   bar on one row.
+- The toolbar no longer shifts while the simulation time ticks.
 
 ## [0.8.2] - 2026-11-17
 

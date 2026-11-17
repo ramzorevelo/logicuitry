@@ -346,6 +346,11 @@
   white-space: nowrap;
 }
 
+/* A ticking "t = ..." grows and shrinks by a digit; the controls after it must not shift. */
+.app-shell:not(.app-shell--compact) .sim-status {
+  min-width: 32ch;
+}
+
 .circuit-tabs {
   display: flex;
   gap: 2px;
