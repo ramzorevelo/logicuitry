@@ -12,13 +12,27 @@ export interface LessonBoardView {
   /** Top-level component ids. */
   componentIds: ReadonlySet<string>;
   sequence?: BoardSequence | undefined;
+  /** Top-level clock part ids; absent skips the clock-kind check. */
+  clockIds?: ReadonlySet<string>;
+}
+
+export function lessonBoardViewOf(board: {
+  components: readonly { id: string; kind: string }[];
+  sequence?: BoardSequence | undefined;
+}): LessonBoardView {
+  return {
+    componentIds: new Set(board.components.map((c) => c.id)),
+    sequence: board.sequence,
+    clockIds: new Set(board.components.filter((c) => c.kind === 'clock').map((c) => c.id)),
+  };
 }
 
 /** One board change, in the order it must happen. */
 export type BoardOp =
   | { op: 'power'; on: boolean }
   | { op: 'timing'; mode: TimingMode }
-  | { op: 'row'; index: number };
+  | { op: 'row'; index: number }
+  | { op: 'pulse'; clock: string };
 
 export type Phase = 'open' | 'reveal';
 
@@ -27,9 +41,16 @@ export function hasReveal(step: LessonStep): boolean {
   return step.kind === 'predict';
 }
 
-/** The phase an action fires in; a held-back row only means something on a predict step. */
+/** Rows and pulses may be held back to the reveal. */
+export function canHoldBack(
+  action: LessonAction,
+): action is Extract<LessonAction, { kind: 'row' | 'pulse' }> {
+  return action.kind === 'row' || action.kind === 'pulse';
+}
+
+/** The phase an action fires in; a held-back action only means something on a predict step. */
 export function actionPhase(step: LessonStep, action: LessonAction): Phase {
-  return action.kind === 'row' && action.when === 'reveal' && hasReveal(step) ? 'reveal' : 'open';
+  return canHoldBack(action) && action.when === 'reveal' && hasReveal(step) ? 'reveal' : 'open';
 }
 
 /** A step's actions in the order they reach the board: open phase, then reveal. */
@@ -47,6 +68,8 @@ function opOf(action: LessonAction): BoardOp | undefined {
       return { op: 'timing', mode: action.mode };
     case 'row':
       return { op: 'row', index: action.index };
+    case 'pulse':
+      return { op: 'pulse', clock: action.clock };
     default:
       return undefined;
   }

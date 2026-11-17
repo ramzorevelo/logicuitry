@@ -9,6 +9,9 @@ import deMorgan from './de-morgan.lcirl';
 import multiplexers from './multiplexers.lcirl';
 import decoders from './decoders.lcirl';
 import srLatch from './sr-latch.lcirl';
+import busComputerProgram from './bus-computer-program.lcirl';
+import cacheHitsAndMisses from './cache-hits-and-misses.lcirl';
+import interleavedMemory from './interleaved-memory.lcirl';
 
 const current = (doc: unknown): unknown => migrate(doc as Record<string, unknown>);
 
@@ -22,4 +25,7 @@ export const BUILTIN_LESSONS: readonly Lesson[] = [
   current(multiplexers) as Lesson,
   current(decoders) as Lesson,
   current(srLatch) as Lesson,
+  current(busComputerProgram) as Lesson,
+  current(cacheHitsAndMisses) as Lesson,
+  current(interleavedMemory) as Lesson,
 ];

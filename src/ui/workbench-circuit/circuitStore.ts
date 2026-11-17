@@ -62,6 +62,7 @@ import {
   type PinViewState,
 } from '../../core/sim/primitives/busPins';
 import { Simulator } from '../../core/sim/kernel';
+import { pulseClock } from '../../core/sim/pulse';
 import { loopNetNames, loopOf } from './oscillation';
 import {
   gateOverlay as overlayOfRun,
@@ -238,7 +239,7 @@ const sameBody = (a: Circuit, b: Circuit) =>
   JSON.stringify([b.components, b.wires, b.junctions, b.groups ?? []]);
 
 // An undo back to the saved state still bumps `version`; that alone is nothing to save.
-const sameDefIgnoringVersion = (a: ChipDef, b: ChipDef) =>
+export const sameDefIgnoringVersion = (a: ChipDef, b: ChipDef) =>
   JSON.stringify({ ...a, version: 0 }) === JSON.stringify({ ...b, version: 0 });
 
 export const seedNextId = (board: Board) => {
@@ -773,10 +774,15 @@ interface CircuitState {
   // --- Input sequence.
   /** Row cursor and per-row results of the live sim; null while unpowered. */
   sequenceRun: () => SequenceRunView | null;
-  /** Sets every input column to that row's values; false when refused. */
-  applySequenceRow: (index: number) => boolean;
+  /**
+   * Sets every input column to that row's values; false when refused. Paused, the change stays
+   * pending unless `settleNow` (a lesson step, which shows a settled board).
+   */
+  applySequenceRow: (index: number, settleNow?: boolean) => boolean;
   /** The row after or before the cursor. */
   stepSequence: (delta: 1 | -1) => boolean;
+  /** One rise and fall of a top-level clock on the paused sim, then settled; a lesson's pulse. */
+  pulseClockOnce: (clockId: string) => ClockPulseResult;
   /** One undoable edit of the board's sequence; undefined removes it. */
   editSequence: (label: string, fn: (seq: BoardSequence) => BoardSequence | undefined) => void;
   /** Writes or, with undefined, removes the board's challenge as one undo step. */
@@ -932,6 +938,12 @@ interface SequenceRun {
   handledFallPs: number;
 }
 let sequenceRun: SequenceRun | null = null;
+
+/**
+ * What a lesson's clock pulse did. `off`, `running` and `missing` leave the board as it was;
+ * `stuck` ran out of budget mid-cycle; `loop` finished the cycle and then oscillated.
+ */
+export type ClockPulseResult = 'ok' | 'off' | 'running' | 'missing' | 'stuck' | 'loop';
 
 export interface SequenceRunView {
   cursor: number;
@@ -1260,20 +1272,27 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
 
   /**
    * Applies a row on the live sim; the caller bumps `rev`. Without `settleNow`
-   * the board settles under the run or later steps, so the comparison waits for
-   * the next row, the next fall or Run stopping.
+   * the board settles under the run, Gate step or Settle, so the comparison
+   * waits for the board to settle, the next row, the next fall or Run stopping.
    */
-  const applyRowNow = (index: number, settleNow = !get().running): boolean => {
+  const applyRowNow = (index: number, settleNow = false, settlePrevious = true): boolean => {
     const seq = boardSequence();
     const run = runOfSim();
     const live = sim;
     if (!seq || !run || !live || index < 0 || index >= seq.rows.length) return false;
-    if (run.pendingCompare !== null) compareRow(run, seq, run.pendingCompare);
+    if (run.pendingCompare !== null) {
+      // Moving on while paused lets the last row finish: it is never judged mid-ripple. A fall
+      // reached inside a gate step judges it where the step stands, as a running sim does.
+      if (settlePrevious && !get().running && !live.sim.settled)
+        set({ oscillation: loopOf(live.compiled, live.sim.settle()) });
+      compareRow(run, seq, run.pendingCompare);
+    }
     run.pendingCompare = null;
     writeRowInputs(seq, index);
     replayIdx = null;
+    gateRun = null;
     run.cursor = index;
-    if (!settleNow) run.pendingCompare = index;
+    if (!settleNow || get().running) run.pendingCompare = index;
     else {
       set({ oscillation: loopOf(live.compiled, live.sim.settle()) });
       compareRow(run, seq, index);
@@ -1292,7 +1311,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
   // Past the last row a fall still closes that row's comparison.
   const onSequenceFall = (run: SequenceRun, seq: BoardSequence, fall: number) => {
     run.handledFallPs = fall;
-    if (run.cursor + 1 < seq.rows.length) applyRowNow(run.cursor + 1, false);
+    if (run.cursor + 1 < seq.rows.length) applyRowNow(run.cursor + 1, false, false);
     else resolvePendingCompare();
   };
 
@@ -1335,6 +1354,35 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     const run = gateRun;
     if (!run || !sim || run.owner !== sim || get().running) return null;
     return run.timePs === sim.sim.time && run.traceLength === sim.sim.traceLength ? run : null;
+  };
+
+  /** A cursor Gate step or Settle parked on the sim's own time still shows the live state. */
+  const scrubbedBack = () => {
+    const shown = get().replayTimePs;
+    return shown !== null && shown !== sim?.sim.time;
+  };
+
+  /** Paused, a row still pending is settled and judged before a click changes its inputs. */
+  const finishPendingRow = () => {
+    const run = sim && sequenceRun?.owner === sim ? sequenceRun : null;
+    if (!sim || get().running || !run || run.pendingCompare === null) return;
+    if (!sim.sim.settled) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
+    resolvePendingCompare();
+  };
+
+  /**
+   * After a switch, button, SPDT or stimulus edit. Paused, the change stays pending so Gate
+   * step walks it from t = 0 and Settle or Run finishes it; a loop reported earlier is stale.
+   * Running, the next frame's pump takes it: settling there would fast-forward through every
+   * queued clock edge.
+   */
+  const leaveInputPending = () => {
+    gateRun = null;
+    set((s) => ({
+      ...(s.running ? {} : { oscillation: null }),
+      replayTimePs: null,
+      rev: s.rev + 1,
+    }));
   };
 
   // Only falls inside this step count: one passed while clock mode was off is history.
@@ -1585,6 +1633,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     if (!topologyChanged && liveParamItems.length > 0 && sim) {
       // Params evaluate() re-reads: patch the compiled primitive and wake it,
       // the same path a switch flip takes, so the board stays powered.
+      finishPendingRow();
       for (const item of liveParamItems) {
         const after = item.after as unknown as Component | undefined;
         if (!after) continue;
@@ -1593,8 +1642,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         sim.sim.setPrimitiveParamsAt(pi, (after.params ?? {}) as never);
       }
       replayIdx = null;
-      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
-      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      leaveInputPending();
     }
     if (topologyChanged) {
       holdRamCells();
@@ -4198,6 +4246,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         owner: live,
         traceLength: live.sim.traceLength,
       };
+      if (report.settled) resolvePendingCompare();
       // Park the cursor on the time just stepped to rather than snapping back
       // to live: stepping is for reading the moment you landed on.
       set((s) => ({
@@ -4243,6 +4292,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         run = null;
       }
       gateRun = run ? { ...run, owner: live, traceLength: live.sim.traceLength } : null;
+      if (live.sim.settled) resolvePendingCompare();
       set((s) => ({ oscillation: loop, replayTimePs: live.sim.time, rev: s.rev + 1 }));
     },
 
@@ -4299,11 +4349,37 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       return { cursor: run.cursor, results: run.results, pending: run.pendingCompare };
     },
 
-    applySequenceRow: (index) => {
+    applySequenceRow: (index, settleNow = false) => {
       if (!get().powered) return false;
-      if (!applyRowNow(index)) return false;
+      if (!applyRowNow(index, settleNow)) return false;
       set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
       return true;
+    },
+
+    pulseClockOnce: (clockId) => {
+      if (!sim || !get().powered) return 'off';
+      if (get().running) return 'running';
+      const comp = get().board.components.find((c) => c.id === clockId);
+      const pi = comp?.kind === 'clock' ? primOf(clockId) : undefined;
+      const net = pi === undefined ? undefined : sim.compiled.primitives[pi]?.outputs[0];
+      if (net === undefined) return 'missing';
+      const live = sim;
+      const from = live.sim.time;
+      const report = pulseClock(live.sim, net);
+      replayIdx = null;
+      gateRun = null;
+      if (!report) {
+        set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+        return 'stuck';
+      }
+      let loop = loopOf(live.compiled, report);
+      if (!loop) {
+        // A clock-mode sequence row lands on the fall the pulse stopped at.
+        applyFallsInStep(from, live.sim.time);
+        if (!live.sim.settled) loop = loopOf(live.compiled, live.sim.settle());
+      }
+      set((s) => ({ oscillation: loop, replayTimePs: null, rev: s.rev + 1 }));
+      return loop ? 'loop' : 'ok';
     },
 
     stepSequence: (delta) => {
@@ -4393,16 +4469,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       // single `y` net to read (pinNet returns undefined), which silently
       // read the current value as 0 on every click and made toggling one
       // bit reset every other bit to 0 instead of flipping just that bit.
+      finishPendingRow();
       const state = sim.sim.primitiveStateAt(pi) as { value?: number } | undefined;
       const curValue = typeof state?.value === 'number' ? state.value : 0;
       replayIdx = null;
       sim.sim.setPrimitiveStateAt(pi, { value: (curValue ^ (1 << bit)) >>> 0 });
-      // settle() drains the queue to empty; while free-running, a clock always
-      // has a future wake queued, so settling here fast-forwarded sim time by
-      // thousands of clock edges per switch click. Running mode leaves the
-      // queued toggle wake to the next frame's pump instead.
-      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
-      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      leaveInputPending();
     },
 
     setButtonHeld: (componentId, held, prefix = 'main/') => {
@@ -4414,10 +4486,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       // A repeat of the same position would restart a bounce already under way.
       if ((sim.sim.primitiveStateAt(pi) as ButtonState).on === held) return;
       replayIdx = null;
+      finishPendingRow();
+      // Holding a button is time passing: the press lands before the release,
+      // or a paused click would vanish before anyone stepped it.
+      if (!held && !get().running && !sim.sim.settled)
+        set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
       // Button's state shape ({on}) is distinct from toggle's; see the kernel.
       sim.sim.setPrimitiveStateAt(pi, { on: held } satisfies ButtonState);
-      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
-      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      leaveInputPending();
     },
 
     flipSpdt: (componentId, prefix = 'main/') => {
@@ -4427,16 +4503,16 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const pi = sim.compiled.componentToPrimitive.get(`${prefix}${comp.id}`);
       if (pi === undefined) return;
       replayIdx = null;
+      finishPendingRow();
       const { position } = sim.sim.primitiveStateAt(pi) as SpdtState;
       sim.sim.setPrimitiveStateAt(pi, {
         position: position === 'a' ? 'b' : 'a',
       } satisfies SpdtState);
-      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
-      set((s) => ({ replayTimePs: null, rev: s.rev + 1 }));
+      leaveInputPending();
     },
 
     spdtThrow: (componentId, prefix = 'main/') => {
-      if (get().replayTimePs !== null) return undefined;
+      if (scrubbedBack()) return undefined;
       const pi = sim?.compiled.componentToPrimitive.get(`${prefix}${componentId}`);
       if (!sim || pi === undefined || sim.compiled.primitives[pi]?.kind !== 'spdt')
         return undefined;
@@ -4444,7 +4520,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     buttonHeld: (componentId, prefix = 'main/') => {
-      if (get().replayTimePs !== null) return undefined;
+      if (scrubbedBack()) return undefined;
       const pi = sim?.compiled.componentToPrimitive.get(`${prefix}${componentId}`);
       if (!sim || pi === undefined || sim.compiled.primitives[pi]?.kind !== 'button')
         return undefined;
@@ -4658,10 +4734,10 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         return;
       const pi = sim.compiled.componentToPrimitive.get(`main/${id}`);
       if (pi === undefined) return;
+      finishPendingRow();
       sim.sim.setPrimitiveParamsAt(pi, params as never);
       replayIdx = null;
-      if (!get().running) set({ oscillation: loopOf(sim.compiled, sim.sim.settle()) });
-      set((st) => ({ replayTimePs: null, rev: st.rev + 1 }));
+      leaveInputPending();
     },
 
     setComponentParamsBatch: (specs, reanchor) => {

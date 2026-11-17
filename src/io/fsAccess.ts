@@ -9,7 +9,7 @@ import * as browser from './fs/browserFs';
 import * as desktop from './fs/desktopFs';
 import { isDesktop } from './platform';
 
-export type { LibrarySubdir, LibraryRestore } from './fs/browserFs';
+export type { LibrarySubdir, LibraryRestore, BlobKind } from './fs/browserFs';
 export { PermissionLapsedError } from './fs/browserFs';
 export type { LibraryDir, DocFile } from './platform';
 
@@ -38,6 +38,8 @@ export const pickDocumentFile: typeof browser.pickDocumentFile = (startIn) =>
   fs().pickDocumentFile(startIn);
 export const pickSavePath: typeof browser.pickSavePath = (name, startIn) =>
   fs().pickSavePath(name, startIn);
+export const saveBlob: typeof browser.saveBlob = (blob, name, kind) =>
+  fs().saveBlob(blob, name, kind);
 export const readDocFile: typeof browser.readDocFile = (file) => fs().readDocFile(file);
 export const writeDocFile: typeof browser.writeDocFile = (file, text) =>
   fs().writeDocFile(file, text);

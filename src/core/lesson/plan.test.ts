@@ -23,7 +23,7 @@ const predict = (...actions: LessonAction[]): LessonStep => ({
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'l',
   title: 'L',
   workbench: 'circuit',
@@ -77,6 +77,32 @@ describe('stepOps', () => {
     const step = narrate(row(4, 'reveal'));
     expect(stepOps(step, 'open')).toEqual([{ op: 'row', index: 4 }]);
     expect(stepOps(step, 'reveal')).toEqual([]);
+  });
+});
+
+describe('pulse actions', () => {
+  const pulse = (when: 'open' | 'reveal'): LessonAction => ({ kind: 'pulse', clock: 'clk', when });
+
+  it('holds a reveal pulse back on a predict step, in order with rows', () => {
+    const step = predict(row(0), pulse('reveal'), pulse('open'));
+    expect(stepOps(step, 'open')).toEqual([
+      { op: 'row', index: 0 },
+      { op: 'pulse', clock: 'clk' },
+    ]);
+    expect(stepOps(step, 'reveal')).toEqual([{ op: 'pulse', clock: 'clk' }]);
+  });
+
+  it('fires a reveal pulse on open on a narrate step', () => {
+    expect(stepOps(narrate(pulse('reveal')), 'open')).toEqual([{ op: 'pulse', clock: 'clk' }]);
+  });
+
+  it('replays every earlier pulse, and step k held one only when revealed', () => {
+    const l = lessonOf(narrate(power(true), pulse('open')), predict(pulse('reveal')));
+    expect(replayPlan(l, 1, false).ops).toEqual([
+      { op: 'power', on: true },
+      { op: 'pulse', clock: 'clk' },
+    ]);
+    expect(replayPlan(l, 1, true).ops).toHaveLength(3);
   });
 });
 

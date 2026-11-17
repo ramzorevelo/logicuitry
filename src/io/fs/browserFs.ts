@@ -219,6 +219,44 @@ export async function pickSavePath(
   }
 }
 
+export interface BlobKind {
+  description: string;
+  mime: string;
+  ext: string;
+}
+
+/** True when written, false when the user dismissed the picker. Without a picker it downloads. */
+export async function saveBlob(
+  blob: Blob,
+  suggestedName: string,
+  kind: BlobKind,
+): Promise<boolean> {
+  const show = filePicker().showSaveFilePicker;
+  if (!show) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedName;
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+  }
+  let handle: FileSystemFileHandle;
+  try {
+    handle = await show({
+      suggestedName,
+      types: [{ description: kind.description, accept: { [kind.mime]: [`.${kind.ext}`] } }],
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return false;
+    throw e;
+  }
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  return true;
+}
+
 export async function readDocFile(file: DocFile): Promise<string> {
   if (file instanceof File) return file.text();
   return (await asFile(file).getFile()).text();

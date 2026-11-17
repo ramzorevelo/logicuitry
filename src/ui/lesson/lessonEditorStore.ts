@@ -20,6 +20,7 @@ import {
   toggleHighlight,
   updateStep,
   type EditableKind,
+  lessonBoardViewOf,
 } from '../../core/lesson';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import {
@@ -330,7 +331,7 @@ export const useLessonEditorStore = create<LessonEditorState>((set, get) => {
         }),
       );
       return held > 0
-        ? 'Narrate steps have no reveal, so held-back rows now apply when the step opens'
+        ? 'Narrate steps have no reveal, so held-back rows and pulses now apply when the step opens'
         : null;
     },
 
@@ -378,12 +379,7 @@ export const useLessonEditorStore = create<LessonEditorState>((set, get) => {
       if (!draft) return;
       if (pick) get().finishPick();
       const board = circuit().board;
-      const flagged = flaggedSteps(
-        lessonWarnings(draft, {
-          componentIds: new Set(board.components.map((c) => c.id)),
-          sequence: board.sequence,
-        }),
-      );
+      const flagged = flaggedSteps(lessonWarnings(draft, lessonBoardViewOf(board)));
       circuit().clearTransientError();
       set({ playing: true, sel });
       useLessonStore.getState().open(get().draft!, sel, { fromEditor: true });

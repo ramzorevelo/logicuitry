@@ -1,6 +1,12 @@
 import './lesson.css';
 import { useEffect, useMemo, useState } from 'react';
-import { announceStep, hasReveal, lessonWarnings, warningText } from '../../core/lesson';
+import {
+  announceStep,
+  hasReveal,
+  lessonBoardViewOf,
+  lessonWarnings,
+  warningText,
+} from '../../core/lesson';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import { renderMarkdown } from './markdown';
 import { useLessonStore } from './lessonStore';
@@ -37,11 +43,7 @@ export function LessonPanel() {
 
   const warnings = useMemo(() => {
     if (!lesson) return [];
-    const view = {
-      componentIds: new Set(board.components.map((c) => c.id)),
-      sequence: board.sequence,
-    };
-    return lessonWarnings(lesson, view).filter((w) => w.step === step);
+    return lessonWarnings(lesson, lessonBoardViewOf(board)).filter((w) => w.step === step);
   }, [lesson, board.components, board.sequence, step]);
 
   if (!lesson) return null;
@@ -53,7 +55,8 @@ export function LessonPanel() {
   const shown = revealed.has(step);
   const choices = current.choices ?? [];
   const right = choices.find((c) => c.right);
-  const announced = [...announceStep(current, board.sequence), ...notes];
+  const labelOf = (id: string) => board.components.find((c) => c.id === id)?.label || id;
+  const announced = [...announceStep(current, board.sequence, labelOf), ...notes];
   const leftMs = deadline === null ? 0 : Math.max(0, deadline - now);
   const leftS = Math.ceil(leftMs / 1000);
   const status = !autoplay

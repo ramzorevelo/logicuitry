@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 13,
+  "formatVersion": 15,
   "id": "cache-tag-lookup",
   "name": "Cache tag lookup",
   "hiddenChecks": [
@@ -1997,5 +1997,140 @@
     "datasheet": "typ",
     "vendor": "ti"
   },
-  "runSpeed": 25000
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "tag",
+      "set",
+      "data",
+      "wr"
+    ],
+    "expect": [
+      "hit",
+      "out"
+    ],
+    "rows": [
+      {
+        "set": [
+          5,
+          2,
+          9,
+          0
+        ],
+        "expect": [
+          null,
+          null
+        ],
+        "note": "Address 42: TAG 5, SET 2, cold miss"
+      },
+      {
+        "set": [
+          5,
+          2,
+          9,
+          1
+        ],
+        "expect": [
+          null,
+          null
+        ],
+        "note": "WRITE pressed: fill set 2"
+      },
+      {
+        "set": [
+          5,
+          2,
+          9,
+          0
+        ],
+        "expect": [
+          1,
+          6
+        ],
+        "note": "WRITE released: hit"
+      },
+      {
+        "set": [
+          3,
+          2,
+          9,
+          0
+        ],
+        "expect": [
+          0,
+          6
+        ],
+        "note": "Address 26: same set, other tag"
+      },
+      {
+        "set": [
+          5,
+          6,
+          9,
+          0
+        ],
+        "expect": [
+          null,
+          null
+        ],
+        "note": "Address 46: set 6 is empty"
+      },
+      {
+        "set": [
+          3,
+          2,
+          4,
+          0
+        ],
+        "expect": [
+          0,
+          6
+        ],
+        "note": "Address 26 again, DATA 4"
+      },
+      {
+        "set": [
+          3,
+          2,
+          4,
+          1
+        ],
+        "expect": [
+          null,
+          null
+        ],
+        "note": "WRITE pressed: replace set 2"
+      },
+      {
+        "set": [
+          3,
+          2,
+          4,
+          0
+        ],
+        "expect": [
+          1,
+          11
+        ],
+        "note": "WRITE released: hit"
+      },
+      {
+        "set": [
+          5,
+          2,
+          4,
+          0
+        ],
+        "expect": [
+          0,
+          11
+        ],
+        "note": "Address 42: evicted, conflict miss"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
+  }
 }

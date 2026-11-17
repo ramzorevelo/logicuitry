@@ -30,3 +30,25 @@ export function lockMenusForLessonEditor(menus: readonly Menu[]): Menu[] {
     }),
   }));
 }
+
+const PLAYING = 'Close the lesson to change the board';
+const POWER = 'The lesson controls power: close it to switch by hand';
+
+/** Driving items a playing lesson keeps; power, bubble mode and every edit are the lesson's. */
+const PLAY_KEEPS: Partial<Record<Menu['id'], ReadonlySet<string>>> = {
+  view: new Set([...VIEW_KEEPS, 'wireColours']),
+  simulate: new Set(['run', 'step', 'settle', 'timing', 'sta', 'run-speed']),
+};
+
+/** The workbench's menus while a lesson plays: look and drive, never edit or switch power. */
+export function lockMenusForLessonRunner(menus: readonly Menu[]): Menu[] {
+  return menus.map((menu) => ({
+    ...menu,
+    items: menu.items.map((entry): MenuEntry => {
+      if ('separator' in entry) return entry;
+      if (PLAY_KEEPS[menu.id]?.has(entry.id)) return entry;
+      const title = entry.id === 'power' ? POWER : PLAYING;
+      return { ...entry, disabled: true, ...('run' in entry ? { title } : {}) };
+    }),
+  }));
+}

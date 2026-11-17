@@ -7,6 +7,7 @@ import type {
   TimingMode,
 } from '../model/types';
 import type { LessonWarning } from './warnings';
+import { canHoldBack } from './plan';
 import {
   annotationIds,
   deletedAt,
@@ -46,7 +47,7 @@ export function newLesson(boardId: string, takenIds: ReadonlySet<string>): Lesso
   const title = 'Untitled lesson';
   return {
     format: 'lcir.lesson',
-    formatVersion: 4,
+    formatVersion: 5,
     id: uniqueId(slugify(title), takenIds),
     title,
     workbench: 'circuit',
@@ -116,8 +117,8 @@ export function moveStep(lesson: Lesson, from: number, to: number): Lesson {
 }
 
 /**
- * Narrate has no reveal, so its held-back rows fire on open and its choices,
- * answer and revealFreely go. `heldRows` counts the rows that moved, for the notice.
+ * Narrate has no reveal, so its held-back rows and pulses fire on open and its
+ * choices, answer and revealFreely go. `heldRows` counts the actions that moved, for the notice.
  */
 export function setStepKind(
   step: LessonStep,
@@ -131,7 +132,7 @@ export function setStepKind(
     };
   let heldRows = 0;
   const actions = step.actions.map((a): LessonAction => {
-    if (a.kind !== 'row' || a.when !== 'reveal') return a;
+    if (!canHoldBack(a) || a.when !== 'reveal') return a;
     heldRows++;
     return { ...a, when: 'open' };
   });
@@ -163,6 +164,7 @@ export function defaultAction(
   step: LessonStep,
   rows: readonly SequenceRow[],
   lastRow: number,
+  clockIds: readonly string[] = [],
 ): LessonAction {
   switch (kind) {
     case 'row':
@@ -179,6 +181,8 @@ export function defaultAction(
       return { kind, components: [] };
     case 'tab':
       return { kind, tab: 'waveform' satisfies LessonDockTab };
+    case 'pulse':
+      return { kind, clock: clockIds[0] ?? '', when: step.kind === 'predict' ? 'reveal' : 'open' };
   }
 }
 

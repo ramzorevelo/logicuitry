@@ -287,7 +287,7 @@ export const EXAMPLES: readonly Example[] = [
   ),
   memory(
     interleavedMemory,
-    'Eight 74LS189s in four banks of two, the 74LS139 enabling one bank from A5 A4. For low-order interleaving, swap the bus wires leaving the A5 A4 and A1 A0 switches. /DATA shows the complement of the stored word.',
+    'Eight 74LS189s in four banks of two, the 74LS139 enabling one bank from A5 A4. For low-order interleaving, swap the bus wires leaving the A5 A4 and A1 A0 switches. With the default wiring each word starts out holding its own address; /DATA shows the complement of the stored word.',
   ),
   memory(
     cacheTagLookup,

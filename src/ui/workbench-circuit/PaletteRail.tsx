@@ -10,6 +10,7 @@ import { useCoarsePointer } from '../pointerKind';
 import { isBuiltinChipDef } from '../../core/parts/packages';
 import { allowedOf, chipDefAllowed } from '../../core/challenge/allowed';
 import { useLessonOpen } from './ChallengePanel';
+import { useLessonStore } from '../lesson/lessonStore';
 import { LONG_PRESS_MS } from './touchGestures';
 import {
   PALETTE,
@@ -45,6 +46,8 @@ export function PaletteRail({ paletteRef, width, shown = false }: Props) {
   const mode = useCircuitStore((s) => s.mode);
   const chipLib = useCircuitStore((s) => s.chipLib);
   const lessonOpen = useLessonOpen();
+  // A playing lesson owns the board's structure; the editor hides the rail altogether.
+  const lessonPlaying = useLessonStore((s) => s.lesson !== null);
   const allowed = useCircuitStore((s) => s.board.challenge?.allowed);
   // A hint, never a lock: a dimmed part still places, and the live rows flag it.
   const offList = (e: Entry): boolean => {
@@ -216,7 +219,7 @@ export function PaletteRail({ paletteRef, width, shown = false }: Props) {
         className={`palette-item${
           active ? ` palette-item--active${tool.repeat ? ' palette-item--repeat' : ''}` : ''
         }${off ? ' palette-item--off' : ''}`}
-        disabled={mode === 'bubble'}
+        disabled={mode === 'bubble' || lessonPlaying}
         title={`${e.caption ? `${e.label}, ${e.caption}` : e.label} (${keepPlacing})${
           off ? '. Not allowed in this challenge' : ''
         }`}

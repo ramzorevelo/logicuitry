@@ -1,0 +1,668 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 5,
+  "id": "bus-computer-program",
+  "title": "Run a program by hand: you are the control unit",
+  "workbench": "circuit",
+  "board": "eight-bit-bus-computer",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "A computer with no control unit",
+      "prose": "Registers **A** and **B**, a program counter, RAM and an adder share one eight-bit **BUS**. Every control line is a switch, so nothing happens unless someone sets them. In this lesson you are the control unit. A switch whose name starts with a slash is active at 0.",
+      "actions": [
+        {
+          "kind": "power",
+          "on": true
+        },
+        {
+          "kind": "row",
+          "index": 0,
+          "set": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "snco",
+            "smi",
+            "sce",
+            "snro",
+            "sai",
+            "sbi",
+            "ssu",
+            "seo",
+            "sfi"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Store the data in RAM",
+      "prose": "With **PROG** on, the **ADDR** and **DATA** switches drive the RAM directly. Pressing **WRITE** stores **DATA** at **ADDR**: 28 at address 0, then 14 at address 1.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 1,
+          "set": [
+            0,
+            1,
+            0,
+            28,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "row",
+          "index": 2,
+          "set": [
+            0,
+            1,
+            0,
+            28,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "row",
+          "index": 3,
+          "set": [
+            0,
+            1,
+            0,
+            28,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "row",
+          "index": 4,
+          "set": [
+            0,
+            1,
+            1,
+            14,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "row",
+          "index": 5,
+          "set": [
+            0,
+            1,
+            1,
+            14,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "row",
+          "index": 6,
+          "set": [
+            0,
+            1,
+            1,
+            14,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "sprog",
+            "addr",
+            "data",
+            "swr"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Run mode: one control word per clock",
+      "prose": "**PROG** off hands the RAM address to the memory address register (**MAR**). From here on, each step sets one control word: which part drives the **BUS** (an **O** signal) and which parts load it (an **I** signal). Loads happen on the next rising edge of **CLK**.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 7,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "sprog",
+            "clk"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Fetch: CO MI",
+      "prose": "**/CO** puts the program counter on the **BUS**, so **BUS** reads 0. **/MI** makes the **MAR** load it on the clock edge. One clock pulse later the RAM is looking at address 0.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 8,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "snco",
+            "smi",
+            "bus",
+            "pc",
+            "mar"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now **/RO**, **/AI** and **CE**: the RAM drives the **BUS**, **A** loads it, and the counter counts. **BUS** already reads 28. What does **A** show after one clock pulse?",
+      "choices": [
+        {
+          "text": "0"
+        },
+        {
+          "text": "28",
+          "right": true
+        },
+        {
+          "text": "14"
+        }
+      ],
+      "answer": "**A** loads 28 from the **BUS** on the rising edge, and the program counter steps to 1 on the same edge. Nothing loads before the edge, whatever the **BUS** shows.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 9,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "snro",
+            "sai",
+            "sce",
+            "leda",
+            "bus"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Fetch again: CO MI",
+      "prose": "The same control word as before, but the program counter now holds 1, so the **BUS** reads 1 and the **MAR** loads address 1.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 8,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "snco",
+            "smi",
+            "bus"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Next word: **/RO**, **/BI** and **CE**, then one clock pulse. Which register changes?",
+      "choices": [
+        {
+          "text": "A"
+        },
+        {
+          "text": "B",
+          "right": true
+        },
+        {
+          "text": "Both"
+        }
+      ],
+      "answer": "**B** loads 14 from address 1. **A** keeps 28: its **/AI** is 1, so the edge does nothing to it.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 10,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "snro",
+            "sbi",
+            "leda",
+            "ledb"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now **/EO**, **/AI** and **/FI**: the adder drives the **BUS** and **A** loads it. **BUS** reads 42. What does **A** hold after one clock pulse?",
+      "choices": [
+        {
+          "text": "42",
+          "right": true
+        },
+        {
+          "text": "56"
+        },
+        {
+          "text": "14"
+        }
+      ],
+      "answer": "**A** = 28 + 14 = 42. The flags register loads on the same edge: no carry out and a sum that is not zero, so **CF** = 0 and **ZF** = 0.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 11,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "seo",
+            "sai",
+            "sfi",
+            "leda",
+            "ledcf",
+            "ledzf"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Why the BUS now reads 56",
+      "prose": "The adder is combinational: it keeps adding the new **A** to **B**, so the **BUS** shows 42 + 14 = 56. **A** took its value once, at the edge. A second pulse with this control word would load 56. That is why each control word lasts exactly one clock.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": [
+            "bus",
+            "leda",
+            "ledb"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Subtract: SU",
+      "prose": "**SU** inverts **B** through the XOR gates and feeds a carry into the adder, so it computes **A** + not **B** + 1, which is **A** minus **B**. The **BUS** now reads 42 minus 14 = 28.",
+      "actions": [
+        {
+          "kind": "row",
+          "index": 12,
+          "set": [
+            0,
+            0,
+            1,
+            14,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0
+          ],
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "ssu",
+            "bus"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "One clock pulse with **SU** on. What do **A** and **CF** show?",
+      "choices": [
+        {
+          "text": "A = 28, CF = 0"
+        },
+        {
+          "text": "A = 28, CF = 1",
+          "right": true
+        },
+        {
+          "text": "A = 14, CF = 1"
+        }
+      ],
+      "answer": "**A** = 28. In two's complement subtraction a carry out of 1 means **no borrow**: 42 is at least 14, so **CF** = 1.",
+      "actions": [
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "leda",
+            "ledcf"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Again: 28 minus 14",
+      "prose": "The control word stays, so another pulse subtracts again. **A** = 14 and **CF** stays 1.",
+      "actions": [
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "open"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "leda",
+            "ledcf",
+            "ledzf"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "One more pulse: 14 minus 14. What changes on the flags?",
+      "choices": [
+        {
+          "text": "ZF lights",
+          "right": true
+        },
+        {
+          "text": "CF goes off"
+        },
+        {
+          "text": "Nothing changes"
+        }
+      ],
+      "answer": "**A** = 0, so **ZF** = 1. **CF** stays 1: 14 minus 14 needs no borrow either.",
+      "actions": [
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "leda",
+            "ledcf",
+            "ledzf"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "And one more: 0 minus 14. What does **A** show?",
+      "choices": [
+        {
+          "text": "0"
+        },
+        {
+          "text": "242",
+          "right": true
+        },
+        {
+          "text": "14"
+        }
+      ],
+      "answer": "**A** = 242, which is minus 14 in eight-bit two's complement. **CF** = 0 this time: the subtraction needed a borrow. **ZF** goes off.",
+      "actions": [
+        {
+          "kind": "pulse",
+          "clock": "clk",
+          "when": "reveal"
+        },
+        {
+          "kind": "highlight",
+          "components": [
+            "leda",
+            "ledcf",
+            "ledzf"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "You were the control unit",
+      "prose": "The program was a list of control words, one per clock: **CO MI**, **RO AI CE**, **CO MI**, **RO BI CE**, **EO AI FI**, then **SU EO AI FI**. A control unit stores those lists, a step counter picks the word for each clock, and the instruction in RAM picks the list. That is what you build next.",
+      "actions": [
+        {
+          "kind": "highlight",
+          "components": [
+            "snco",
+            "smi",
+            "sce",
+            "snro",
+            "sai",
+            "sbi",
+            "ssu",
+            "seo",
+            "sfi"
+          ]
+        }
+      ]
+    }
+  ]
+}

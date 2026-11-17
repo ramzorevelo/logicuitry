@@ -107,4 +107,12 @@ describe('buildBlockedReason', () => {
       'Close the lesson editor to edit the board.',
     );
   });
+  it('refuses while a lesson plays, ahead of the power wording', () => {
+    expect(blockedText(buildBlockedReason({ ...free, lessonPlay: true, powered: true })!)).toBe(
+      'Close the lesson to edit the board.',
+    );
+    expect(blockedText('lesson-power')).toBe(
+      'The lesson controls power: close it to switch by hand.',
+    );
+  });
 });

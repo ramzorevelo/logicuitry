@@ -72,7 +72,7 @@ describe('parseBoard', () => {
 
 const lesson = (title: string): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'l1',
   title,
   workbench: 'circuit',

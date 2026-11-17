@@ -15,7 +15,9 @@ export type LessonWarning =
   | { kind: 'target-inside-chip'; step: number; id: string; by: PointerRole }
   | { kind: 'narration-no-part'; step: number }
   | { kind: 'until-before-step'; step: number; until: number }
-  | { kind: 'until-past-end'; step: number; until: number };
+  | { kind: 'until-past-end'; step: number; until: number }
+  | { kind: 'pulse-no-clock'; step: number; clock: string }
+  | { kind: 'pulse-while-off'; step: number; clock: string };
 
 /** What points at a part on the board. */
 export type PointerRole = 'callout' | 'narration';
@@ -51,6 +53,19 @@ function highlightWarnings(
     if (id.includes('/')) out.push({ kind: 'inside-chip', step, id });
     else if (!board.componentIds.has(id)) out.push({ kind: 'missing-component', step, id });
   }
+  return out;
+}
+
+function pulseWarnings(
+  step: number,
+  clock: string,
+  board: LessonBoardView,
+  powered: boolean,
+): LessonWarning[] {
+  const out: LessonWarning[] = [];
+  const known = board.clockIds ? board.clockIds.has(clock) : board.componentIds.has(clock);
+  if (!known) out.push({ kind: 'pulse-no-clock', step, clock });
+  if (!powered) out.push({ kind: 'pulse-while-off', step, clock });
   return out;
 }
 
@@ -100,6 +115,7 @@ export function lessonWarnings(lesson: Lesson, board: LessonBoardView): LessonWa
     for (const action of firingOrder(step)) {
       if (action.kind === 'power') powered = action.on;
       else if (action.kind === 'row') out.push(...rowWarnings(i, action, board, powered));
+      else if (action.kind === 'pulse') out.push(...pulseWarnings(i, action.clock, board, powered));
       else if (action.kind === 'highlight')
         out.push(...highlightWarnings(i, action.components, board));
     }
@@ -138,6 +154,12 @@ export function warningText(w: LessonWarning): string {
       return `A note ends at step ${w.until + 1}, before its own step`;
     case 'until-past-end':
       return `A note lasts until step ${w.until + 1}, past the last step`;
+    case 'pulse-no-clock':
+      return w.clock
+        ? `Clock pulse names ${w.clock}, which is not a clock on the board`
+        : 'Clock pulse names no clock';
+    case 'pulse-while-off':
+      return 'Clock pulse while the board is off';
   }
 }
 

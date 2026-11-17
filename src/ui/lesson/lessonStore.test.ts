@@ -19,7 +19,7 @@ function loadAlu() {
 
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'test',
   title: 'Test',
   workbench: 'circuit',
@@ -72,6 +72,7 @@ describe('playing the ALU flags lesson', () => {
     expect(snapshot().inputs).toEqual([7, 1, 0, 0]);
     expect(snapshot().flags).toEqual([1, 0, 0, 1]);
     cs().toggleInput('a', 0);
+    cs().settle();
     ls().reveal();
     expect(snapshot().inputs[0]).toBe(6);
   });
@@ -118,6 +119,7 @@ describe('playing the ALU flags lesson', () => {
     ls().open(flagsLesson);
     ls().next();
     cs().toggleInput('f0');
+    cs().settle();
     ls().next();
     expect(snapshot().inputs).toEqual([3, 2, 0, 1]);
     ls().reveal();

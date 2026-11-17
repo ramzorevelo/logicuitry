@@ -1,6 +1,6 @@
 import './lesson.css';
 import './lessonEditor.css';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   Component,
   LessonAction,
@@ -8,6 +8,7 @@ import type {
   LessonStep,
   SequenceRow,
 } from '../../core/model/types';
+import { placeMenu, scrollParentOf, type MenuPlacement } from './menuPlacement';
 import {
   announceStep,
   defaultAction,
@@ -24,6 +25,7 @@ import {
   autoplaySeconds,
   type LessonWarning,
   type NewActionKind,
+  lessonBoardViewOf,
 } from '../../core/lesson';
 import { EXAMPLES } from '../../examples';
 import { useModalKeys } from '../modalKeys';
@@ -47,6 +49,7 @@ const ACTION_TITLES: Record<LessonAction['kind'], string> = {
   timing: 'Timing mode',
   highlight: 'Highlight parts',
   tab: 'Open dock tab',
+  pulse: 'Clock pulse',
 };
 
 const ADD_LABELS: Record<NewActionKind, string> = {
@@ -55,6 +58,7 @@ const ADD_LABELS: Record<NewActionKind, string> = {
   power: 'Power on or off',
   timing: 'Timing mode',
   tab: 'Open dock tab',
+  pulse: 'Clock pulse',
 };
 
 function shortAction(a: LessonAction, step: LessonStep): string {
@@ -69,6 +73,8 @@ function shortAction(a: LessonAction, step: LessonStep): string {
       return `${a.mode} timing`;
     case 'tab':
       return `${TAB_LABELS[a.tab]} tab`;
+    case 'pulse':
+      return `pulse ${a.clock || '?'}${hasReveal(step) && a.when === 'reveal' ? ' on reveal' : ''}`;
   }
 }
 
@@ -81,6 +87,7 @@ function rowLabel(row: SequenceRow | undefined, i: number): string {
 function warningsOfAction(a: LessonAction, ws: readonly LessonWarning[]): LessonWarning[] {
   return ws.filter((w) => {
     if (a.kind === 'row') return 'index' in w && w.index === a.index;
+    if (a.kind === 'pulse') return 'clock' in w && w.clock === a.clock;
     if (a.kind !== 'highlight') return false;
     if (w.kind === 'highlight-empty') return a.components.length === 0;
     return 'id' in w && a.components.includes(w.id);
@@ -91,8 +98,7 @@ function useBoardView() {
   const board = useCircuitStore((s) => s.board);
   return useMemo(
     () => ({
-      componentIds: new Set(board.components.map((c) => c.id)),
-      sequence: board.sequence,
+      ...lessonBoardViewOf(board),
       byId: new Map<string, Component>(board.components.map((c) => [c.id, c])),
       name: board.name,
       example: EXAMPLES.some((e) => e.id === board.id),
@@ -374,6 +380,36 @@ function ActionFields({
         </>
       );
     }
+    case 'pulse': {
+      const clocks = [...byId.values()].filter((c) => c.kind === 'clock');
+      const stale = !clocks.some((c) => c.id === action.clock);
+      return (
+        <>
+          <select
+            aria-label="Clock"
+            value={action.clock}
+            onChange={(e) => set({ ...action, clock: e.target.value })}
+          >
+            {stale && <option value={action.clock}>{action.clock || 'no clock'}</option>}
+            {clocks.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label || c.id}
+              </option>
+            ))}
+          </select>
+          {hasReveal(step) && (
+            <select
+              aria-label="When"
+              value={action.when}
+              onChange={(e) => set({ ...action, when: e.target.value as 'open' | 'reveal' })}
+            >
+              <option value="open">when the step opens</option>
+              <option value="reveal">held back until reveal</option>
+            </select>
+          )}
+        </>
+      );
+    }
     case 'power':
       return (
         <span className="lesson-seg">
@@ -464,6 +500,8 @@ export function LessonInspector() {
   const view = useBoardView();
   const [addOpen, setAddOpen] = useState(false);
   const addRef = useRef<HTMLDivElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const [addPlacement, setAddPlacement] = useState<MenuPlacement>('down');
   const step = draft?.steps[sel];
   const choices = step?.choices?.length ?? 0;
   const choiceCount = useRef({ sel, count: choices });
@@ -476,6 +514,21 @@ export function LessonInspector() {
     };
     window.addEventListener('pointerdown', away);
     return () => window.removeEventListener('pointerdown', away);
+  }, [addOpen]);
+  useLayoutEffect(() => {
+    const menu = addMenuRef.current;
+    const anchor = addRef.current;
+    if (!addOpen || !menu || !anchor) {
+      setAddPlacement('down');
+      return;
+    }
+    const a = anchor.getBoundingClientRect();
+    const clip = scrollParentOf(anchor)?.getBoundingClientRect();
+    const top = Math.max(clip?.top ?? 0, 0);
+    const bottom = Math.min(clip?.bottom ?? window.innerHeight, window.innerHeight);
+    const placement = placeMenu(bottom - a.bottom, a.top - top, menu.offsetHeight);
+    setAddPlacement(placement);
+    if (placement === 'scroll') menu.scrollIntoView({ block: 'nearest' });
   }, [addOpen]);
 
   // A choice just added takes the cursor; switching steps moves no focus.
@@ -494,7 +547,7 @@ export function LessonInspector() {
   const ownWarnings = mine.filter((w) => w.kind === 'nothing-to-reveal');
   const rows = view.sequence?.rows ?? [];
   const predict = hasReveal(step);
-  const announced = announceStep(step, view.sequence);
+  const announced = announceStep(step, view.sequence, (id) => view.byId.get(id)?.label || id);
   const has = (kind: LessonAction['kind']) => step.actions.some((a) => a.kind === kind);
   const dirty = lessonDirty({ draft, saved });
 
@@ -503,7 +556,9 @@ export function LessonInspector() {
 
   const addAction = (kind: NewActionKind) => {
     setAddOpen(false);
-    const action = defaultAction(kind, step, rows, lastRowBefore(draft, sel));
+    const action = defaultAction(kind, step, rows, lastRowBefore(draft, sel), [
+      ...(view.clockIds ?? []),
+    ]);
     ed.updateSelected((s) => ({ ...s, actions: [...s.actions, action] }));
     if (kind === 'highlight') ed.beginPick(step.actions.length);
   };
@@ -780,14 +835,20 @@ export function LessonInspector() {
               + Action
             </button>
             {addOpen && (
-              <div className="lesson-add__menu" role="menu">
+              <div
+                ref={addMenuRef}
+                className={`lesson-add__menu${addPlacement === 'up' ? ' lesson-add__menu--up' : ''}`}
+                role="menu"
+              >
                 {(Object.keys(ADD_LABELS) as NewActionKind[]).map((kind) => {
                   const why =
                     kind === 'row' && rows.length === 0
                       ? 'The board has no sequence rows: add them in the Sequence tab'
-                      : (kind === 'highlight' || kind === 'tab') && has(kind)
-                        ? 'This step already has one'
-                        : undefined;
+                      : kind === 'pulse' && (view.clockIds?.size ?? 0) === 0
+                        ? 'The board has no clock part'
+                        : (kind === 'highlight' || kind === 'tab') && has(kind)
+                          ? 'This step already has one'
+                          : undefined;
                   return (
                     <button
                       key={kind}

@@ -382,6 +382,11 @@
   box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
+.lesson-add__menu--up {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+
 .lesson-add__menu button {
   padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2.5);
   border: 0;

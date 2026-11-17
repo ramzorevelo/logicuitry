@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "format": { "const": "lcir.lesson" },
-    "formatVersion": { "const": 4 },
+    "formatVersion": { "const": 5 },
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "minLength": 1 },
     "workbench": { "enum": ["numbers", "gates", "circuit", "devicelab"] },
@@ -151,6 +151,16 @@
             "tab": { "enum": ["waveform", "analyze", "checks", "sequence"] }
           },
           "required": ["kind", "tab"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "pulse" },
+            "clock": { "type": "string", "minLength": 1 },
+            "when": { "enum": ["open", "reveal"] }
+          },
+          "required": ["kind", "clock", "when"],
           "additionalProperties": false
         }
       ]

@@ -8,6 +8,7 @@ import {
   hasReveal,
   pageDownAction,
   replayPlan,
+  pulseSkippedText,
   rowMissingText,
   rowWhileOffText,
   stepDockTab,
@@ -118,8 +119,14 @@ function applyOp(op: BoardOp, notes: string[]): void {
       return;
     }
     case 'row':
-      if (circuit().applySequenceRow(op.index)) return;
+      if (circuit().applySequenceRow(op.index, true)) return;
       notes.push(circuit().powered ? rowMissingText(op.index) : rowWhileOffText(op.index));
+      return;
+    case 'pulse': {
+      const result = circuit().pulseClockOnce(op.clock);
+      const label = circuit().board.components.find((x) => x.id === op.clock)?.label;
+      if (result !== 'ok') notes.push(pulseSkippedText(label || op.clock, result));
+    }
   }
 }
 

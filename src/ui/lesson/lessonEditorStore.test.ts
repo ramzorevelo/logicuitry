@@ -140,7 +140,7 @@ describe('step edits and the lesson undo stack', () => {
 
   it('turning predict into narrate moves held-back rows to the step open, and says so', () => {
     ed().select(2);
-    expect(ed().setKind('narrate')).toMatch(/held-back rows now apply/);
+    expect(ed().setKind('narrate')).toMatch(/held-back rows and pulses now apply/);
     const row = ed().draft!.steps[2]!.actions.find((a) => a.kind === 'row');
     expect(row).toMatchObject({ when: 'open' });
     expect(ed().setKind('predict')).toBeNull();

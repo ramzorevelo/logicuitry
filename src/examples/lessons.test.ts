@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from './index';
 import { BUILTIN_LESSONS } from './lessons/index';
 import { parseDocument } from '../io/library';
-import { lessonWarnings, warningText } from '../core/lesson';
+import { lessonBoardViewOf, lessonWarnings, warningText } from '../core/lesson';
 
 describe('built-in lessons', () => {
   it('ships the ALU flags lesson first', () => {
@@ -18,16 +18,19 @@ describe('built-in lessons', () => {
 
       const example = EXAMPLES.find((e) => e.id === lesson.board);
 
+      it('keeps Markdown out of choices, which show as plain text', () => {
+        const marked = lesson.steps
+          .flatMap((s) => s.choices ?? [])
+          .filter((c) => /[*_`]/.test(c.text));
+        expect(marked.map((c) => c.text)).toEqual([]);
+      });
+
       it('names an example board', () => {
         expect(example, `board ${lesson.board ?? '(none)'}`).toBeDefined();
       });
 
       it('has no warnings against that board', () => {
-        const board = example!.board;
-        const view = {
-          componentIds: new Set(board.components.map((c) => c.id)),
-          sequence: board.sequence,
-        };
+        const view = lessonBoardViewOf(example!.board);
         expect(lessonWarnings(lesson, view).map(warningText)).toEqual([]);
       });
     });

@@ -1,0 +1,152 @@
+/* Lesson editor workspace. The overlay draws headers, splitters and the strip; the views sit
+   beneath it in .circuit-body at the boxes it measures, so its own boxes pass the pointer through. */
+.circuit-editor--lesson-edit .circuit-body {
+  position: relative;
+}
+
+.ws {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  color: var(--ink);
+  font: var(--text-secondary) / 1.4 var(--font-ui);
+}
+
+.ws-tabs,
+.ws-strip,
+.ws-area__head,
+.ws-split {
+  pointer-events: auto;
+}
+
+.ws-tabs,
+.ws-strip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border-bottom: var(--chrome-border);
+  background: var(--surface);
+}
+
+.ws-tabs .tool-btn,
+.ws-strip .tool-btn,
+.ws-area__head .tool-btn {
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+}
+
+.ws-tabs .tool-btn[aria-pressed='true'],
+.ws-strip .tool-btn[aria-pressed='true'],
+.ws-area__head .tool-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
+.ws-grow {
+  flex: 1;
+}
+
+.ws-tree {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.ws-box {
+  display: flex;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ws-box--col {
+  flex-direction: column;
+}
+
+.ws-area {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ws-area__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border-bottom: var(--chrome-border);
+  background: var(--paper);
+}
+
+.ws-area--focus .ws-area__head {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.ws-area__head select {
+  padding: 2px calc(var(--space-unit) * 1.5);
+  border: var(--chrome-border);
+  border-radius: var(--chrome-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.ws-area__body {
+  flex: 1;
+  min-height: 0;
+}
+
+.ws-split {
+  flex: none;
+  background: var(--line);
+  touch-action: none;
+}
+
+.ws-split--row {
+  width: calc(var(--space-unit) * 1.5);
+  cursor: col-resize;
+}
+
+.ws-split--col {
+  height: calc(var(--space-unit) * 1.5);
+  cursor: row-resize;
+}
+
+.ws-split:hover,
+.ws-split:focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
+.ws-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A view takes its area's box; the fixed widths it has outside the workspace give way. */
+.ws-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ws-view > .lesson-steps,
+.ws-view > .lesson-inspector {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  border-right: 0;
+  border-left: 0;
+}

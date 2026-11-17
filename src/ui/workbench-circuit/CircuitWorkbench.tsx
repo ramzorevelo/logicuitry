@@ -179,6 +179,7 @@ import { keyBelongsElsewhere } from '../panelKeys';
 import { circuitFromNetlist } from './buildCircuit';
 import { LabelConflictDialog } from './LabelConflictDialog';
 import { CloseTabDialog } from './CloseTabDialog';
+import { ExportDialog } from '../export/ExportDialog';
 import {
   alignSplicePos,
   canHealSelection,
@@ -257,7 +258,9 @@ import { handleLessonKey } from '../lesson/lessonKeys';
 import { LessonCanvasBar, LessonInspector, LessonStepList } from '../lesson/LessonEditor';
 import { useLessonEditorStore } from '../lesson/lessonEditorStore';
 import { handleLessonEditorKey } from '../lesson/lessonEditorKeys';
-import { lockMenusForLessonEditor } from '../lesson/lessonLock';
+import { LessonWorkspace } from '../lesson/workspace/LessonWorkspace';
+import { useWorkspaceStore } from '../lesson/workspace/workspaceStore';
+import { lockMenusForLessonEditor, lockMenusForLessonRunner } from '../lesson/lessonLock';
 
 interface DragState {
   ids: Set<string>;
@@ -754,6 +757,10 @@ export function CircuitWorkbench() {
   const challengeEditor = useChallengeStore((s) => s.editor);
   const lessonLockRef = useRef(editingLesson);
   lessonLockRef.current = editingLesson;
+  // A playing lesson owns power and structure; its inputs, Gate step and the sequence stay live.
+  const lessonPlaying = useLessonStore((s) => s.lesson !== null);
+  const playLockRef = useRef(lessonPlaying);
+  playLockRef.current = lessonPlaying;
   const toolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (toolbarRef.current) toolbarRef.current.inert = editingLesson;
@@ -998,6 +1005,7 @@ export function CircuitWorkbench() {
     tab: activeTab.kind,
     viewOnly,
     lessonEdit: editingLesson,
+    lessonPlay: lessonPlaying,
     mode,
     powered,
   });
@@ -1619,7 +1627,8 @@ export function CircuitWorkbench() {
     const size = () => {
       const c = canvasRef.current;
       const box = containerRef.current;
-      if (c && box) {
+      // A box hidden mid-layout reads 0 x 0; keep the last backing store rather than an empty one.
+      if (c && box && box.clientWidth > 0 && box.clientHeight > 0) {
         const dpr = window.devicePixelRatio || 1;
         c.width = Math.round(box.clientWidth * dpr);
         c.height = Math.round(box.clientHeight * dpr);
@@ -1745,6 +1754,20 @@ export function CircuitWorkbench() {
         if (s.powered && s.board.sequence) {
           e.preventDefault();
           s.stepSequence(e.key === ']' ? 1 : -1);
+        }
+        return;
+      }
+      if (playLockRef.current) {
+        if (e.key === 'Home') {
+          e.preventDefault();
+          fitRef.current();
+        } else if (e.key === ' ') {
+          e.preventDefault();
+          reportBlockedRef.current('lesson-power');
+        } else if (e.key === '.') {
+          s.gateStep();
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          reportBlockedRef.current('lesson-play');
         }
         return;
       }
@@ -2184,6 +2207,9 @@ export function CircuitWorkbench() {
     if (!noticePolicyRef.current.shouldAnnounce(reason, Date.now())) return;
     announce(blockedText(reason));
   };
+
+  const reportBlockedRef = useRef(reportBlocked);
+  reportBlockedRef.current = reportBlocked;
 
   const announce = (text: string) => {
     setNotice(text);
@@ -3738,6 +3764,7 @@ export function CircuitWorkbench() {
       const lesson = useLessonEditorStore.getState();
       return (
         viewOnlyRef.current ||
+        playLockRef.current ||
         store.getState().mode === 'bubble' ||
         (lesson.draft !== null && !lesson.playing)
       );
@@ -3795,7 +3822,8 @@ export function CircuitWorkbench() {
   // Long press = the precise/alternate variant of a tap. Its one job today is
   // the parameter overlay, which the mouse reaches by double-clicking.
   const onLongPress = (clientX: number, clientY: number) => {
-    if (viewOnlyRef.current || lessonLockRef.current || mode === 'bubble') return;
+    if (viewOnlyRef.current || lessonLockRef.current || playLockRef.current || mode === 'bubble')
+      return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const world = screenToWorld(viewportRef.current, {
@@ -4040,7 +4068,7 @@ export function CircuitWorkbench() {
     // View-only: no editing gesture below is reachable. Driving the board is
     // not editing, so a momentary button still presses (and a switch still
     // toggles, via onCanvasClick); anything else pans.
-    if (viewOnlyRef.current || lessonLockRef.current) {
+    if (viewOnlyRef.current || lessonLockRef.current || playLockRef.current) {
       if (!lessonLockRef.current && tryButtonPress(e)) return;
       if (e.button === 0) beginPan(e);
       return;
@@ -5020,6 +5048,14 @@ export function CircuitWorkbench() {
     hoverItemRef.current = null;
     draw();
   };
+  const leaveRef = useRef(onCanvasPointerLeave);
+  leaveRef.current = onCanvasPointerLeave;
+
+  // A Board swapped out or behind a maximised area gets no pointerleave, and kept its hover.
+  const boardShown = useWorkspaceStore((s) => !editingLesson || s.shown('board'));
+  useEffect(() => {
+    if (!boardShown) leaveRef.current();
+  }, [boardShown]);
 
   const onCanvasClick = (e: React.MouseEvent) => {
     // Click a switch to drive it while powered. Ports are ChipDef
@@ -5206,6 +5242,10 @@ export function CircuitWorkbench() {
   // overlay behaves identically whichever way it was opened.
   const openParamsAt = (clientX: number, clientY: number, shift: boolean) => {
     if (mode === 'bubble' || viewOnlyRef.current || lessonLockRef.current) return;
+    if (playLockRef.current) {
+      reportBlocked('lesson-play');
+      return;
+    }
     const rect = canvasRef.current!.getBoundingClientRect();
     const world = screenToWorld(viewportRef.current, {
       x: clientX - rect.left,
@@ -6292,8 +6332,13 @@ export function CircuitWorkbench() {
     lessonOpen,
   ]);
   const lockedMenus = useMemo(
-    () => (editingLesson ? lockMenusForLessonEditor(circuitMenus) : circuitMenus),
-    [editingLesson, circuitMenus],
+    () =>
+      editingLesson
+        ? lockMenusForLessonEditor(circuitMenus)
+        : lessonPlaying
+          ? lockMenusForLessonRunner(circuitMenus)
+          : circuitMenus,
+    [editingLesson, lessonPlaying, circuitMenus],
   );
   useContributeMenus('circuit', lockedMenus);
 
@@ -6408,6 +6453,7 @@ export function CircuitWorkbench() {
                 type="button"
                 className="tool-btn"
                 title={`Undo${key('Ctrl+Z')}`}
+                disabled={lessonPlaying}
                 onClick={() => store.getState().undo()}
               >
                 <ToolIcon name="undo" />
@@ -6417,6 +6463,7 @@ export function CircuitWorkbench() {
                 type="button"
                 className="tool-btn"
                 title={`Redo${key('Ctrl+Shift+Z')}`}
+                disabled={lessonPlaying}
                 onClick={() => store.getState().redo()}
               >
                 <ToolIcon name="redo" />
@@ -6455,6 +6502,7 @@ export function CircuitWorkbench() {
                 icon="undo"
                 quick
                 title={`Undo${key('Ctrl+Z')}`}
+                disabled={lessonPlaying}
                 onClick={() => store.getState().undo()}
               >
                 Undo
@@ -6463,6 +6511,7 @@ export function CircuitWorkbench() {
                 icon="redo"
                 quick
                 title={`Redo${key('Ctrl+Shift+Z')}`}
+                disabled={lessonPlaying}
                 onClick={() => store.getState().redo()}
               >
                 Redo
@@ -6601,7 +6650,12 @@ export function CircuitWorkbench() {
                 icon="power"
                 quick
                 active={powered}
-                title={`Compile and settle; all nets start at X${key('Space')}`}
+                disabled={lessonPlaying}
+                title={
+                  lessonPlaying
+                    ? 'The lesson controls power: close it to switch by hand'
+                    : `Compile and settle; all nets start at X${key('Space')}`
+                }
                 onClick={() => store.getState().power()}
               >
                 {powered ? 'Power off' : 'Power on'}
@@ -6796,7 +6850,11 @@ export function CircuitWorkbench() {
           cancelPending();
         }}
       >
-        {editingLesson ? (
+        {editingLesson && !compact ? (
+          <div className="ws-view" data-ws-view="steps">
+            <LessonStepList />
+          </div>
+        ) : editingLesson ? (
           <LessonStepList />
         ) : (
           <>
@@ -6805,7 +6863,7 @@ export function CircuitWorkbench() {
               width={partsShown ? null : paletteW}
               shown={partsShown}
             />
-            {!partsShown && (
+            {!partsShown && !lessonPlaying && (
               <button
                 type="button"
                 className="palette-tab"
@@ -6850,7 +6908,7 @@ export function CircuitWorkbench() {
           }}
           onDoubleClick={() => setPaletteW(paletteFitWidth())}
         />
-        <div className="circuit-canvas-wrap" ref={containerRef}>
+        <div className="circuit-canvas-wrap" ref={containerRef} data-ws-view="board">
           <canvas
             ref={canvasRef}
             className="circuit-canvas"
@@ -6945,6 +7003,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="power"
                 active={powered}
+                disabled={lessonPlaying}
                 title={`${powered ? 'Power off' : 'Power on'}${key('Space')}`}
                 onClick={() => store.getState().power()}
               >
@@ -6962,7 +7021,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="undo"
                 title="Undo"
-                disabled={!store.getState().canUndo()}
+                disabled={lessonPlaying || !store.getState().canUndo()}
                 onClick={() => store.getState().undo()}
               >
                 Undo
@@ -6970,7 +7029,7 @@ export function CircuitWorkbench() {
               <ToolBtn
                 icon="redo"
                 title="Redo"
-                disabled={!store.getState().canRedo()}
+                disabled={lessonPlaying || !store.getState().canRedo()}
                 onClick={() => store.getState().redo()}
               >
                 Redo
@@ -7751,7 +7810,15 @@ export function CircuitWorkbench() {
             </div>
           )}
         </div>
-        {!compact && (editingLesson ? <LessonInspector /> : <LessonPanel />)}
+        {!compact &&
+          (editingLesson ? (
+            <div className="ws-view" data-ws-view="insp">
+              <LessonInspector />
+            </div>
+          ) : (
+            <LessonPanel />
+          ))}
+        {editingLesson && !compact && <LessonWorkspace />}
       </div>
 
       <WaveformPanel rootRef={wavePanelRef} viewOnly={viewOnly} />
@@ -7798,6 +7865,7 @@ export function CircuitWorkbench() {
       )}
       <LabelConflictDialog />
       <CloseTabDialog />
+      <ExportDialog />
     </div>
   );
 }

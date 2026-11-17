@@ -1279,9 +1279,13 @@ describe('bundled examples', () => {
       const words = [0x11, 0x2c, 0xd4, 0x7e];
       words.forEach((w, bank) => write((bank << 4) | 5, w));
       expect(range(4).map((bank) => read((bank << 4) | 5))).toEqual(words);
-      // No preload: a cell nobody wrote holds whatever the RAM powered up with.
       address(0x06);
-      expect(lights()).toBe('XXXXXXXX');
+      expect(lights()).toBe('11111001');
+    });
+
+    it('preloads every word with its own address', () => {
+      const { read } = memory();
+      expect(range(64).map(read)).toEqual(range(64));
     });
 
     it('holds 64 different words, one per address', () => {

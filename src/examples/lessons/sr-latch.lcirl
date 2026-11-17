@@ -51,8 +51,8 @@
       "kind": "predict",
       "prose": "Release **R** too, so both inputs are 0 again. Which output is high?",
       "choices": [
-        { "text": "**Q**" },
-        { "text": "**Q NOT**", "right": true },
+        { "text": "Q" },
+        { "text": "Q NOT", "right": true },
         { "text": "Both" },
         { "text": "Neither" }
       ],
@@ -72,8 +72,8 @@
       "kind": "predict",
       "prose": "Press both **S** and **R**, so **S** = 1 and **R** = 1. What do the outputs show?",
       "choices": [
-        { "text": "**Q** = 1 and **Q NOT** = 0" },
-        { "text": "**Q** = 0 and **Q NOT** = 1" },
+        { "text": "Q = 1 and Q NOT = 0" },
+        { "text": "Q = 0 and Q NOT = 1" },
         { "text": "Both outputs are 0", "right": true }
       ],
       "answer": "Each NOR sees a 1 on one input, so both outputs go to 0. **Q** and **Q NOT** are no longer opposites, which breaks what a latch is supposed to mean.",

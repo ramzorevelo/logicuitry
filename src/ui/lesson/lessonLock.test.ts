@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Menu, MenuCommand } from '../menu/menuModel';
-import { lockMenusForLessonEditor } from './lessonLock';
+import { lockMenusForLessonEditor, lockMenusForLessonRunner } from './lessonLock';
 
 const cmd = (id: string): MenuCommand => ({ id, label: id, run: () => {} });
 
@@ -43,5 +43,37 @@ describe('lockMenusForLessonEditor', () => {
       'Undo lesson edit',
       'Redo lesson edit',
     ]);
+  });
+});
+
+describe('lockMenusForLessonRunner', () => {
+  const playing: Menu[] = [
+    ...menus,
+    { id: 'simulate', items: [cmd('run'), cmd('step'), cmd('settle'), cmd('bubble')] },
+  ];
+
+  it('keeps looking and driving, greys editing and power', () => {
+    expect(state(lockMenusForLessonRunner(playing))).toEqual({
+      'file.import': false,
+      'file.build': false,
+      'edit.undo': false,
+      'edit.redo': false,
+      'edit.delete': false,
+      'view.fit': true,
+      'view.viewOnly': false,
+      'view.analyze': true,
+      'simulate.power': false,
+      'simulate.run-speed': true,
+      'simulate.run': true,
+      'simulate.step': true,
+      'simulate.settle': true,
+      'simulate.bubble': false,
+    });
+  });
+
+  it('says why power is greyed', () => {
+    const sim = lockMenusForLessonRunner(playing).find((m) => m.id === 'simulate')!;
+    const power = sim.items.find((e) => 'id' in e && e.id === 'power') as MenuCommand;
+    expect(power.title).toBe('The lesson controls power: close it to switch by hand');
   });
 });

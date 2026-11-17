@@ -310,7 +310,9 @@ export type LessonAction =
   | { kind: 'power'; on: boolean }
   | { kind: 'timing'; mode: TimingMode }
   | { kind: 'highlight'; components: string[] }
-  | { kind: 'tab'; tab: LessonDockTab };
+  | { kind: 'tab'; tab: LessonDockTab }
+  /** One rise and fall of a top-level clock part, then settled; `when` as on a row. */
+  | { kind: 'pulse'; clock: string; when: 'open' | 'reveal' };
 
 export interface LessonChoice {
   text: string;
@@ -359,7 +361,7 @@ export interface LessonStep {
 
 export interface Lesson {
   format: 'lcir.lesson';
-  formatVersion: 4;
+  formatVersion: 5;
   id: string;
   title: string;
   workbench: 'numbers' | 'gates' | 'circuit' | 'devicelab';

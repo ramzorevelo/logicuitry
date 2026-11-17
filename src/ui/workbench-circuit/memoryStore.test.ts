@@ -44,7 +44,9 @@ function writeOnce() {
   st().power();
   st().toggleInput('C');
   st().toggleInput('W');
+  st().settle();
   st().toggleInput('W');
+  st().settle();
 }
 
 beforeEach(() => {
@@ -76,6 +78,7 @@ describe('live view', () => {
     expect(liveHex()).toEqual(['5a', 'X']);
     expect(st().ramLive(ram().index)!.address).toBe(0);
     st().toggleInput('A');
+    st().settle();
     expect(st().ramLive(ram().index)!.address).toBe(1);
   });
 });

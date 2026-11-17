@@ -17,6 +17,8 @@ export type BlockedReason =
   | 'bubble-edit'
   | 'view-only'
   | 'lesson-edit'
+  | 'lesson-play'
+  | 'lesson-power'
   | 'board-tab';
 
 /** Quiet gap after which a reason may announce itself again. */
@@ -38,6 +40,8 @@ const TEXT: Record<BlockedReason, string> = {
   'bubble-edit': 'Leave bubble mode to edit the board.',
   'view-only': 'Leave view-only to edit the board.',
   'lesson-edit': 'Close the lesson editor to edit the board.',
+  'lesson-play': 'Close the lesson to edit the board.',
+  'lesson-power': 'The lesson controls power: close it to switch by hand.',
   'board-tab': 'Build circuit works on the board tab.',
 };
 
@@ -51,11 +55,14 @@ export function buildBlockedReason(state: {
   tab: string;
   viewOnly: boolean;
   lessonEdit?: boolean;
+  /** A lesson is playing: its inputs stay live, the board's structure does not. */
+  lessonPlay?: boolean;
   mode: string;
   powered: boolean;
 }): BlockedReason | null {
   if (state.tab !== 'board') return 'board-tab';
   if (state.lessonEdit) return 'lesson-edit';
+  if (state.lessonPlay) return 'lesson-play';
   if (state.viewOnly) return 'view-only';
   if (state.mode === 'bubble') return 'bubble-edit';
   if (state.powered) return 'powered-place';

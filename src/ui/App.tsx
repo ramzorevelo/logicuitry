@@ -56,6 +56,7 @@ import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
 import { modalKeysHeld } from './modalKeys';
 import { isSelectTarget } from './panelKeys';
 import { rememberChipSource } from './document/chipSave';
+import { withoutUnsavedTabs } from './document/chipTabsSession';
 
 // Gates workbench retired: bubble pushing is the Circuit workbench's locked
 // bubble mode now (B key / mode bar).
@@ -104,8 +105,12 @@ export function App() {
       setChipsDir(dir);
       setPending(null);
       const { chips, skipped, fileNames } = await loadChipLibrary(dir);
-      const result = useCircuitStore.getState().loadChipDefs(chips);
-      for (const [id, name] of fileNames) rememberChipSource(id, { kind: 'library', dir, name });
+      const kept = withoutUnsavedTabs(chips);
+      const result = useCircuitStore.getState().loadChipDefs(kept);
+      // An unsaved tab keeps the file it was opened from, so Save does not land in the library.
+      const keptIds = new Set(kept.map((d) => d.id));
+      for (const [id, name] of fileNames)
+        if (keptIds.has(id)) rememberChipSource(id, { kind: 'library', dir, name });
       setLibraryNote(
         !result.ok
           ? result.error

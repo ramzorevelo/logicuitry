@@ -297,6 +297,8 @@ describe('store: gate step and settle', () => {
     );
     st().power();
     st().toggleInput('a');
+    expect(st().oscillation).toBeNull();
+    st().settle();
     expect(st().oscillation).not.toBeNull();
     st().gateStep();
     expect(st().oscillation).not.toBeNull();

@@ -8,13 +8,27 @@ import type { DocFile } from './platform';
 // a student would otherwise lose everything. Cleared by clearing site data,
 // like any browser storage -- it is recovery, not a substitute for saving.
 
-import type { Board } from '../core/model/types';
+import type { Board, ChipDef } from '../core/model/types';
 import { openLcirDb, requestOf } from './handleStore';
 
 const STORE = 'session';
 const KEY = 'working-board';
 
+/** An open chip tab; `def` differing from `saved` is unsaved work. */
+export interface SessionChipTab {
+  def: ChipDef;
+  saved: ChipDef;
+  prefix: string;
+  breadcrumb: string;
+  /** The `.lcirc` it was opened from or saved to, so Save still writes there. */
+  file?: DocFile;
+}
+
 export interface Session {
+  /** Chip tabs after the board tab, in order; absent in sessions from before 0.8.3. */
+  chipTabs?: SessionChipTab[];
+  /** Index into `chipTabs` of the tab in front; absent means the board. */
+  activeChipTab?: number;
   /** Serialized board document; parsed back through the migrate+validate pipeline. */
   board: Board;
   /** The file this board came from, so Ctrl+S still targets it after a reload. */

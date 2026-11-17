@@ -74,12 +74,16 @@ describe('sequence rows by key', () => {
     st().power();
     expect(st().sequenceRun()).toEqual({ cursor: -1, results: [], pending: null });
     expect(st().stepSequence(1)).toBe(true);
-    expect(st().pinRawValue('y', 'a')?.v).toBe(5);
     expect(st().buttonHeld('b')).toBe(false);
+    expect(st().canSettle()).toBe(true);
+    st().settle();
+    expect(st().pinRawValue('y', 'a')?.v).toBe(5);
     expect(st().stepSequence(1)).toBe(true);
     expect(st().buttonHeld('b')).toBe(true);
+    st().settle();
     expect(st().sequenceRun()).toMatchObject({ cursor: 1, results: [true, false] });
     expect(st().stepSequence(1)).toBe(true);
+    st().settle();
     expect(st().sequenceRun()!.results[2]).toBeNull();
   });
 
@@ -106,6 +110,7 @@ describe('sequence rows by key', () => {
     st().power();
     st().stepSequence(1);
     st().stepSequence(1);
+    st().settle();
     expect(st().sequenceRun()!.results).toEqual([true, false]);
   });
 
@@ -117,6 +122,7 @@ describe('sequence rows by key', () => {
     expect(st().stepSequence(1)).toBe(false);
     expect(st().sequenceRun()!.cursor).toBe(2);
     expect(st().stepSequence(-1)).toBe(true);
+    st().settle();
     expect(st().pinRawValue('y', 'a')?.v).toBe(3);
   });
 
@@ -133,6 +139,7 @@ describe('sequence rows by key', () => {
     loadKeyBoard({ ...keySequence, rows: [{ set: [0x1f, 0], expect: [0xf] }] });
     st().power();
     st().applySequenceRow(0);
+    st().settle();
     expect(st().pinRawValue('y', 'a')?.v).toBe(0xf);
     expect(st().sequenceRun()!.results[0]).toBe(true);
   });
@@ -261,6 +268,7 @@ describe('example sequences', () => {
     st().power();
     const rows = st().board.sequence!.rows.length;
     for (let i = 0; i < rows; i++) expect(st().stepSequence(1)).toBe(true);
+    st().settle();
     expect(st().sequenceRun()!.results).toEqual(new Array<boolean>(rows).fill(true));
   });
 });

@@ -6,6 +6,7 @@ import { handleLessonEditorKey, type EditorKeyEvent } from './lessonEditorKeys';
 import { useLessonEditorStore } from './lessonEditorStore';
 import { handleLessonKey } from './lessonKeys';
 import { useLessonStore } from './lessonStore';
+import { useWorkspaceStore } from './workspace/workspaceStore';
 
 const lesson = BUILTIN_LESSONS[0]!;
 const alu = EXAMPLES.find((e) => e.id === lesson.board)!;
@@ -45,6 +46,7 @@ function press(
 }
 
 beforeEach(() => {
+  useWorkspaceStore.setState({ maxArea: null, narrow: false, hoverArea: null, focusArea: null });
   ed().close();
   useLessonStore.getState().close();
   useCircuitStore.getState().loadBoard(structuredClone(alu.board));
@@ -140,6 +142,37 @@ describe('editor keys', () => {
     press('Escape');
     expect(ed().playing).toBe(false);
     expect(ed().sel).toBe(2);
+  });
+
+  it('Ctrl+Space maximises the hovered area, from a text box too, and toggles back', () => {
+    useWorkspaceStore.setState({ maxArea: null, narrow: false, hoverArea: 'a1', focusArea: 'a3' });
+    expect(press(' ', { ctrlKey: true, tag: 'TEXTAREA' })).toEqual({
+      taken: true,
+      prevented: true,
+    });
+    expect(useWorkspaceStore.getState().maxArea).toBe('a1');
+    press(' ', { ctrlKey: true });
+    expect(useWorkspaceStore.getState().maxArea).toBeNull();
+    useWorkspaceStore.setState({ hoverArea: null });
+    press(' ', { ctrlKey: true });
+    expect(useWorkspaceStore.getState().maxArea).toBe('a3');
+  });
+
+  it('Esc cancels a pick before it restores a maximised area', () => {
+    useWorkspaceStore.setState({ maxArea: 'a2', narrow: false });
+    ed().select(4);
+    ed().beginPick(0);
+    press('Escape');
+    expect(ed().pick).toBeNull();
+    expect(useWorkspaceStore.getState().maxArea).toBe('a2');
+    expect(press('Escape')).toEqual({ taken: true, prevented: true });
+    expect(useWorkspaceStore.getState().maxArea).toBeNull();
+  });
+
+  it('Esc in a text box leaves the maximised area alone', () => {
+    useWorkspaceStore.setState({ maxArea: 'a2', narrow: false });
+    expect(press('Escape', { tag: 'INPUT' }).taken).toBe(false);
+    expect(useWorkspaceStore.getState().maxArea).toBe('a2');
   });
 
   it('does nothing with the editor closed', () => {

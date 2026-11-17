@@ -33,8 +33,12 @@ import {
   type WaveformLayout,
   type WaveformRow,
 } from '../../render/waveform';
-import { readTheme } from '../../render/theme';
+import { readTheme, type Theme } from '../../render/theme';
 import { setupHoldWindows } from '../../core/timing/apertures';
+import type { Track } from '../../core/timing/traceView';
+import { useExportSource } from '../export/exportRender';
+import { wavePicture } from '../export/panelPictures';
+import { useExportDialog } from '../export/exportActions';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { getPrefs } from '../prefs';
 import { useCompact } from '../compact';
@@ -51,6 +55,68 @@ import {
   useChallengeApplies,
   useChallengeView,
 } from './ChallengePanel';
+
+/** About an A4 page across at 1x; the time axis scales to fit it. */
+const WAVE_EXPORT_WIDTH = 960;
+
+/**
+ * The run from its first record to the sim clock, not the last record: records
+ * only mark changes, so a settled board's newest state lies past the final
+ * transition.
+ */
+function fullSpanOf(): Win {
+  const st = useCircuitStore.getState();
+  const recs = st.simTrace()?.records ?? [];
+  const first = recs.length ? recs[0]!.time : 0;
+  const last = recs.length ? recs[recs.length - 1]!.time : 0;
+  const end = Math.max(st.simNow(), last, first + 1);
+  // A level starting exactly at the right edge has zero width, and a settled
+  // board's last record always does: give it a slice of the window.
+  const tail = end === last ? Math.max(1, Math.round((end - first) * 0.02)) : 0;
+  return { t0: first, t1: end + tail };
+}
+
+/** Setup/hold shading around capture-clock edges on the sampled inputs of
+ *  top-level clocked blocks: derived, so it follows whichever view asks. */
+function setupHoldFor(view: TraceView): WaveAnnotation[] {
+  const st = useCircuitStore.getState();
+  const trace = st.simTrace();
+  if (!trace) return [];
+  const prims = st.board.components
+    .map((c) => trace.compiled.componentToPrimitive.get(`main/${c.id}`))
+    .filter((pi): pi is number => pi !== undefined);
+  const out: WaveAnnotation[] = [];
+  for (const w of setupHoldWindows(trace.compiled, trace.records, prims, view.t0, view.t1)) {
+    const track = view.tracks.find((t) => t.net === w.net);
+    if (!track) continue;
+    out.push({
+      kind: 'window',
+      trackPath: track.path,
+      t0: w.t0,
+      t1: w.t1,
+      style: w.kind === 'setup' ? 'ok' : 'warn',
+    });
+  }
+  return out;
+}
+
+/**
+ * The label column sized to the longest name rather than a flat 120px, which
+ * left a band of empty gutter on a board of short names. Labels are drawn in
+ * the mono face at max(canvasTextMin, 12), where every glyph is 0.6em wide, so
+ * counting characters measures them without a second context.
+ */
+function waveMetrics(theme: Theme, tracks: readonly Track[]) {
+  const labelPx = Math.max(theme.canvasTextMin, 12);
+  const longest = tracks.reduce((n, t) => Math.max(n, t.label.length), 0);
+  return {
+    ...defaultWaveformMetrics,
+    labelW: Math.round(
+      Math.min(defaultWaveformMetrics.labelW, Math.max(56, longest * labelPx * 0.6 + 26)),
+    ),
+    tickSpacing: defaultWaveformMetrics.tickSpacing / theme.wave.gridDensity,
+  };
+}
 
 /** Pending Δt measure: first clicked edge, waiting for the second. */
 interface MeasureState {
@@ -225,22 +291,8 @@ export function WaveformPanel({
   // throttled view is what put a scrollbar on screen right after a Fit.
   // t1 is the sim clock, not the last record: records only mark changes, so a
   // settled board's newest state lies past the final transition.
-  const fullSpan = useMemo((): Win => {
-    const st = store.getState();
-    const trace = st.simTrace();
-    const recs = trace?.records ?? [];
-    const first = recs.length ? recs[0]!.time : 0;
-    const last = recs.length ? recs[recs.length - 1]!.time : 0;
-    const end = Math.max(st.simNow(), last, first + 1);
-    // A level that begins exactly at the right edge has zero width, so the
-    // newest state was invisible and the one before it read as current: flip a
-    // switch on a settled board and the trace still showed it low. That is the
-    // normal case, not an edge one, because the last record IS the settle the
-    // clock stopped at. Give it a slice of the window to be seen in.
-    const tail = end === last ? Math.max(1, Math.round((end - first) * 0.02)) : 0;
-    return { t0: first, t1: end + tail };
-    // viewLen and powered are the same inputs `view` uses.
-  }, [viewLen, powered, store]);
+  // viewLen and powered are the same inputs `view` uses.
+  const fullSpan = useMemo(fullSpanOf, [viewLen, powered]);
 
   /** The window actually drawn, from the frozen one and the two toggles. */
   const effectiveWin = useMemo(
@@ -351,28 +403,51 @@ export function WaveformPanel({
 
   // Setup/hold window shading around capture-clock edges on the sampled inputs
   // of top-level clocked blocks: derived (not user-added), so it recomputes with the view.
-  const setupHoldAnnotations = useMemo((): WaveAnnotation[] => {
-    if (!view || !column) return [];
-    const st = store.getState();
-    const trace = st.simTrace();
-    if (!trace) return [];
-    const prims = st.board.components
-      .map((c) => trace.compiled.componentToPrimitive.get(`main/${c.id}`))
-      .filter((pi): pi is number => pi !== undefined);
-    const out: WaveAnnotation[] = [];
-    for (const w of setupHoldWindows(trace.compiled, trace.records, prims, view.t0, view.t1)) {
-      const track = view.tracks.find((t) => t.net === w.net);
-      if (!track) continue;
-      out.push({
-        kind: 'window',
-        trackPath: track.path,
-        t0: w.t0,
-        t1: w.t1,
-        style: w.kind === 'setup' ? 'ok' : 'warn',
+  const setupHoldAnnotations = useMemo(
+    (): WaveAnnotation[] => (view && column ? setupHoldFor(view) : []),
+    [view, column],
+  );
+
+  // The whole run, whatever the panel is scrolled or zoomed to, with the
+  // panel's own choice of rows and markers.
+  useExportSource('waveforms', {
+    available: () => store.getState().simTrace() !== null,
+    picture: (theme) => {
+      const st = store.getState();
+      const trace = st.simTrace();
+      if (!trace) return null;
+      const full = buildTraceView(st.board, trace.compiled, trace.records, {
+        ...fullSpanOf(),
+        spanEnd: st.simNow(),
+        ...(column ? { column, vendor } : {}),
+        glitchThresholdPs: Math.max(1, Math.round(thresholdNs * 1000)),
+        ...(staReport?.report.worst ? { glitchWindowPs: staReport.report.worst.totalTpdPs } : {}),
       });
-    }
-    return out;
-  }, [view, column, store]);
+      const order = full.tracks.map((t) => t.path);
+      const tracks = full.tracks
+        .flatMap((t) =>
+          t.width > 1 && expandedTracks.has(t.path) ? [t, ...expandTrackByBit(t)] : [t],
+        )
+        .map((t) => ({ t, k: waveformOrderKey(t.path, order, trackOrder) }))
+        .sort((a, b) => a.k - b.k)
+        .map((e) => e.t)
+        .filter((t) => !hiddenTracks.has(t.path));
+      const layout = layoutWaveform(
+        tracks,
+        { t0: full.t0, t1: full.t1 },
+        WAVE_EXPORT_WIDTH,
+        waveMetrics(theme, tracks),
+      );
+      return wavePicture(theme, layout, {
+        glitches: full.glitches,
+        arrows: showArrows ? full.arrows : [],
+        annotations: [...(column ? setupHoldFor(full) : []), ...annotations].filter(
+          (a) => !a.trackPath || !hiddenTracks.has(a.trackPath),
+        ),
+        expandedTracks,
+      });
+    },
+  });
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -382,20 +457,7 @@ export function WaveformPanel({
     const cssW = Math.max(320, wrap.clientWidth - 2);
     // A user-dragged panel height stretches the rows to fill it (min stays the
     // default row height; the body scrolls if it still doesn't fit).
-    // The label column was a flat 120px whatever the names were, so a board of
-    // short names left a band of empty gutter between them and 0 ps. It is
-    // sized to the longest name instead. The labels are drawn in the mono face
-    // at max(canvasTextMin, 12), where every glyph is 0.6em wide, so counting
-    // characters measures them without a second context to measure in.
-    const labelPx = Math.max(theme.canvasTextMin, 12);
-    const longest = visibleTracks.reduce((n, t) => Math.max(n, t.label.length), 0);
-    const base = {
-      ...defaultWaveformMetrics,
-      labelW: Math.round(
-        Math.min(defaultWaveformMetrics.labelW, Math.max(56, longest * labelPx * 0.6 + 26)),
-      ),
-      tickSpacing: defaultWaveformMetrics.tickSpacing / theme.wave.gridDensity,
-    };
+    const base = waveMetrics(theme, visibleTracks);
     let metrics = base;
     if (panelH !== null && visibleTracks.length) {
       const m = base;
@@ -913,6 +975,15 @@ export function WaveformPanel({
         )}
         {open && (
           <>
+            <button
+              type="button"
+              className="tool-btn"
+              disabled={!view}
+              title="Export the waveforms as an image"
+              onClick={() => useExportDialog.getState().show('waveforms')}
+            >
+              Export image...
+            </button>
             <label className="wave-panel__toggle" title="Keep the whole recorded trace in view">
               <input
                 type="checkbox"

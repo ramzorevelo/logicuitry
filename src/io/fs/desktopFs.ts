@@ -16,7 +16,7 @@ import { parseDocument, serializeDocument, type LibraryDoc } from '../library';
 import { loadDirectoryHandle, saveDirectoryHandle, type DirKind } from '../handleStore';
 import type { DocFile, LibraryDir } from '../platform';
 import { loadChipLibraryWith } from './chipLibrary';
-import type { LibrarySubdir, LibraryRestore } from './browserFs';
+import type { LibrarySubdir, LibraryRestore, BlobKind } from './browserFs';
 
 /** A folder or file on disk. `name` is what the UI shows; `path` is the truth. */
 interface Located {
@@ -172,6 +172,22 @@ export async function pickSavePath(
   if (!path) return undefined;
   const file: Located = { name: await basename(path), path };
   return file;
+}
+
+export async function saveBlob(
+  blob: Blob,
+  suggestedName: string,
+  kind: BlobKind,
+): Promise<boolean> {
+  const { save } = await dialog();
+  const path = await save({
+    defaultPath: suggestedName,
+    filters: [{ name: kind.description, extensions: [kind.ext] }],
+  });
+  if (!path) return false;
+  const { writeFile } = await fs();
+  await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
+  return true;
 }
 
 export async function readDocFile(file: DocFile): Promise<string> {

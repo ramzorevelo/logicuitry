@@ -199,6 +199,8 @@ export interface RenderParams extends GlyphContext {
   // point) -- not just a single from/to elbow, per P1.6's multi-bend drawing.
   wiringPreview?: Vec2[] | undefined;
   grid: number;
+  /** Dot grid off; `grid` still routes and snaps, so it cannot stand in. */
+  hideGrid?: boolean;
   /** Backing-store scale: canvas.width = cssWidth * dpr. */
   dpr?: number;
   /** Pending-placement ghost, drawn last at reduced alpha. */
@@ -312,7 +314,7 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
   const cssH = canvas.height / dpr;
   ctx.fillStyle = theme.colors.paper;
   ctx.fillRect(0, 0, cssW, cssH);
-  drawGrid(ctx, theme, p, cssW, cssH);
+  if (!p.hideGrid) drawGrid(ctx, theme, p, cssW, cssH);
 
   ctx.setTransform(
     dpr * vp.zoom,

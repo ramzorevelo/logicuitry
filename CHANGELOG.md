@@ -2,8 +2,28 @@
 
 All notable changes to Logicuitry are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
-[SemVer](https://semver.org/) (pre-1.0: the minor digit marks a release worth
-updating for, the patch digit is reserved for a critical one-off fix).
+[SemVer](https://semver.org/) (pre-1.0: the minor digit marks a big release, the
+patch digit a small feature, fix or follow-up).
+
+## [0.8.2] - 2026-11-17
+
+### Added
+
+- Export image: save, copy or print the schematic, waveforms, K-map or truth
+  table, or save them all as a ZIP.
+- Lessons on the bus computer program, cache hits and misses, and interleaved
+  memory.
+- The lesson editor is a workspace with resizable, swappable areas.
+- Chip tabs reopen after a reload.
+
+### Changed
+
+- While paused, input changes wait for Gate step, Settle or Run.
+- A playing lesson locks its circuit. Lessons saved now need 0.8.2.
+
+### Fixed
+
+- Small lesson and switch display fixes.
 
 ## [0.8.1] - 2026-11-16
 

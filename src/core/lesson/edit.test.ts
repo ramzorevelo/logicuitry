@@ -30,7 +30,7 @@ const narrate = (prose: string, ...actions: LessonAction[]): LessonStep => ({
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'l',
   title: 'L',
   workbench: 'circuit',
@@ -117,6 +117,18 @@ describe('setStepKind', () => {
     expect(step.answer).toBeUndefined();
   });
 
+  it('turns a held-back pulse into an on-open pulse too, and counts it', () => {
+    const predict: LessonStep = {
+      kind: 'predict',
+      prose: 'q',
+      actions: [{ kind: 'pulse', clock: 'clk', when: 'reveal' }],
+      answer: 'because',
+    };
+    const { step, heldRows } = setStepKind(predict, 'narrate');
+    expect(heldRows).toBe(1);
+    expect(step.actions).toEqual([{ kind: 'pulse', clock: 'clk', when: 'open' }]);
+  });
+
   it('gives a predict step empty choices and answer', () => {
     const { step } = setStepKind(narrate('n'), 'predict');
     expect(step).toMatchObject({ kind: 'predict', choices: [], answer: '' });
@@ -141,6 +153,19 @@ describe('actions', () => {
       when: 'open',
     });
     expect(defaultAction('highlight', p, rows, -1)).toEqual({ kind: 'highlight', components: [] });
+  });
+
+  it('a new pulse takes the first clock, held back on predict', () => {
+    expect(defaultAction('pulse', newStep('predict'), rows, 0, ['clk', 'c2'])).toEqual({
+      kind: 'pulse',
+      clock: 'clk',
+      when: 'reveal',
+    });
+    expect(defaultAction('pulse', newStep('narrate'), rows, 0)).toEqual({
+      kind: 'pulse',
+      clock: '',
+      when: 'open',
+    });
   });
 
   it('finds the last row applied up to a step', () => {

@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 13,
+  "formatVersion": 15,
   "id": "four-bank-interleaved-memory",
   "name": "Four-bank interleaved memory",
   "hiddenChecks": [
@@ -134,7 +134,10 @@
         "x": 400,
         "y": 360
       },
-      "label": "BANK 0 LO"
+      "label": "BANK 0 LO",
+      "contents": {
+        "u1": "0 1 2 3 4 5 6 7 8 9 a b c d e f"
+      }
     },
     {
       "id": "vr0l",
@@ -258,7 +261,10 @@
         "x": 720,
         "y": 360
       },
-      "label": "BANK 1 LO"
+      "label": "BANK 1 LO",
+      "contents": {
+        "u1": "0 1 2 3 4 5 6 7 8 9 a b c d e f"
+      }
     },
     {
       "id": "vr1l",
@@ -382,7 +388,10 @@
         "x": 1040,
         "y": 360
       },
-      "label": "BANK 2 LO"
+      "label": "BANK 2 LO",
+      "contents": {
+        "u1": "0 1 2 3 4 5 6 7 8 9 a b c d e f"
+      }
     },
     {
       "id": "vr2l",
@@ -506,7 +515,10 @@
         "x": 1360,
         "y": 360
       },
-      "label": "BANK 3 LO"
+      "label": "BANK 3 LO",
+      "contents": {
+        "u1": "0 1 2 3 4 5 6 7 8 9 a b c d e f"
+      }
     },
     {
       "id": "vr3l",
@@ -630,7 +642,10 @@
         "x": 400,
         "y": 616
       },
-      "label": "BANK 0 HI"
+      "label": "BANK 0 HI",
+      "contents": {
+        "u1": "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      }
     },
     {
       "id": "vr0h",
@@ -754,7 +769,10 @@
         "x": 720,
         "y": 616
       },
-      "label": "BANK 1 HI"
+      "label": "BANK 1 HI",
+      "contents": {
+        "u1": "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+      }
     },
     {
       "id": "vr1h",
@@ -878,7 +896,10 @@
         "x": 1040,
         "y": 616
       },
-      "label": "BANK 2 HI"
+      "label": "BANK 2 HI",
+      "contents": {
+        "u1": "2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2"
+      }
     },
     {
       "id": "vr2h",
@@ -1002,7 +1023,10 @@
         "x": 1360,
         "y": 616
       },
-      "label": "BANK 3 HI"
+      "label": "BANK 3 HI",
+      "contents": {
+        "u1": "3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3"
+      }
     },
     {
       "id": "vr3h",
@@ -4088,5 +4112,101 @@
     "datasheet": "typ",
     "vendor": "ti"
   },
-  "runSpeed": 25000
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "ahi",
+      "amid",
+      "alo",
+      "data",
+      "wr"
+    ],
+    "expect": [
+      "out"
+    ],
+    "rows": [
+      {
+        "set": [
+          0,
+          0,
+          3,
+          0,
+          0
+        ],
+        "expect": [
+          252
+        ],
+        "note": "Address 3: bank 0"
+      },
+      {
+        "set": [
+          1,
+          0,
+          3,
+          0,
+          0
+        ],
+        "expect": [
+          236
+        ],
+        "note": "Address 19: bank 1"
+      },
+      {
+        "set": [
+          1,
+          0,
+          3,
+          53,
+          0
+        ],
+        "expect": [
+          236
+        ],
+        "note": "DATA 53"
+      },
+      {
+        "set": [
+          1,
+          0,
+          3,
+          53,
+          1
+        ],
+        "expect": [
+          null
+        ],
+        "note": "WRITE pressed"
+      },
+      {
+        "set": [
+          1,
+          0,
+          3,
+          53,
+          0
+        ],
+        "expect": [
+          202
+        ],
+        "note": "WRITE released: 53 at address 19"
+      },
+      {
+        "set": [
+          0,
+          0,
+          3,
+          53,
+          0
+        ],
+        "expect": [
+          252
+        ],
+        "note": "Address 3: bank 0 unchanged"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": true
+  }
 }

@@ -20,7 +20,7 @@ const step = (kind: LessonStep['kind'], ...actions: LessonAction[]): LessonStep 
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'l',
   title: 'L',
   workbench: 'circuit',
@@ -108,6 +108,36 @@ describe('lessonWarnings', () => {
   });
 });
 
+describe('pulse warnings', () => {
+  const clocked: LessonBoardView = { ...board, clockIds: new Set(['clk']) };
+  const pulse = (clock: string): LessonAction => ({ kind: 'pulse', clock, when: 'open' });
+
+  it('is empty for a powered pulse on a clock', () => {
+    expect(lessonWarnings(lessonOf(step('narrate', on, pulse('clk'))), clocked)).toEqual([]);
+  });
+
+  it('flags a pulse on a part that is not a clock, or on nothing', () => {
+    const lesson = lessonOf(step('narrate', on, pulse('a'), pulse('')));
+    expect(lessonWarnings(lesson, clocked)).toEqual([
+      { kind: 'pulse-no-clock', step: 0, clock: 'a' },
+      { kind: 'pulse-no-clock', step: 0, clock: '' },
+    ]);
+  });
+
+  it('flags a pulse while the board is off', () => {
+    const lesson = lessonOf(step('narrate', pulse('clk')));
+    expect(lessonWarnings(lesson, clocked)).toEqual([
+      { kind: 'pulse-while-off', step: 0, clock: 'clk' },
+    ]);
+  });
+
+  it('a held-back pulse fires after the open-phase power', () => {
+    const held: LessonAction = { kind: 'pulse', clock: 'clk', when: 'reveal' };
+    const lesson = lessonOf(step('predict', held, on));
+    expect(lessonWarnings(lesson, clocked)).toEqual([]);
+  });
+});
+
 describe('warningText', () => {
   it.each<[LessonWarning, string]>([
     [{ kind: 'row-past-end', step: 0, index: 8 }, "Row 9 is past the end of the board's sequence"],
@@ -124,6 +154,12 @@ describe('warningText', () => {
       { kind: 'nothing-to-reveal', step: 0 },
       'Nothing to reveal: add an answer or mark a right choice',
     ],
+    [
+      { kind: 'pulse-no-clock', step: 0, clock: 'u1' },
+      'Clock pulse names u1, which is not a clock on the board',
+    ],
+    [{ kind: 'pulse-no-clock', step: 0, clock: '' }, 'Clock pulse names no clock'],
+    [{ kind: 'pulse-while-off', step: 0, clock: 'clk' }, 'Clock pulse while the board is off'],
   ])('%j', (w, text) => {
     expect(warningText(w)).toBe(text);
   });

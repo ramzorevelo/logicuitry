@@ -86,6 +86,7 @@ describe('circuitStore power + pinSignal', () => {
     s.power();
     s.toggleInput('sw1');
     s.toggleInput('sw2'); // AND(1,1) = 1
+    s.settle();
     expect(s.pinSignal('g1', 'y')).toBe('1');
     expect(s.pinSignal('led1', 'a')).toBe('1');
   });
@@ -137,9 +138,11 @@ describe('circuitStore power + pinSignal', () => {
     const s = useCircuitStore.getState();
     s.power();
     s.toggleInput('sw9', 0);
+    s.settle();
     expect(s.pinSignal('sw9', 'y0')).toBe('1');
     expect(s.pinSignal('sw9', 'y1')).toBe('0');
     s.toggleInput('sw9', 1);
+    s.settle();
     // Bit 0 must still be set -- this is exactly what broke before the fix.
     expect(s.pinSignal('sw9', 'y0')).toBe('1');
     expect(s.pinSignal('sw9', 'y1')).toBe('1');
@@ -947,6 +950,7 @@ describe('circuitStore packaging + tabs', () => {
     s.power();
     expect(useCircuitStore.getState().error).toBeNull();
     s.toggleInput(sw.id);
+    s.settle();
     expect(s.pinSignal(inst.id, 'y')).toBe('1');
   });
 
@@ -5039,10 +5043,12 @@ describe('net label joins do not steal the switch', () => {
     expect(s.pinSignal('led', 'a')).toBe('0');
 
     s.toggleInput('sw');
+    s.settle();
     expect(s.pinSignal('sw', 'y')).toBe('1');
     expect(s.pinSignal('led', 'a')).toBe('1');
 
     s.toggleInput('sw');
+    s.settle();
     expect(s.pinSignal('sw', 'y')).toBe('0');
     expect(s.pinSignal('led', 'a')).toBe('0');
   });
@@ -5056,6 +5062,7 @@ describe('net label joins do not steal the switch', () => {
     s.power();
     expect(useCircuitStore.getState().error).toBeNull();
     s.toggleInput('sw');
+    s.settle();
     expect(s.pinSignal('sw', 'y')).toBe('1');
     expect(s.pinSignal('led', 'a')).toBe('1');
   });
@@ -5446,6 +5453,7 @@ describe('powered param edits (liveness gate)', () => {
     const s = useCircuitStore.getState();
     s.power();
     s.toggleInput('c1');
+    s.settle();
     expect(useCircuitStore.getState().pinSignal('c1', 'y')).toBe('1');
     useCircuitStore.getState().setComponentParams('c2', { shape: 'square' });
     expect(useCircuitStore.getState().powered).toBe(true);
@@ -5517,6 +5525,7 @@ describe('switch positions across a power cycle (opt-in pref)', () => {
     const s = useCircuitStore.getState();
     s.power();
     s.toggleInput('sw');
+    s.settle();
     expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
     useCircuitStore.getState().power(); // off
     useCircuitStore.getState().power(); // on
@@ -5529,6 +5538,7 @@ describe('switch positions across a power cycle (opt-in pref)', () => {
     const s = useCircuitStore.getState();
     s.power();
     s.toggleInput('sw');
+    s.settle();
     expect(useCircuitStore.getState().pinSignal('sw', 'y')).toBe('1');
     useCircuitStore.getState().power(); // off
     useCircuitStore.getState().power(); // on
@@ -5622,7 +5632,9 @@ describe('run speed, bounce and the SPDT switch', () => {
     expect([level('sw', 'a'), level('sw', 'b')]).toEqual(['1', 'Z']);
     const t0 = useCircuitStore.getState().simTimePs()!;
     useCircuitStore.getState().flipSpdt('sw');
+    expect(useCircuitStore.getState().canSettle()).toBe(true);
     expect(useCircuitStore.getState().spdtThrow('sw')).toBe('b');
+    useCircuitStore.getState().settle();
     expect([level('sw', 'a'), level('sw', 'b')]).toEqual(['Z', '1']);
     expect(useCircuitStore.getState().simTimePs()! - t0).toBeGreaterThanOrEqual(499_000_000);
   });
@@ -5674,7 +5686,9 @@ describe('run speed, bounce and the SPDT switch', () => {
     useCircuitStore.getState().power();
     expect([useCircuitStore.getState().buttonHeld('b'), level('b', 'y')]).toEqual([false, '1']);
     useCircuitStore.getState().setButtonHeld('b', true);
-    expect([useCircuitStore.getState().buttonHeld('b'), level('b', 'y')]).toEqual([true, '0']);
+    expect(useCircuitStore.getState().buttonHeld('b')).toBe(true);
+    useCircuitStore.getState().settle();
+    expect(level('b', 'y')).toBe('0');
   });
 
   it('a scrub reports no lever, so the glyph reads the throws off the replayed nets', () => {
@@ -6205,8 +6219,11 @@ describe('oscillation status', () => {
     st().power();
     expect(st().oscillation).toBeNull();
     st().toggleInput('en');
-    expect(st().oscillation).toEqual(['u2.1Y', 'u1.4B', 'u1.4Y']);
+    expect(st().oscillation).toBeNull();
+    st().settle();
+    expect([...st().oscillation!].sort()).toEqual(['u1.4B', 'u1.4Y', 'u2.1Y']);
     st().toggleInput('en');
+    st().settle();
     expect(st().oscillation).toBeNull();
   });
 

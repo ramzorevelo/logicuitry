@@ -10,6 +10,7 @@ export const SHORTCUTS = {
   open: 'Ctrl+O',
   save: 'Ctrl+S',
   saveAs: 'Ctrl+Shift+S',
+  exportImage: 'Ctrl+E',
   undo: 'Ctrl+Z',
   redo: 'Ctrl+Shift+Z',
   copy: 'Ctrl+C',

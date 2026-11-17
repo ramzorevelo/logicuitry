@@ -1,6 +1,6 @@
 {
   "format": "lcir.board",
-  "formatVersion": 9,
+  "formatVersion": 15,
   "id": "eight-bit-bus-computer",
   "name": "Eight-bit bus computer",
   "groups": [
@@ -14100,6 +14100,280 @@
   },
   "timing": {
     "mode": "ideal",
-    "datasheet": "typ"
+    "datasheet": "typ",
+    "vendor": "ti"
+  },
+  "runSpeed": 25000,
+  "sequence": {
+    "inputs": [
+      "clr",
+      "sprog",
+      "addr",
+      "data",
+      "swr",
+      "snco",
+      "smi",
+      "sce",
+      "snro",
+      "sai",
+      "sbi",
+      "ssu",
+      "seo",
+      "sfi"
+    ],
+    "expect": [],
+    "rows": [
+      {
+        "set": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "Clear the registers"
+      },
+      {
+        "set": [
+          0,
+          1,
+          0,
+          28,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "Program mode: address 0, data 28"
+      },
+      {
+        "set": [
+          0,
+          1,
+          0,
+          28,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "WRITE pressed"
+      },
+      {
+        "set": [
+          0,
+          1,
+          0,
+          28,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "WRITE released"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1,
+          14,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "Address 1, data 14"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1,
+          14,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "WRITE pressed"
+      },
+      {
+        "set": [
+          0,
+          1,
+          1,
+          14,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "WRITE released"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "Run mode"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "CO MI: PC to MAR"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1
+        ],
+        "note": "RO AI CE: RAM to A, count"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0,
+          0,
+          1,
+          1
+        ],
+        "note": "RO BI CE: RAM to B, count"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "note": "EO AI FI: sum to A, flags"
+      },
+      {
+        "set": [
+          0,
+          0,
+          1,
+          14,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          0
+        ],
+        "note": "SU EO AI FI: difference to A, flags"
+      }
+    ],
+    "advance": {
+      "mode": "key"
+    },
+    "hideExpected": false
   }
 }

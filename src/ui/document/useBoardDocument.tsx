@@ -41,6 +41,7 @@ import type { Menu } from '../menu/menuModel';
 import { modalKeysHeld } from '../modalKeys';
 import { isDirtyAgainst, restoredCleanMark, type CleanMark } from './cleanMark';
 import { useCompact } from '../compact';
+import { useExportDialog } from '../export/exportActions';
 import { useLessonStore } from '../lesson/lessonStore';
 import {
   findLibraryBoard,
@@ -55,6 +56,7 @@ import { newLesson } from '../../core/lesson';
 import { BUILTIN_LESSONS } from '../../examples/lessons';
 import { isBuiltinChipDef } from '../../core/parts/packages';
 import { rememberChipSource, saveOpenChip } from './chipSave';
+import { chipTabsOf, openChipFileOf, restoreChipTabs } from './chipTabsSession';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -91,6 +93,10 @@ export function useBoardDocument(): BoardDocument {
   // tabs is harder to learn than one whose items grey out.
   const onBoard = useShellStore((st) => st.workbench) === 'circuit';
   const rev = useCircuitStore((s) => s.rev);
+  // Opening, closing or switching a chip tab changes no `rev`, but the session keeps them.
+  const tabs = useCircuitStore((s) => s.tabs);
+  const activeTabId = useCircuitStore((s) => s.activeTabId);
+  const chipLib = useCircuitStore((s) => s.chipLib);
   // Open and Save As start in the BOARDS folder, not the chip shelf.
   const boardsDir = useShellStore((st) => st.boardsDir);
   // The library root: chips/, boards/ and lessons/ live under it.
@@ -148,6 +154,7 @@ export function useBoardDocument(): BoardDocument {
         setCurrentFile(session.file ?? null);
         cleanRef.current = restoredCleanMark(session.dirty, useCircuitStore.getState().board);
         setDirty(session.dirty);
+        restoreChipTabs(session);
       })
       .catch(() => {
         // A corrupt or stale session must never block startup: the starter
@@ -158,18 +165,24 @@ export function useBoardDocument(): BoardDocument {
   useEffect(() => {
     if (!restoredRef.current || !getPrefs().autosave) return;
     const id = window.setTimeout(() => {
-      const st = store.getState();
-      void saveSession({
-        board: st.board,
-        ...(currentFile ? { file: currentFile } : {}),
-        dirty,
-        savedAt: Date.now(),
-      }).catch(() => {
-        // Storage full or blocked -- autosave is best-effort by design.
-      });
+      // A library load can land before the restore does; saving then would keep the starter board.
+      void restoreDone.current
+        .then(() => {
+          const st = store.getState();
+          return saveSession({
+            board: st.board,
+            ...chipTabsOf(st, openChipFileOf),
+            ...(currentFile ? { file: currentFile } : {}),
+            dirty,
+            savedAt: Date.now(),
+          });
+        })
+        .catch(() => {
+          // Storage full or blocked -- autosave is best-effort by design.
+        });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [rev, currentFile, dirty, store]);
+  }, [rev, tabs, activeTabId, chipLib, currentFile, dirty, store]);
 
   // The menu bar builds its items up front, so the recent list loads on mount
   // and again whenever the board's own file changes (which is what adds one).
@@ -644,6 +657,9 @@ export function useBoardDocument(): BoardDocument {
       } else if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         void fileOpenRef.current();
+      } else if ((e.key === 'e' || e.key === 'E') && !e.shiftKey) {
+        e.preventDefault();
+        useExportDialog.getState().show('schematic');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -748,6 +764,25 @@ export function useBoardDocument(): BoardDocument {
                   shortcut: SHORTCUTS.saveAs,
                   disabled: !onBoard || !pickers,
                   run: () => void fileSaveAs(),
+                },
+              ]),
+          { separator: true },
+          {
+            id: 'exportImage',
+            label: 'Export image...',
+            shortcut: SHORTCUTS.exportImage,
+            disabled: !onBoard,
+            run: () => useExportDialog.getState().show('schematic'),
+          },
+          // A phone has no print dialog worth the name; Save and Copy cover it.
+          ...(compact
+            ? []
+            : [
+                {
+                  id: 'print',
+                  label: 'Print...',
+                  disabled: !onBoard,
+                  run: () => useExportDialog.getState().show('schematic', { print: true }),
                 },
               ]),
         ],

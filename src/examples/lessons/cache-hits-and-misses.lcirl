@@ -1,0 +1,114 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 5,
+  "id": "cache-hits-and-misses",
+  "title": "Direct-mapped cache: hits and misses",
+  "workbench": "circuit",
+  "board": "cache-tag-lookup",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Eight sets, one place per address",
+      "prose": "This cache takes a 6-bit address. The low 3 bits are the **SET** (the index): they pick one of eight rows in both 74LS189 RAMs. The high 3 bits are the **TAG**, which tells which of the eight addresses sharing that set is stored there now.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["tag", "set"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "What a set holds",
+      "prose": "**TAG AND VALID** stores a valid bit and the 3-bit tag for each set. **DATA** stores the cached word. The 74LS85 compares the stored tag with **TAG**, and **Hit** = tags equal AND valid. The cache starts empty: every valid bit is 0.",
+      "actions": [{ "kind": "highlight", "components": ["tv", "dm", "cmp", "and", "hit"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Look up address 42, which is **TAG** 5 and **SET** 2. Is it a hit or a miss?",
+      "choices": [{ "text": "Hit" }, { "text": "Miss", "right": true }, { "text": "Cannot tell" }],
+      "answer": "A **miss**. Set 2's valid bit is 0, so **Hit** stays 0 whatever the tag. **/DATA** reads X: nothing was ever written to the data RAM, and a real SRAM powers up with unknown contents. Hit = 0 is what tells the processor not to use it.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [5, 2, 9, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["hit", "out"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Miss: fill the set",
+      "prose": "On a miss the word comes from main memory, here **DATA** = 9, and the cache keeps a copy. Pressing **WRITE** stores tag 5 with valid = 1 in **TAG AND VALID** and 9 in **DATA**, both in set 2. While **WRITE** is held the 74LS189 outputs turn off, so **Hit** reads X for that moment.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [5, 2, 9, 1], "when": "open" },
+        { "kind": "highlight", "components": ["wr", "tv", "dm"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Release **WRITE** and look up address 42 again. Hit or miss?",
+      "choices": [{ "text": "Hit", "right": true }, { "text": "Miss" }],
+      "answer": "A **hit**. Set 2 now holds tag 5 and its valid bit is 1, so the 74LS85 sees equal tags and **Hit** lights.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [5, 2, 9, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["cmp", "and", "hit"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "The data comes out inverted",
+      "prose": "**/DATA** shows 0110, not 1001. The 74LS189 outputs the complement of the stored word, so 9 = 1001 reads as 0110. Read every **/DATA** value by flipping each bit.",
+      "actions": [{ "kind": "highlight", "components": ["dm", "out"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now address 26: **TAG** 3, **SET** 2. Hit or miss?",
+      "choices": [{ "text": "Hit" }, { "text": "Miss", "right": true }],
+      "answer": "A **miss**. Set 2 is valid, but it holds tag 5, not 3. **/DATA** still shows set 2's word: the data RAM always outputs the selected set, and **Hit** decides whether that word belongs to this address.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [3, 2, 9, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["tv", "cmp", "hit", "out"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Address 46 is **TAG** 5, **SET** 6. Same tag as the word we stored. Hit or miss?",
+      "choices": [{ "text": "Hit" }, { "text": "Miss", "right": true }],
+      "answer": "A **miss**. A tag only means something inside its own set, and set 6 was never filled: its valid bit is still 0.",
+      "actions": [
+        { "kind": "row", "index": 4, "set": [5, 6, 9, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["set", "hit"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Fill address 26",
+      "prose": "Address 26 missed, so fetch its word, **DATA** = 4, and press **WRITE**. Set 2 has only one place, so tag 3 and 4 replace tag 5 and 9. Released, address 26 now hits and **/DATA** shows 1011, the complement of 0100.",
+      "actions": [
+        { "kind": "row", "index": 5, "set": [3, 2, 4, 0], "when": "open" },
+        { "kind": "row", "index": 6, "set": [3, 2, 4, 1], "when": "open" },
+        { "kind": "row", "index": 7, "set": [3, 2, 4, 0], "when": "open" },
+        { "kind": "highlight", "components": ["wr", "hit", "out"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Back to address 42, which hit a moment ago. Hit or miss?",
+      "choices": [{ "text": "Hit" }, { "text": "Miss", "right": true }],
+      "answer": "A **miss**. Filling address 26 evicted address 42, because both map to set 2. This is a **conflict miss**: the cache has room elsewhere, but this address has only one place to go.",
+      "actions": [
+        { "kind": "row", "index": 8, "set": [5, 2, 4, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["tv", "hit"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "A loop reads address 42, then 26, then 42, then 26, eight reads in all, and fills the cache on every miss. How many of the eight reads hit?",
+      "choices": [{ "text": "None", "right": true }, { "text": "Four" }, { "text": "Seven" }],
+      "answer": "**None**. Each fill evicts the other address, so every read misses: a hit ratio of 0. With 8 sets and 3 tag bits, eight addresses compete for every set.",
+      "actions": []
+    },
+    {
+      "kind": "narrate",
+      "headline": "Beyond direct-mapped",
+      "prose": "A direct-mapped cache is cheap: one comparator, one place to look. Its weakness is the conflict miss you just saw. A **two-way set-associative** cache keeps two tags per set and compares both at once, so 42 and 26 could both stay. More ways cost more comparators and a replacement rule.",
+      "actions": [{ "kind": "highlight", "components": ["cmp"] }]
+    }
+  ]
+}

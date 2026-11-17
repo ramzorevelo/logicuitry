@@ -538,7 +538,7 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
-  it('migrates a v2 lesson to v3 with nothing else changed', () => {
+  it('migrates a v2 lesson to the current version with nothing else changed', () => {
     const v2 = {
       ...lessonV1([]),
       formatVersion: 2,
@@ -554,7 +554,7 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       ],
     };
     const out = migrate(structuredClone(v2));
-    expect(out).toEqual({ ...v2, formatVersion: 4 });
+    expect(out).toEqual({ ...v2, formatVersion: 5 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
@@ -582,9 +582,9 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       ],
     };
     const out = migrate(structuredClone(v3));
-    expect(out).toEqual({ ...v3, formatVersion: 4 });
+    expect(out).toEqual({ ...v3, formatVersion: 5 });
     expect(validateDocument(out)).toEqual({ valid: true });
-    expect(JSON.parse(JSON.stringify(out))).toEqual({ ...v3, formatVersion: 4 });
+    expect(JSON.parse(JSON.stringify(out))).toEqual({ ...v3, formatVersion: 5 });
   });
 
   it('keeps a v4 step autoplay seconds', () => {
@@ -595,7 +595,7 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       steps: [{ kind: 'narrate', prose: 'Hi', actions: [], seconds: 12 }],
     };
     const out = migrate(structuredClone(v4));
-    expect(out).toEqual(v4);
+    expect(out).toEqual({ ...v4, formatVersion: 5 });
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
@@ -606,6 +606,29 @@ describe('lesson v1 -> v2 (kinds and actions)', () => {
       steps: [{ kind: 'narrate', prose: 'Hi', actions: [], seconds: 0 }],
     };
     expect(validateDocument(bad).valid).toBe(false);
+  });
+
+  it('carries a v4 lesson to v5 unchanged and accepts a pulse action', () => {
+    const v4 = {
+      ...lessonV1([]),
+      formatVersion: 4,
+      board: 'b1',
+      steps: [{ kind: 'narrate', prose: 'Hi', actions: [{ kind: 'power', on: true }] }],
+    };
+    const out = migrate(structuredClone(v4));
+    expect(out).toEqual({ ...v4, formatVersion: 5 });
+    const pulsed = {
+      ...out,
+      steps: [
+        { kind: 'narrate', prose: 'Hi', actions: [{ kind: 'pulse', clock: 'clk', when: 'open' }] },
+      ],
+    };
+    expect(validateDocument(pulsed)).toEqual({ valid: true });
+    const noClock = {
+      ...out,
+      steps: [{ kind: 'narrate', prose: 'Hi', actions: [{ kind: 'pulse', when: 'open' }] }],
+    };
+    expect(validateDocument(noClock).valid).toBe(false);
   });
 });
 

@@ -1,0 +1,85 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 5,
+  "id": "interleaved-memory",
+  "title": "Four-bank memory: decoding and interleaving",
+  "workbench": "circuit",
+  "board": "four-bank-interleaved-memory",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Four banks of 16 words",
+      "prose": "Each 74LS189 is 16 words of 4 bits. Two side by side, **LO** and **HI**, make one 16 x 8 bank, and four banks make 64 words. That needs a 6-bit address: **A5 A4**, **A3 A2** and **A1 A0**.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "highlight", "components": ["r0l", "r0h", "r1l", "r1h", "r2l", "r2h", "r3l", "r3h"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "The decoder picks a bank",
+      "prose": "The 74LS139 turns **A5 A4** into one active-low chip select: 00 pulls **/CS0** low, 01 **/CS1**, and so on. Only that bank drives the outputs. **A3** to **A0** go to every chip and pick the word inside the bank. Each word here was preloaded with its own address, so a read shows where it landed.",
+      "actions": [{ "kind": "highlight", "components": ["dec", "ahi", "amid", "alo"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set address 3: **A5 A4** = 00, **A3 A2** = 00, **A1 A0** = 11. Word 3 holds 00000011, and the 74LS189 outputs the complement. What does **/DATA** show?",
+      "choices": [{ "text": "00000011" }, { "text": "11111100", "right": true }, { "text": "XXXXXXXX" }],
+      "answer": "**11111100**, the complement of 00000011. Bank 0 is selected and its word 3 holds the value 3.",
+      "actions": [
+        { "kind": "row", "index": 0, "set": [0, 0, 3, 0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["out"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Change only **A5 A4** to 01. The address becomes 19. Which chip select goes low?",
+      "choices": [{ "text": "/CS0" }, { "text": "/CS1", "right": true }, { "text": "/CS3" }],
+      "answer": "**/CS1**, so bank 1 answers. **/DATA** shows 11101100, the complement of 19 = 00010011. The low four bits are the same word number, 3, in a different bank.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [1, 0, 3, 0, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["dec", "r1l", "r1h", "out"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Write 53 to address 19",
+      "prose": "Set **DATA** to 53 and press **WRITE**: only bank 1 is selected, so only bank 1 stores it. While **WRITE** is held the outputs turn off. Released, **/DATA** reads 11001010, the complement of 53 = 00110101.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [1, 0, 3, 53, 0], "when": "open" },
+        { "kind": "row", "index": 3, "set": [1, 0, 3, 53, 1], "when": "open" },
+        { "kind": "row", "index": 4, "set": [1, 0, 3, 53, 0], "when": "open" },
+        { "kind": "highlight", "components": ["data", "wr", "r1l", "r1h", "out"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **A5 A4** back to 00, address 3. Word 3 of bank 0 got the same **A3** to **A0** and the same **/WE** during that write. What does it hold now?",
+      "choices": [{ "text": "Still 3", "right": true }, { "text": "53" }, { "text": "Unknown" }],
+      "answer": "**Still 3**: **/DATA** shows 11111100 again. **/CS0** was high during the write, so bank 0 ignored **/WE**. The chip select is what keeps the banks apart.",
+      "actions": [
+        { "kind": "row", "index": 5, "set": [0, 0, 3, 53, 0], "when": "reveal" },
+        { "kind": "highlight", "components": ["dec", "r0l", "r0h", "out"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "High-order interleaving",
+      "prose": "With the bank on the top bits, addresses 0 to 15 all sit in bank 0, 16 to 31 in bank 1, and so on. A program reading consecutive addresses keeps using one bank, and each access must finish before the next starts.",
+      "actions": [{ "kind": "highlight", "components": ["ahi", "dec"] }]
+    },
+    {
+      "kind": "predict",
+      "prose": "Swap the bus wires leaving the **A5 A4** and **A1 A0** switches, so **A1 A0** drive the decoder. This is **low-order interleaving**. Which bank holds address 5?",
+      "choices": [{ "text": "Bank 0" }, { "text": "Bank 1", "right": true }, { "text": "Bank 2" }],
+      "answer": "**Bank 1**. Address 5 is 000101, and its low two bits, 01, now pick the bank. Addresses 4, 5, 6, 7 land in banks 0, 1, 2, 3.",
+      "actions": [{ "kind": "highlight", "components": ["alo", "dec"] }]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Why main memory interleaves on the low bits",
+      "prose": "With low-order interleaving, consecutive addresses rotate through all four banks. A bank can start an access while the others are still busy, so four sequential reads overlap. Cache line fills and instruction fetches read consecutive words, which is why this layout raises memory bandwidth.",
+      "actions": [{ "kind": "highlight", "components": ["r0l", "r1l", "r2l", "r3l"] }]
+    }
+  ]
+}

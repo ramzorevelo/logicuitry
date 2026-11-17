@@ -44,6 +44,10 @@ import {
   type KmapLayout,
 } from '../../render/kmap';
 import { readTheme } from '../../render/theme';
+import { useExportDialog } from '../export/exportActions';
+import { useExportSource } from '../export/exportRender';
+import { kmapPicture, tablePicture, type ExprCaption } from '../export/panelPictures';
+import { tableToCsv, tableToHtml, tableToTsv, truthTableModel } from './truthTableText';
 import { useThemeRevision } from '../theme/useThemeRevision';
 import { sizeCanvas, watchBackingScale } from '../canvasBacking';
 import { LONG_PRESS_MS, TAP_SLOP } from './touchGestures';
@@ -708,6 +712,71 @@ export function AnalyzeDrawer({
   }, [draw]);
   // Backing-scale changes (zoom, DPR flips, pinch) redraw via the shared helper.
   useEffect(() => watchBackingScale(() => draw()), [draw]);
+
+  // What the drawer shows, never more: the reveal stage decides whether the
+  // minimal cover appears, and hover, cursor and a half-drawn circle stay out.
+  useExportSource(
+    'kmap',
+    layout && table
+      ? {
+          picture: (theme) => {
+            const varNames = buildVarNames(table.inputPaths.map(nameOfPath));
+            const captions: ExprCaption[] = [];
+            if (myCircles.length > 0)
+              captions.push({
+                lead: `${outShown.name} = `,
+                expr: exprOfGroups(
+                  table,
+                  myCircles.map((c) => c.minterms),
+                  polarity,
+                  varNames,
+                ),
+              });
+            if (stage === 3)
+              captions.push({
+                lead: `Minimal: ${outShown.name} = `,
+                expr: exprOfGroups(table, cover, polarity, varNames),
+              });
+            return kmapPicture(
+              theme,
+              layout,
+              {
+                names,
+                outName: outShown.name,
+                groups: drawGroups,
+                flagged,
+                cellNumbers: kmapCellNumbers,
+                polarity,
+              },
+              captions,
+            );
+          },
+        }
+      : null,
+  );
+  const tableModel = () =>
+    table
+      ? truthTableModel(
+          { ...table, outputPaths: table.outputPaths.slice(0, 1) },
+          (p) => (p === table.outputPaths[0] ? outShown.name : nameOfPath(p)),
+          myDcs,
+        )
+      : null;
+  useExportSource(
+    'table',
+    table && n <= MAX_ANALYSIS_INPUTS
+      ? {
+          picture: (theme) => {
+            const m = tableModel();
+            return m ? tablePicture(theme, m) : null;
+          },
+          text: () => {
+            const m = tableModel();
+            return m ? { tsv: tableToTsv(m), csv: tableToCsv(m), html: tableToHtml(m) } : null;
+          },
+        }
+      : null,
+  );
   useEffect(
     () => () => {
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -1053,6 +1122,14 @@ export function AnalyzeDrawer({
   const header = (
     <div className="analyze-head">
       <h3>Analyze</h3>
+      <button
+        type="button"
+        className="tool-btn"
+        title="Export the K-map or truth table as an image"
+        onClick={() => useExportDialog.getState().show(kmapEligible ? 'kmap' : 'table')}
+      >
+        Export image...
+      </button>
       {onBuild && (
         <button
           type="button"

@@ -2,6 +2,7 @@ import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import { useLessonEditorStore } from './lessonEditorStore';
 import type { LessonKeyEvent } from './lessonKeys';
 import { saveLessonDraft } from './lessonSave';
+import { useWorkspaceStore } from './workspace/workspaceStore';
 
 export interface EditorKeyEvent extends LessonKeyEvent {
   shiftKey: boolean;
@@ -45,11 +46,22 @@ export function handleLessonEditorKey(e: EditorKeyEvent): boolean {
     void saveLessonDraft();
     return true;
   }
+  // Taken from a text box too, where Ctrl+Space would only type a space.
+  if (ctrl && key === ' ') {
+    e.preventDefault();
+    useWorkspaceStore.getState().toggleMax();
+    return true;
+  }
   if (editable) return false;
   if (ed.pick && (key === 'Enter' || key === 'Escape')) {
     e.preventDefault();
     if (key === 'Enter') ed.finishPick();
     else ed.cancelPick();
+    return true;
+  }
+  if (key === 'Escape' && useWorkspaceStore.getState().maxArea) {
+    e.preventDefault();
+    useWorkspaceStore.getState().restore();
     return true;
   }
   if (ctrl && (key === 'z' || key === 'y')) {

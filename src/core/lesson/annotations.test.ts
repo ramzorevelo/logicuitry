@@ -18,7 +18,7 @@ const stepWith = (prose: string, ...annots: LessonAnnotation[]): LessonStep => (
 });
 const lessonOf = (...steps: LessonStep[]): Lesson => ({
   format: 'lcir.lesson',
-  formatVersion: 4,
+  formatVersion: 5,
   id: 'l',
   title: 'L',
   workbench: 'circuit',
