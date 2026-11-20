@@ -41,6 +41,7 @@ export function schematicPicture(
           board: circuit,
           chipLib,
           viewport,
+          lod: 'full',
           selection: NO_SELECTION,
           pinSignal: opts.signals?.pinSignal ?? UNPOWERED,
           ...(opts.signals?.pinRawValue ? { pinRawValue: opts.signals.pinRawValue } : {}),

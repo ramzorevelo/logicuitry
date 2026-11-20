@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { pruneHiddenChecks } from '../../core/checks/checks';
 import { boardFileName } from '../../io/boardFile';
 import { exportFileName } from '../../io/exportName';
 import { saveBlob } from '../../io/fsAccess';
@@ -7,6 +6,8 @@ import { serializeDocument } from '../../io/library';
 import { buildZip, type ZipEntry } from '../../io/zip';
 import { useCompact } from '../compact';
 import { chipDocument, chipFileName } from '../document/chipSave';
+import { boardAsSaved } from '../document/embeddedChips';
+import { getPrefs } from '../prefs';
 import { useModalKeys } from '../modalKeys';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import {
@@ -18,6 +19,7 @@ import {
 } from './exportActions';
 import {
   EXPORT_VIEWS,
+  schematicUnavailable,
   selectionSubset,
   VIEW_LABEL,
   VIEW_SLUG,
@@ -67,17 +69,14 @@ function openDocument(): { base: string; fileName: string; text: () => string } 
   return {
     base: board.name,
     fileName: boardFileName(board),
-    text: () => serializeDocument({ ...board, hiddenChecks: pruneHiddenChecks(board, st.chipLib) }),
+    text: () => serializeDocument(boardAsSaved(board, st.chipLib, getPrefs().embedChips)),
   };
 }
 
 function unavailableReason(view: ExportView, selectionOnly: boolean): string | null {
   const st = useCircuitStore.getState();
-  if (view === 'schematic') {
-    if (st.activeCircuit().components.length === 0) return 'The board is empty';
-    if (selectionOnly && st.selection.size === 0) return 'Nothing is selected';
-    return null;
-  }
+  if (view === 'schematic')
+    return schematicUnavailable(st.activeCircuit(), st.selection, selectionOnly);
   const available = panelSource(view)?.available?.() ?? false;
   if (view === 'waveforms') return available ? null : 'Power the board to record a run';
   return available ? null : 'Open Analyze on an output';
@@ -189,7 +188,7 @@ function ExportDialogBody({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const name = fileName(view, 'png');
-      if (await saveBlob(await canvasToPng(raster.canvas), name, PNG)) say(`Saved ${name}`);
+      if (await saveBlob(() => canvasToPng(raster.canvas), name, PNG)) say(`Saved ${name}`);
     } catch (e) {
       fail(e);
     } finally {
@@ -214,23 +213,25 @@ function ExportDialogBody({ onClose }: { onClose: () => void }) {
   const saveZip = async () => {
     setBusy(true);
     try {
-      const encoder = new TextEncoder();
-      const entries: ZipEntry[] = [];
-      for (const v of EXPORT_VIEWS) {
-        if (reasons[v]) continue;
-        const picture = pictureOf(v, { ...opts, selectionOnly: false }, opts.paper);
-        const r = picture ? rasterize(picture, opts.scale) : null;
-        if (!r) continue;
-        const png = await canvasToPng(r.canvas);
-        entries.push({ name: fileName(v, 'png'), data: new Uint8Array(await png.arrayBuffer()) });
-      }
-      const csv = panelSource('table')?.text?.()?.csv;
-      if (csv && !reasons.table)
-        entries.push({ name: 'truth-table.csv', data: encoder.encode(csv) });
-      entries.push({ name: doc.fileName, data: encoder.encode(doc.text()) });
-      const zip = buildZip(entries, new Date());
+      const build = async (): Promise<Blob> => {
+        const encoder = new TextEncoder();
+        const entries: ZipEntry[] = [];
+        for (const v of EXPORT_VIEWS) {
+          if (reasons[v]) continue;
+          const picture = pictureOf(v, { ...opts, selectionOnly: false }, opts.paper);
+          const r = picture ? rasterize(picture, opts.scale) : null;
+          if (!r) continue;
+          const png = await canvasToPng(r.canvas);
+          entries.push({ name: fileName(v, 'png'), data: new Uint8Array(await png.arrayBuffer()) });
+        }
+        const csv = panelSource('table')?.text?.()?.csv;
+        if (csv && !reasons.table)
+          entries.push({ name: 'truth-table.csv', data: encoder.encode(csv) });
+        entries.push({ name: doc.fileName, data: encoder.encode(doc.text()) });
+        return new Blob([buildZip(entries, new Date())], { type: ZIP.mime });
+      };
       const name = exportFileName(doc.base, 'export', 'zip');
-      if (await saveBlob(new Blob([zip], { type: ZIP.mime }), name, ZIP)) say(`Saved ${name}`);
+      if (await saveBlob(build, name, ZIP)) say(`Saved ${name}`);
     } catch (e) {
       fail(e);
     } finally {

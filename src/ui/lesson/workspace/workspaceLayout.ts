@@ -31,6 +31,8 @@ export const PRESETS: readonly { id: PresetId; label: string }[] = [
 ];
 
 export const MIN_AREA_PX = 160;
+/** Smallest stored share accepted: 160 px of an 8K-wide body is 2.1%, so only true slivers go below it. */
+export const MIN_STORED_SHARE_PCT = 1.5;
 /** Below this body width the workspace shows one area at a time. */
 export const NARROW_BELOW_PX = 1000;
 /** One arrow-key press on a focused splitter, in percent of the parent. */
@@ -168,7 +170,10 @@ function parseNode(raw: unknown): LayoutNode | null {
   if ((o.dir !== 'row' && o.dir !== 'col') || !Array.isArray(o.kids) || !Array.isArray(o.sizes))
     return null;
   if (o.kids.length < 2 || o.sizes.length !== o.kids.length) return null;
-  if (!o.sizes.every((s) => typeof s === 'number' && Number.isFinite(s) && s > 0)) return null;
+  if (
+    !o.sizes.every((s) => typeof s === 'number' && Number.isFinite(s) && s >= MIN_STORED_SHARE_PCT)
+  )
+    return null;
   const sum = (o.sizes as number[]).reduce((t, s) => t + s, 0);
   if (Math.abs(sum - 100) > 0.5) return null;
   const kids = o.kids.map(parseNode);

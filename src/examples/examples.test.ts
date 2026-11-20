@@ -689,6 +689,43 @@ describe('bundled examples', () => {
       expect(q(), 'cleared mid-phase').toBe(0);
     });
 
+    it('divide-by-three-counter steps S0, S1, S2 with Y high in S0 once /RST is released', () => {
+      const id = 'divide-by-three-counter';
+      const { sim, read } = running(id, ['S1', 'S0', 'Y']);
+      const at = (cycle: number) => sampleAt(id, cycle);
+      sim.runUntil(at(1));
+      expect(read()).toBe(0b001);
+      sim.setToggle('main//RST', true);
+      const seen: number[] = [];
+      for (let cycle = 2; cycle <= 7; cycle++) {
+        sim.runUntil(at(cycle));
+        seen.push(read());
+      }
+      expect(seen).toEqual([0b010, 0b100, 0b001, 0b010, 0b100, 0b001]);
+    });
+
+    it('moore-and-mealy-01-recognizers: Mealy rises with A, Moore on the next edge', () => {
+      const id = 'moore-and-mealy-01-recognizers';
+      const { sim, read } = running(id, ['MOORE', 'MEALY']);
+      const at = (cycle: number) => sampleAt(id, cycle);
+      sim.runUntil(at(1));
+      sim.setToggle('main//RST', true);
+      sim.runUntil(at(2));
+      expect(read(), 'saw a 0').toBe(0b00);
+      sim.setToggle('main/A', true);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'A rises mid-cycle').toBe(0b01);
+      sim.runUntil(at(3));
+      expect(read(), 'after the edge').toBe(0b10);
+      sim.runUntil(at(4));
+      expect(read(), 'A held at 1').toBe(0b00);
+      sim.setToggle('main/A', false);
+      sim.runUntil(at(5));
+      sim.setToggle('main/A', true);
+      sim.runUntil(sim.time + SETTLE_PS);
+      expect(read(), 'a second 0 then 1').toBe(0b01);
+    });
+
     it('three-bit-counter-on-two-74ls74s counts 0 to 7 and wraps once /CLR is released', () => {
       const id = 'three-bit-counter-on-two-74ls74s';
       const { sim, read: q } = running(id, ['Q2', 'Q1', 'Q0']);

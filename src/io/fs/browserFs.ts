@@ -244,20 +244,30 @@ export interface BlobKind {
   ext: string;
 }
 
+/** The bytes, or a producer run only after the destination is chosen: the picker needs the
+ *  click's user activation, which slow encoding before it would spend. */
+export type BlobSource = Blob | (() => Promise<Blob>);
+
+const resolveBlob = (source: BlobSource): Promise<Blob> =>
+  typeof source === 'function' ? source() : Promise.resolve(source);
+
+/** The browser may still be reading the object URL when click() returns. */
+const REVOKE_DELAY_MS = 30_000;
+
 /** True when written, false when the user dismissed the picker. Without a picker it downloads. */
 export async function saveBlob(
-  blob: Blob,
+  source: BlobSource,
   suggestedName: string,
   kind: BlobKind,
 ): Promise<boolean> {
   const show = filePicker().showSaveFilePicker;
   if (!show) {
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(await resolveBlob(source));
     const a = document.createElement('a');
     a.href = url;
     a.download = suggestedName;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
     return true;
   }
   let handle: FileSystemFileHandle;
@@ -270,6 +280,7 @@ export async function saveBlob(
     if (e instanceof DOMException && e.name === 'AbortError') return false;
     throw e;
   }
+  const blob = await resolveBlob(source);
   const writable = await handle.createWritable();
   await writable.write(blob);
   await writable.close();

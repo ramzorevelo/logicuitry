@@ -7,6 +7,31 @@ patch digit a small feature, fix or follow-up).
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-21
+
+### Added
+
+- State machine examples: a divide-by-3 counter and Moore and Mealy "01"
+  recognizers.
+- A Moore vs Mealy lesson.
+
+### Changed
+
+- The clock and pattern editors close and keep their values on a click outside.
+- On a phone, a playing lesson keeps its question and at least a third of the
+  screen for the board.
+
+### Fixed
+
+- On a phone, a playing lesson no longer lets a tap select or delete parts.
+- Export image includes group frames and names, draws a dense board in full
+  detail, and saves boards with their chips.
+- The tutorial's last card stays until it is closed.
+- A chip whose id matches a built-in part asks before replacing it.
+- A restored chip tab no longer overwrites a newer saved copy.
+- Open Chip reports a duplicate or broken file and opens the rest.
+- The Parts list total names the gates that have no chip chosen.
+
 ## [0.8.3] - 2026-11-18
 
 ### Added

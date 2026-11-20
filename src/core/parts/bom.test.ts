@@ -89,9 +89,11 @@ describe('bomOf', () => {
     });
     expect(plain.looseGates[0]!.choice).toBeUndefined();
     expect(plain.icTotal).toBe(0);
+    expect(plain.unpackedGates).toBe(5);
     const bom = bomOf(b, lib, { 'and:2': '74LS08' });
     expect(bom.looseGates[0]).toMatchObject({ choice: '74LS08', ics: 2, spare: 3 });
     expect(bom.icTotal).toBe(2);
+    expect(bom.unpackedGates).toBe(0);
   });
 
   it('counts a width-N gate as N gates', () => {

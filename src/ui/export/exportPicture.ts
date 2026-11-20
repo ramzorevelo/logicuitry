@@ -48,6 +48,18 @@ export function fitScale(
   return { scale: Math.floor(cap * 100) / 100, reduced: true };
 }
 
+/** Why the schematic cannot be exported, or null. A wires-only selection has no parts to frame. */
+export function schematicUnavailable(
+  circuit: Circuit,
+  selection: ReadonlySet<string>,
+  selectionOnly: boolean,
+): string | null {
+  if (circuit.components.length === 0) return 'The board is empty';
+  if (selectionOnly && selectionSubset(circuit, selection).components.length === 0)
+    return 'The selection has no parts';
+  return null;
+}
+
 /**
  * The selected part of a circuit: selected components and junctions, and a
  * wire only when both its ends stay (a free end counts when the wire itself is

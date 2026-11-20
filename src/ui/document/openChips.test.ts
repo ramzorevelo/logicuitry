@@ -49,18 +49,45 @@ describe('openChipFiles', () => {
     expect(st().chipLib.has('two-halves')).toBe(true);
   });
 
-  it('keeps the later file when the same chip is picked twice', () => {
+  it('reports the second file when the same chip is picked twice', () => {
     const failed: string[] = [];
     const later = { ...wrapper, name: 'Later' };
     st().loadChipDefs([halfAdder]);
-    openChipFiles(
+    const opened = openChipFiles(
       [
         { def: wrapper, file: file('a.lcirc') },
         { def: later, file: file('b.lcirc') },
       ],
       failed,
     );
-    expect(st().chipLib.get('two-halves')?.name).toBe('Later');
+    expect(opened).toEqual(['Two halves']);
+    expect(st().chipLib.get('two-halves')?.name).toBe('Two halves');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatch(/b\.lcirc.*two-halves/);
+  });
+
+  it('loads the valid chips and reports the cyclic ones', () => {
+    const using = (id: string, other: string): ChipDef => ({
+      ...wrapper,
+      id,
+      name: id,
+      components: [{ id: 'x', kind: 'chip', defId: other, pos: { x: 0, y: 0 } }],
+    });
+    const good = { ...halfAdder, id: 'good', name: 'Good' };
+    const failed: string[] = [];
+    const opened = openChipFiles(
+      [
+        { def: using('ping', 'pong'), file: file('a.lcirc') },
+        { def: using('pong', 'ping'), file: file('b.lcirc') },
+        { def: good, file: file('c.lcirc') },
+      ],
+      failed,
+    );
+    expect(opened).toContain('Good');
+    expect(opened).toHaveLength(2);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatch(/recursive chip reference/);
+    expect(st().chipLib.has('good')).toBe(true);
   });
 
   it('refuses a chip whose tab has unsaved edits and opens the rest', () => {

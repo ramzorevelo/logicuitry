@@ -15,10 +15,14 @@ interface OnboardingState {
   stop: number;
   /** A document reached the board at startup, so this launch is not a blank first look. */
   documentOpened: boolean;
+  /** Every build step has been done once; the done card stays until dismissed,
+   *  even when a switch is flipped back or power goes off. */
+  buildCompleted: boolean;
   showWelcome(): void;
   startTour(): void;
   setStop(stop: number): void;
   startBuild(): void;
+  completeBuild(): void;
   end(): void;
   noteDocumentOpened(): void;
   /** Esc that the board had nothing to cancel for: the hands-on part's way out. */
@@ -29,16 +33,18 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   phase: 'off',
   stop: 0,
   documentOpened: false,
+  buildCompleted: false,
   showWelcome: () => set({ phase: 'welcome' }),
   startTour: () => set({ phase: 'tour', stop: 0 }),
   setStop: (stop) => set({ stop }),
-  startBuild: () => set({ phase: 'build' }),
-  end: () => set({ phase: 'off', stop: 0 }),
+  startBuild: () => set({ phase: 'build', buildCompleted: false }),
+  completeBuild: () => set({ buildCompleted: true }),
+  end: () => set({ phase: 'off', stop: 0, buildCompleted: false }),
   noteDocumentOpened: () => {
     if (get().phase === 'welcome') set({ phase: 'off' });
     set({ documentOpened: true });
   },
   idleEscape: () => {
-    if (get().phase === 'build') set({ phase: 'off' });
+    if (get().phase === 'build') set({ phase: 'off', buildCompleted: false });
   },
 }));

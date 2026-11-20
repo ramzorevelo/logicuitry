@@ -39,6 +39,7 @@ export function LessonPanel() {
   const deadline = useLessonStore((s) => s.autoplayDeadline);
   const totalMs = useLessonStore((s) => s.autoplayTotalMs);
   const now = useNow(autoplay && deadline !== null);
+  const [autoOpen, setAutoOpen] = useState(false);
   const board = useCircuitStore((s) => s.board);
 
   const warnings = useMemo(() => {
@@ -71,10 +72,26 @@ export function LessonPanel() {
   const fill = autoplay && totalMs > 0 ? 1 - leftMs / totalMs : 0;
 
   return (
-    <aside className="lesson-panel" aria-label="Lesson">
+    <aside
+      className={`lesson-panel${autoOpen ? ' lesson-panel--auto-open' : ''}`}
+      aria-label="Lesson"
+    >
       <header className="lesson-panel__head">
         <div className="lesson-panel__title-row">
           <span className="lesson-panel__title">{lesson.title}</span>
+          <span className="lesson-panel__step-inline">
+            {step + 1}/{count}
+          </span>
+          <button
+            type="button"
+            className="tool-btn lesson-panel__more"
+            aria-pressed={autoOpen}
+            title="Autoplay pace and waiting"
+            aria-label="Autoplay pace and waiting"
+            onClick={() => setAutoOpen((o) => !o)}
+          >
+            ⋯
+          </button>
           <button
             type="button"
             className="tool-btn lesson-panel__close"

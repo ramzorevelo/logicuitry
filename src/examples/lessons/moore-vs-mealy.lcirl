@@ -1,0 +1,91 @@
+{
+  "format": "lcir.lesson",
+  "formatVersion": 5,
+  "id": "moore-vs-mealy",
+  "title": "Moore vs Mealy: when the output moves",
+  "workbench": "circuit",
+  "board": "moore-and-mealy-01-recognizers",
+  "steps": [
+    {
+      "kind": "narrate",
+      "headline": "Two machines, one input",
+      "prose": "Both machines watch **A** and answer 1 after a 0 followed by a 1. The **Moore** machine on the top 74LS74 has three states in **S1 S0**, and its output is **S1** itself. The **Mealy** machine on the bottom 74LS74 has two states in **Q**, and its output is **Q** AND **A**. Both start held in reset.",
+      "actions": [
+        { "kind": "power", "on": true },
+        { "kind": "row", "index": 0, "set": [0, 0], "when": "open" },
+        { "kind": "highlight", "components": ["u1", "u2"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Release reset and clock in a 0",
+      "prose": "**/RST** goes high with **A** = 0, then one clock pulse. The Moore machine moves to its \"saw a 0\" state, so **S0** = 1. The Mealy machine loads **Q** = 1. Neither output is lit yet.",
+      "actions": [
+        { "kind": "row", "index": 1, "set": [1, 0], "when": "open" },
+        { "kind": "pulse", "clock": "clk", "when": "open" },
+        { "kind": "highlight", "components": ["ls0", "lq"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Now set **A** = 1 and leave the clock alone. Which output lights?",
+      "choices": [
+        { "text": "MOORE only" },
+        { "text": "MEALY only", "right": true },
+        { "text": "Both" },
+        { "text": "Neither" }
+      ],
+      "answer": "**MEALY** lights at once. Its output is **Q** AND **A**, and **Q** is already 1. **MOORE** is **S1**, a flip-flop output, so it cannot change before a clock edge.",
+      "actions": [
+        { "kind": "row", "index": 2, "set": [1, 1], "when": "reveal" },
+        { "kind": "highlight", "components": ["a", "lmoore", "lmealy"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "One clock pulse with **A** still 1. What do the two outputs show after the edge?",
+      "choices": [
+        { "text": "MOORE 1, MEALY 1" },
+        { "text": "MOORE 1, MEALY 0", "right": true },
+        { "text": "MOORE 0, MEALY 1" },
+        { "text": "MOORE 0, MEALY 0" }
+      ],
+      "answer": "The Moore machine enters its \"saw 01\" state, so **MOORE** = 1 for this whole cycle. The Mealy flip-flop loads NOT **A** = 0, so **Q** = 0 and **MEALY** goes out. The Mealy machine answered before the edge; the Moore machine answers for one full cycle after it.",
+      "actions": [
+        { "kind": "pulse", "clock": "clk", "when": "reveal" },
+        { "kind": "highlight", "components": ["lmoore", "lmealy", "ls1", "lq"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Read it on the waveform",
+      "prose": "**MEALY** rose when **A** rose, between two clock edges. **MOORE**, the **S1** track, rose on the next rising edge of **CLK**. A Mealy output follows its input straight away. A Moore output changes only on a clock edge.",
+      "actions": [
+        { "kind": "tab", "tab": "waveform" },
+        { "kind": "highlight", "components": ["a", "clk", "lmoore", "lmealy"] }
+      ]
+    },
+    {
+      "kind": "predict",
+      "prose": "Set **A** = 0 and clock once more. Which outputs are lit?",
+      "choices": [
+        { "text": "Neither", "right": true },
+        { "text": "MOORE only" },
+        { "text": "MEALY only" },
+        { "text": "Both" }
+      ],
+      "answer": "Neither. The Moore machine is back in \"saw a 0\", so **S1** = 0. The Mealy machine has **Q** = 1 again, but **A** = 0, so **Q** AND **A** = 0. Both are ready for the next 1.",
+      "actions": [
+        { "kind": "row", "index": 3, "set": [1, 0], "when": "reveal" },
+        { "kind": "pulse", "clock": "clk", "when": "reveal" },
+        { "kind": "highlight", "components": ["ls1", "ls0", "lq"] }
+      ]
+    },
+    {
+      "kind": "narrate",
+      "headline": "Same job, different trade",
+      "prose": "The Mealy machine needs one flip-flop instead of two and answers in the same cycle, but its output moves whenever **A** does, glitches included. The Moore machine needs an extra state and answers one cycle later, but its output changes only on a clock edge.",
+      "actions": [{ "kind": "highlight", "components": ["u1", "u2"] }]
+    }
+  ]
+}

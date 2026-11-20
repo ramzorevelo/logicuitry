@@ -16,6 +16,8 @@ import { useCompact } from '../compact';
 import { useModalKeys } from '../modalKeys';
 import { openExternal } from '../desktop/openExternal';
 import { serializeDocument } from '../../io/library';
+import { boardAsSaved } from '../document/embeddedChips';
+import { getPrefs } from '../prefs';
 import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import { useShellStore } from '../store';
 
@@ -43,6 +45,7 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
   const [description, setDescription] = useState(initialDescription ?? '');
   const workbench = useShellStore((st) => st.workbench);
   const board = useCircuitStore((s) => s.board);
+  const chipLib = useCircuitStore((s) => s.chipLib);
   // Which tab happens to be open does not decide this. The board is in the
   // store either way, and making the checkbox follow the active workbench
   // meant noticing something on the Circuit board, opening this from anywhere
@@ -65,9 +68,11 @@ export function BugReportDialog({ onClose, initialDescription, crash }: Props) {
         userAgent: navigator.userAgent,
         screen: `${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x`,
         lastError: crash ?? lastError(),
-        boardJson: includeBoard ? serializeDocument(board) : undefined,
+        boardJson: includeBoard
+          ? serializeDocument(boardAsSaved(board, chipLib, getPrefs().embedChips))
+          : undefined,
       }),
-    [description, includeBoard, board, crash, where],
+    [description, includeBoard, board, chipLib, crash, where],
   );
 
   const preview = reportToText(payload);

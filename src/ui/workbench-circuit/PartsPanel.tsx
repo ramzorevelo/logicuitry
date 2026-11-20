@@ -139,7 +139,11 @@ export function PartsPanel({ viewOnly }: { viewOnly: boolean }) {
       )}
       {!empty && (
         <div className="parts-panel__foot">
-          <span className="parts-panel__total">ICs: {bom.icTotal}</span>
+          <span className="parts-panel__total">
+            ICs: {bom.icTotal}
+            {bom.unpackedGates > 0 &&
+              `, plus ${bom.unpackedGates} ${bom.unpackedGates === 1 ? 'gate' : 'gates'} with no package chosen`}
+          </span>
           <span className="parts-panel__sub">Resistors, capacitors and wire are not counted.</span>
           <button type="button" className="tool-btn" onClick={copy}>
             Copy as text

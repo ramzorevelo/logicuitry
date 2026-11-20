@@ -3,7 +3,12 @@ import { useCircuitStore } from '../workbench-circuit/circuitStore';
 import { EXAMPLES } from '../../examples';
 import type { ChipDef } from '../../core/model/types';
 import type { Session } from '../../io/sessionStore';
-import { chipTabsOf, restoreChipTabs, withoutUnsavedTabs } from './chipTabsSession';
+import {
+  chipTabsOf,
+  chipsDivergedFromLibrary,
+  restoreChipTabs,
+  withoutUnsavedTabs,
+} from './chipTabsSession';
 import { chipSourceOf } from './chipSave';
 import type { DocFile } from '../../io/platform';
 
@@ -120,5 +125,31 @@ describe('chip tabs across a reload', () => {
     const tab = st().tabs.find((t) => t.kind === 'def')!;
     expect(st().chipLib.get(halfAdder.id)?.name).toBe('Half adder, edited');
     expect(st().chipTabDirty(tab.id)).toBe(false);
+  });
+  it('a library copy newer than the session base wins over restored edits', () => {
+    st().openDefTab(halfAdder.id, `${halfAdder.id}/`, 'Half adder');
+    st().loadChipDefs([edited]);
+    const session = sessionOf();
+    const newer: ChipDef = { ...halfAdder, name: 'Half adder, newer on disk', version: 9 };
+    reload();
+    st().loadChipDefs([newer]);
+    useCircuitStore.setState({ error: null });
+    restoreChipTabs(session);
+    const tab = st().tabs.find((t) => t.kind === 'def')!;
+    expect(st().chipLib.get(halfAdder.id)?.name).toBe('Half adder, newer on disk');
+    expect(st().chipTabDirty(tab.id)).toBe(false);
+    expect(st().error).toMatch(/Half adder, edited.*unsaved edits.*dropped/);
+  });
+
+  it('a live dirty tab is kept when the library holds a different copy', () => {
+    st().openDefTab(halfAdder.id, `${halfAdder.id}/`, 'Half adder');
+    st().loadChipDefs([edited]);
+    const newer: ChipDef = { ...halfAdder, name: 'Half adder, newer on disk', version: 9 };
+    expect(withoutUnsavedTabs([newer])).toEqual([]);
+    expect(chipsDivergedFromLibrary([newer])).toEqual(['Half adder, newer on disk']);
+    expect(chipsDivergedFromLibrary([halfAdder])).toEqual([]);
+    const tab = st().tabs.find((t) => t.kind === 'def')!;
+    expect(st().chipLib.get(halfAdder.id)?.name).toBe('Half adder, edited');
+    expect(st().chipTabDirty(tab.id)).toBe(true);
   });
 });

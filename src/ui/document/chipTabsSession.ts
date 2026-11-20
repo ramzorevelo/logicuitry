@@ -66,36 +66,67 @@ function chipOf(raw: ChipDef): ChipDef | undefined {
 export function restoreChipTabs(session: Session): void {
   const st = useCircuitStore.getState;
   const opened: (string | undefined)[] = [];
+  const dropped: string[] = [];
   for (const raw of session.chipTabs ?? []) {
     const def = chipOf(raw.def);
     const saved = chipOf(raw.saved);
     const unsaved = !!def && !!saved && !sameDefIgnoringVersion(def, saved);
     const have = def && st().chipLib.get(def.id);
+    // The library copy is the file's newest state: edits made on an older base are not replayed over it.
+    const moved =
+      unsaved &&
+      have !== undefined &&
+      !sameDefIgnoringVersion(have, saved) &&
+      !sameDefIgnoringVersion(have, def);
+    const restoreEdits = unsaved && !moved;
     // A clean tab takes the library's copy, which may be newer than the session's.
     const loaded =
       !!def &&
       !!saved &&
       partStillThere(st().board, raw.prefix) &&
-      ((have && (!unsaved || sameDefIgnoringVersion(have, def))) || st().loadChipDefs([def]).ok);
+      ((have && (!restoreEdits || sameDefIgnoringVersion(have, def))) ||
+        st().loadChipDefs([def]).ok);
     if (!loaded) {
       opened.push(undefined);
       continue;
     }
+    if (moved) dropped.push(def.name);
     st().openDefTab(def.id, raw.prefix, raw.breadcrumb);
-    if (unsaved) st().markChipSaved(def.id, saved);
+    if (restoreEdits) st().markChipSaved(def.id, saved);
     else st().markChipSaved(def.id);
     if (raw.file) rememberChipSource(def.id, { kind: 'file', file: raw.file });
     opened.push(st().activeTabId);
   }
   const front = session.activeChipTab === undefined ? undefined : opened[session.activeChipTab];
   st().setActiveTab(front ?? 'board');
+  if (dropped.length > 0) noticeDroppedEdits(dropped);
 }
 
-/** Library defs that would overwrite a chip tab's unsaved edits stay out of a library load. */
-export function withoutUnsavedTabs(defs: readonly ChipDef[]): ChipDef[] {
+function noticeDroppedEdits(names: readonly string[]): void {
+  useCircuitStore.setState({
+    error: `open: ${names.join(', ')}: unsaved edits from last session were dropped because the file changed since`,
+  });
+}
+
+/** Dirty chip tabs paired with their chip ids. */
+function dirtyChipTabs(): { defId: string; saved: ChipDef }[] {
   const st = useCircuitStore.getState();
-  const unsaved = new Set(
-    st.tabs.flatMap((t) => (t.kind === 'def' && st.chipTabDirty(t.id) ? [t.defId] : [])),
+  return st.tabs.flatMap((t) =>
+    t.kind === 'def' && st.chipTabDirty(t.id) ? [{ defId: t.defId, saved: t.saved }] : [],
   );
-  return defs.filter((d) => !unsaved.has(d.id));
+}
+
+/** A library load never overwrites a chip tab's unsaved edits in this session. */
+export function withoutUnsavedTabs(defs: readonly ChipDef[]): ChipDef[] {
+  const dirty = new Set(dirtyChipTabs().map((t) => t.defId));
+  return defs.filter((d) => !dirty.has(d.id));
+}
+
+/** Names of chips whose unsaved tab edits sit beside a library file that differs from the tab's base. */
+export function chipsDivergedFromLibrary(defs: readonly ChipDef[]): string[] {
+  const incoming = new Map(defs.map((d) => [d.id, d]));
+  return dirtyChipTabs().flatMap((t) => {
+    const d = incoming.get(t.defId);
+    return d && !sameDefIgnoringVersion(d, t.saved) ? [d.name] : [];
+  });
 }

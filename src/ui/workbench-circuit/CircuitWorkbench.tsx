@@ -495,6 +495,25 @@ function styledWireIds(se: {
   return se.wholeNet ? se.netIds : se.ids;
 }
 
+/** A press outside an open overlay commits it, as Enter does; a stray click must not discard. */
+function useCommitOnPressOutside(
+  boxRef: React.RefObject<HTMLDivElement | null>,
+  commit: (() => void) | null,
+) {
+  // Registered once per open/close, so the listener calls through the ref, not a stale snapshot.
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  const open = commit !== null;
+  useEffect(() => {
+    if (!open) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) commitRef.current?.();
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+  }, [open, boxRef]);
+}
+
 export function CircuitWorkbench() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -4020,6 +4039,8 @@ export function CircuitWorkbench() {
   // And closes a param editor unsaved, as Esc does.
   useBackLayer(coarse && paramEdit ? () => cancelParamEdit() : null);
   useBackLayer(coarse && styleEdit ? () => setStyleEdit(null) : null);
+  useBackLayer(coarse && clockEdit ? () => setClockEdit(null) : null);
+  useBackLayer(coarse && patternEdit ? () => setPatternEdit(null) : null);
 
   /** Abandon whatever gesture is half-finished: a wire being drawn, a lasso,
    *  a cut, a suggestion, a duplicate ghost. Shared by Esc and by a press
@@ -5145,7 +5166,8 @@ export function CircuitWorkbench() {
     // handle that a subsequent drag moves. It selects any handle, not just a
     // component: tapping a wire used to clear the selection, which left no way
     // to pick one up at all. Powered locks editing, so a touch tap there only drives inputs.
-    const tapSelects = viewOnlyRef.current || (coarseRef.current && !powered);
+    const tapSelects =
+      viewOnlyRef.current || (coarseRef.current && !powered && !playLockRef.current);
     if (tapSelects && !panMovedRef.current) {
       const id = handleIdAt(world);
       store.getState().setSelection(id ? new Set([id]) : new Set());
@@ -5956,6 +5978,38 @@ export function CircuitWorkbench() {
     }
     setParamEdit(null);
   };
+
+  const commitClockEdit = () => {
+    if (!clockEdit) return;
+    // Name + params commit as ONE undo step; a rejected name
+    // (duplicate on another net) keeps the overlay open, warn-flashed.
+    const ok = store.getState().setComponentParams(
+      clockEdit.id,
+      {
+        periodPs: Math.max(2, Math.round(clockEdit.periodNs * 1000)),
+        dutyPercent: Math.min(99, Math.max(1, Math.round(clockEdit.dutyPct))),
+        phasePs: Math.max(0, Math.round(clockEdit.phaseNs * 1000)),
+      },
+      clockEdit.name,
+    );
+    if (ok) setClockEdit(null);
+    else setClockEdit({ ...clockEdit, flash: true });
+  };
+  useCommitOnPressOutside(clockEditBoxRef, clockEdit ? commitClockEdit : null);
+
+  const commitPatternEdit = () => {
+    if (!patternEdit) return;
+    const parsed = parsePatternFields(patternEdit);
+    if (!parsed.ok) {
+      setPatternEdit({ ...patternEdit, flash: parsed.field });
+      return;
+    }
+    // Name and params commit as one undo step, as on the clock.
+    const ok = store.getState().setComponentParams(patternEdit.id, parsed.params, patternEdit.name);
+    if (ok) setPatternEdit(null);
+    else setPatternEdit({ ...patternEdit, flash: 'name' });
+  };
+  useCommitOnPressOutside(patternEditBoxRef, patternEdit ? commitPatternEdit : null);
 
   // Effect below registers once per open/close, so it calls through this
   // ref rather than closing over a stale paramEdit snapshot (drawRef precedent).
@@ -7122,7 +7176,10 @@ export function CircuitWorkbench() {
               selection.size > 0 &&
               connectPairs === 0 &&
               !powered &&
+              !lessonPlaying &&
               !styleEdit &&
+              !clockEdit &&
+              !patternEdit &&
               !paramEdit
             }
           />
@@ -7154,21 +7211,8 @@ export function CircuitWorkbench() {
               style={{ left: clockEdit.screen.x, top: clockEdit.screen.y }}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === 'Enter') {
-                  // Name + params commit as ONE undo step; a rejected name
-                  // (duplicate on another net) keeps the overlay open, warn-flashed.
-                  const ok = store.getState().setComponentParams(
-                    clockEdit.id,
-                    {
-                      periodPs: Math.max(2, Math.round(clockEdit.periodNs * 1000)),
-                      dutyPercent: Math.min(99, Math.max(1, Math.round(clockEdit.dutyPct))),
-                      phasePs: Math.max(0, Math.round(clockEdit.phaseNs * 1000)),
-                    },
-                    clockEdit.name,
-                  );
-                  if (ok) setClockEdit(null);
-                  else setClockEdit({ ...clockEdit, flash: true });
-                } else if (e.key === 'Escape') setClockEdit(null);
+                if (e.key === 'Enter') commitClockEdit();
+                else if (e.key === 'Escape') setClockEdit(null);
               }}
             >
               <label>
@@ -7232,19 +7276,8 @@ export function CircuitWorkbench() {
               style={{ left: patternEdit.screen.x, top: patternEdit.screen.y }}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === 'Enter') {
-                  const parsed = parsePatternFields(patternEdit);
-                  if (!parsed.ok) {
-                    setPatternEdit({ ...patternEdit, flash: parsed.field });
-                    return;
-                  }
-                  // Name and params commit as one undo step, as on the clock.
-                  const ok = store
-                    .getState()
-                    .setComponentParams(patternEdit.id, parsed.params, patternEdit.name);
-                  if (ok) setPatternEdit(null);
-                  else setPatternEdit({ ...patternEdit, flash: 'name' });
-                } else if (e.key === 'Escape') setPatternEdit(null);
+                if (e.key === 'Enter') commitPatternEdit();
+                else if (e.key === 'Escape') setPatternEdit(null);
               }}
             >
               {(

@@ -311,6 +311,11 @@
 }
 
 .app-shell--compact .circuit-editor:has(> .lesson-panel) > .circuit-body {
+  min-height: auto;
+}
+
+/* The floor is the canvas, not the body: the palette strip above it is not board. */
+.app-shell--compact .circuit-editor:has(> .lesson-panel) .circuit-canvas-wrap {
   min-height: 30dvh;
 }
 
@@ -322,4 +327,80 @@
 
 .app-shell--compact .circuit-editor > .lesson-panel {
   flex-shrink: 1;
+}
+
+/* Inline step count and the autoplay toggle exist only where the head must be one line. */
+.lesson-panel__step-inline,
+.lesson-panel .lesson-panel__more {
+  display: none;
+}
+
+/* A short phone, either way up: the question is what the class reads, so the head is one
+   line, the board id and the autoplay options fold away, and the sheet may take the space
+   the dock gives up. */
+@media (max-height: 700px) {
+  .app-shell--compact .lesson-panel {
+    max-height: 56dvh;
+  }
+
+  .app-shell--compact .lesson-panel__head {
+    padding-block: var(--space-unit);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--compact .lesson-panel__title-row {
+    align-items: center;
+  }
+
+  .app-shell--compact .lesson-panel__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell--compact .lesson-panel__step-inline {
+    display: inline;
+    flex: none;
+    color: var(--muted);
+    font-size: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-shell--compact .lesson-panel__more {
+    display: inline-flex;
+    flex: none;
+    padding: 0 calc(var(--space-unit) * 1.5);
+    justify-content: center;
+  }
+
+  .app-shell--compact .lesson-panel__head .tool-btn {
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+  }
+
+  .app-shell--compact .lesson-panel__count {
+    display: none;
+  }
+
+  .app-shell--compact .lesson-panel__foot {
+    grid-template-columns: repeat(4, 1fr);
+    padding: var(--space-unit);
+  }
+
+  .app-shell--compact .lesson-panel__auto {
+    display: contents;
+  }
+
+  .app-shell--compact .lesson-panel__pace,
+  .app-shell--compact .lesson-panel__wait {
+    display: none;
+  }
+
+  .app-shell--compact .lesson-panel--auto-open .lesson-panel__pace,
+  .app-shell--compact .lesson-panel--auto-open .lesson-panel__wait {
+    display: inline-flex;
+    grid-column: 1 / -1;
+  }
 }

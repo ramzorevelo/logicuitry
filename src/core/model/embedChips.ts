@@ -34,11 +34,21 @@ function canonical(value: unknown): string {
 }
 
 /** Version and silenced checks are bookkeeping, not what the chip does. */
-function sameBehavior(a: ChipDef, b: ChipDef): boolean {
+export function sameBehavior(a: ChipDef, b: ChipDef): boolean {
   const strip = (d: ChipDef) => {
     return canonical({ ...d, version: 0, hiddenChecks: undefined });
   };
   return strip(a) === strip(b);
+}
+
+/** Wires reach a chip by pin name, so a changed pin set leaves them dangling. */
+export function pinsDiffer(a: ChipDef, b: ChipDef): boolean {
+  const key = (d: ChipDef) =>
+    d.pins
+      .map((p) => `${p.name}/${p.dir}/${p.width}`)
+      .sort()
+      .join('|');
+  return key(a) !== key(b);
 }
 
 /** Ids of embedded chips whose content differs from the already loaded def of the same id. */

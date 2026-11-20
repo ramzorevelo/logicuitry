@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { lodFor, showsBloom, showsCorners, showsPattern, showsRelief } from './lod';
+import { lodFor, resolveLod, showsBloom, showsCorners, showsPattern, showsRelief } from './lod';
 import { zoomBucket } from './glyphCache';
+
+describe('resolveLod', () => {
+  it('lets an override beat the density rule, and falls back without one', () => {
+    expect(resolveLod('full', 1, 500)).toBe('full');
+    expect(resolveLod(undefined, 1, 500)).toBe('flat');
+  });
+});
 
 describe('lodFor', () => {
   it('keeps full detail on a normal board at normal zoom', () => {

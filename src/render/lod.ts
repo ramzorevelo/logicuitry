@@ -17,6 +17,15 @@ export function lodFor(zoom: number, componentCount: number): LodLevel {
   return 'full';
 }
 
+/** An explicit level wins: a still image is not redraw-bound, so an export forces 'full'. */
+export function resolveLod(
+  override: LodLevel | undefined,
+  zoom: number,
+  componentCount: number,
+): LodLevel {
+  return override ?? lodFor(zoom, componentCount);
+}
+
 /** Corner motifs go first: smallest marks, least meaning. */
 export function showsCorners(lod: LodLevel): boolean {
   return lod === 'full';

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, Component } from '../../core/model/types';
-import { fitScale, MAX_AREA_PX, MAX_SIDE_PX, selectionSubset } from './exportPicture';
+import {
+  fitScale,
+  MAX_AREA_PX,
+  MAX_SIDE_PX,
+  schematicUnavailable,
+  selectionSubset,
+} from './exportPicture';
 
 const part = (id: string, group?: string): Component =>
   ({ id, kind: 'and', pos: { x: 0, y: 0 }, ...(group ? { group } : {}) }) as Component;
@@ -57,6 +63,23 @@ describe('selectionSubset', () => {
   it('keeps the groups of kept parts and their ancestors', () => {
     const sub = selectionSubset(circuit, new Set(['g1']));
     expect(sub.groups?.map((g) => g.id)).toEqual(['outer', 'inner']);
+  });
+});
+
+describe('schematicUnavailable', () => {
+  it('says why when the board is empty or the selection holds no parts', () => {
+    expect(schematicUnavailable({ ...circuit, components: [] }, new Set(), false)).toBe(
+      'The board is empty',
+    );
+    expect(schematicUnavailable(circuit, new Set(['w12']), true)).toBe(
+      'The selection has no parts',
+    );
+    expect(schematicUnavailable(circuit, new Set(), true)).toBe('The selection has no parts');
+  });
+
+  it('is clear for a whole board or a selection with a part', () => {
+    expect(schematicUnavailable(circuit, new Set(['w12']), false)).toBeNull();
+    expect(schematicUnavailable(circuit, new Set(['g1']), true)).toBeNull();
   });
 });
 

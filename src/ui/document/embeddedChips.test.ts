@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { builtinChipLibrary } from '../../core/parts/packages';
 import type { Board, ChipDef, Component } from '../../core/model/types';
-import { boardWithChips, planEmbedded, withoutChips } from './embeddedChips';
+import { boardAsSaved, boardWithChips, planEmbedded, withoutChips } from './embeddedChips';
 
 const inst = (id: string, defId: string): Component => ({
   id,
@@ -67,6 +67,16 @@ describe('boardWithChips', () => {
   });
 });
 
+describe('boardAsSaved', () => {
+  it('embeds the open copy of a chip, not the stale one the board carried', () => {
+    const open = chip('a', [], { version: 2 });
+    const stale = chip('a', [], { version: 1 });
+    const saved = boardAsSaved(boardUsing(['a'], [stale]), lib(open), true);
+    expect(saved.chips).toEqual([open]);
+    expect('chips' in boardAsSaved(boardUsing(['a'], [stale]), lib(open), false)).toBe(false);
+  });
+});
+
 describe('planEmbedded', () => {
   it('loads what is missing and asks only about real differences', () => {
     const same = chip('same');
@@ -85,12 +95,35 @@ describe('planEmbedded', () => {
     expect(plan.kept).toEqual(['a']);
   });
 
-  it('loads a user chip that shadows a built-in part', () => {
+  it('asks before a board chip replaces a built-in part, and not for an identical one', () => {
     const builtins = builtinChipLibrary();
     const [part] = [...builtins.keys()];
     const shadow = chip(part!, [], { name: 'my own' });
     const plan = planEmbedded(boardUsing([], [shadow]), builtins, new Set());
-    expect(plan.load).toEqual([shadow]);
+    expect(plan.load).toEqual([]);
+    expect(plan.differ).toEqual([shadow]);
+    expect(plan.builtin).toEqual([part]);
+    const same = planEmbedded(boardUsing([], [builtins.get(part!)!]), builtins, new Set());
+    expect(same.differ).toEqual([]);
+  });
+
+  it('a built-in id with different pins is a warning, not a block', () => {
+    const builtins = builtinChipLibrary();
+    const [part] = [...builtins.keys()];
+    const pin = { id: 'p', name: 'A', dir: 'in', width: 1, role: 'data', order: 0 } as never;
+    const shadow = chip(part!, [], { name: 'my own', pins: [pin] });
+    const plan = planEmbedded(boardUsing([], [shadow]), builtins, new Set());
+    expect(plan.builtinPinMismatch).toEqual([part]);
+    expect(plan.pinMismatch).toEqual([]);
+  });
+
+  it('flags a differing chip whose pins changed, and one with a clean tab open', () => {
+    const pin = { id: 'p', name: 'A', dir: 'in', width: 1, role: 'data', order: 0 } as never;
+    const board = boardUsing([], [chip('a', [], { name: 'new', pins: [pin] }), chip('b')]);
+    const library = lib(chip('a'), chip('b', [], { name: 'old' }));
+    const plan = planEmbedded(board, library, new Set(), new Set(['b']));
+    expect(plan.pinMismatch).toEqual(['a']);
+    expect(plan.tabbed).toEqual(['b']);
   });
 });
 

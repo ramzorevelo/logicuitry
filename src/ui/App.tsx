@@ -59,7 +59,7 @@ import { DeviceLabWorkbench } from './workbench-devicelab/DeviceLabWorkbench';
 import { modalKeysHeld } from './modalKeys';
 import { isSelectTarget } from './panelKeys';
 import { rememberChipSource } from './document/chipSave';
-import { withoutUnsavedTabs } from './document/chipTabsSession';
+import { chipsDivergedFromLibrary, withoutUnsavedTabs } from './document/chipTabsSession';
 
 // Gates workbench retired: bubble pushing is the Circuit workbench's locked
 // bubble mode now (B key / mode bar).
@@ -109,6 +109,7 @@ export function App() {
       setPending(null);
       const { chips, skipped, fileNames } = await loadChipLibrary(dir);
       const kept = withoutUnsavedTabs(chips);
+      const diverged = chipsDivergedFromLibrary(chips);
       const result = useCircuitStore.getState().loadChipDefs(kept);
       // An unsaved tab keeps the file it was opened from, so Save does not land in the library.
       const keptIds = new Set(kept.map((d) => d.id));
@@ -119,7 +120,9 @@ export function App() {
           ? result.error
           : skipped.length > 0
             ? `${result.count} chips loaded, ${skipped.length} skipped`
-            : null,
+            : diverged.length > 0
+              ? `The library holds a different copy of ${diverged.join(', ')}; your open edits were kept`
+              : null,
       );
     },
     [setChipsDir],

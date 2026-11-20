@@ -161,6 +161,11 @@ export function useBoardDocument(): BoardDocument {
     then();
     const notes = [
       ...(result && !result.ok ? [`the board's own chips were not loaded: ${result.error}`] : []),
+      ...(choice === 'open' && plan.builtin.length > 0
+        ? [
+            `${plan.builtin.join(', ')}: kept the built-in part; the board's own copy was not loaded`,
+          ]
+        : []),
       ...(plan.kept.length > 0
         ? [`${plan.kept.join(', ')} kept the unsaved edits in its tab, not the board's copy`]
         : []),
@@ -175,9 +180,13 @@ export function useBoardDocument(): BoardDocument {
     const dirtyTabIds = new Set(
       st.tabs.flatMap((t) => (t.kind === 'def' && st.chipTabDirty(t.id) ? [t.defId] : [])),
     );
-    const plan = planEmbedded(board, st.chipLib, dirtyTabIds);
+    const openTabIds = new Set(st.tabs.flatMap((t) => (t.kind === 'def' ? [t.defId] : [])));
+    const plan = planEmbedded(board, st.chipLib, dirtyTabIds, openTabIds);
     const choice = mode === 'quiet' ? 'open' : rememberedChipCopyChoice();
-    if (plan.differ.length === 0 || choice) applyEmbedded(plan, choice ?? 'open', then);
+    // A remembered "open" never covers a pin mismatch: that one is asked every time.
+    const remembered =
+      mode === 'ask' && choice === 'open' && plan.pinMismatch.length > 0 ? null : choice;
+    if (plan.differ.length === 0 || remembered) applyEmbedded(plan, remembered ?? 'open', then);
     else setPendingChips({ plan, then });
   };
   const withEmbeddedChipsRef = useRef(withEmbeddedChips);
@@ -955,7 +964,7 @@ export function useBoardDocument(): BoardDocument {
         <LessonUnsavedDialog />
         {pendingChips && (
           <ChipsDifferDialog
-            chips={pendingChips.plan.differ}
+            plan={pendingChips.plan}
             onChoose={(choice, remember) => {
               const { plan, then } = pendingChips;
               setPendingChips(null);

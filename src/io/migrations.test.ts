@@ -762,6 +762,16 @@ describe('board v15 -> v16 (embedded chips, part choices)', () => {
     expect(validateDocument(out)).toEqual({ valid: true });
   });
 
+  it('names the embedded chip when its entry is malformed or from the future', () => {
+    const board = { ...structuredClone(boardV15), formatVersion: 16 };
+    expect(() => migrate({ ...board, chips: [null] })).toThrow(/embedded chip #1 is not a chip/);
+    expect(() => migrate({ ...board, chips: [innerChip, 'x'] })).toThrow(/embedded chip #2/);
+    const future = { ...innerChip, formatVersion: 99 };
+    expect(() => migrate({ ...board, chips: [future] })).toThrow(
+      new RegExp(`embedded chip #1 '${innerChip.id}': file is version 99`),
+    );
+  });
+
   it('rejects an invalid embedded chip or part choice', () => {
     const bad = { format: 'lcir.chip', formatVersion: 8, id: 'x' };
     expect(validateDocument({ ...boardV15, formatVersion: 16, chips: [bad] }).valid).toBe(false);

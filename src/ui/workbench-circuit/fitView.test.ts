@@ -56,4 +56,18 @@ describe('circuitDrawnBounds', () => {
     expect(b.x + b.w).toBe(1000);
     expect(b.y + b.h).toBe(500);
   });
+
+  it('includes a group frame and its name box around the members', () => {
+    const circuit = {
+      ...empty,
+      groups: [{ id: 'grp', name: 'A very long group name here' }],
+      components: [{ id: 'g', kind: 'and', pos: { x: 0, y: 0 }, group: 'grp' }],
+    } as unknown as Circuit;
+    const plain = circuitDrawnBounds({ ...circuit, groups: [] }, builtinChipLibrary(), theme)!;
+    const b = circuitDrawnBounds(circuit, builtinChipLibrary(), theme)!;
+    const g = theme.gridSchematic;
+    expect(b.x).toBeLessThanOrEqual(plain.x - 1.5 * g);
+    expect(b.y).toBeLessThanOrEqual(plain.y - 1.5 * g - theme.glyphText);
+    expect(b.x + b.w).toBeGreaterThanOrEqual(b.x + 27 * theme.glyphText * 0.6);
+  });
 });

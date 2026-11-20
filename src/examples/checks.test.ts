@@ -57,6 +57,8 @@ const EXPECTED: Record<string, [number, number]> = {
   'register-to-register-path': [0, 2],
   'three-bit-counter-on-two-74ls74s': [0, 4],
   'mod-10-counter': [0, 1],
+  'divide-by-three-counter': [0, 2],
+  'moore-and-mealy-01-recognizers': [0, 4],
   'logic-project-module': [0, 3],
   'clock-module': [0, 4],
   'bus-and-registers': [0, 0],

@@ -137,6 +137,7 @@ describe('parseStoredLayout', () => {
     ['wrong dir', mutate((p) => (p.dir = 'col'))],
     ['sizes not summing to 100', mutate((p) => (p.sizes = [19, 51, 40]))],
     ['negative size', mutate((p) => (p.sizes = [-10, 80, 30]))],
+    ['sliver size', mutate((p) => (p.sizes = [1, 1, 98]))],
     ['NaN size', mutate((p) => (p.sizes = [NaN, 70, 30]))],
     ['unknown view', mutate((p) => ((p.kids[0] as { view: string }).view = 'nope'))],
     ['duplicate views', mutate((p) => ((p.kids[0] as { view: string }).view = 'board'))],

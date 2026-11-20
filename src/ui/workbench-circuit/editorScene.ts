@@ -91,7 +91,7 @@ import {
 } from '../../render/glyphCache';
 import { circuitRoutes, componentGeometry, endResolver, previewRoutes } from './routeCache';
 import { wireDisplayInfo } from './wireDisplay';
-import { lodFor } from '../../render/lod';
+import { resolveLod, type LodLevel } from '../../render/lod';
 import { paintEmphasis } from '../../render/glyphs/relief';
 import { glyphVariant } from '../../render/glyphs/variants';
 import { drawTimer } from '../../render/glyphs/timer';
@@ -184,6 +184,8 @@ export interface RenderParams extends GlyphContext {
    *  wires the preview touches reroute. */
   routeBase?: Circuit | undefined;
   viewport: Viewport;
+  /** Forces a detail level instead of deriving it from zoom and part count. */
+  lod?: LodLevel;
   selection: ReadonlySet<string>;
   /** A touch hold has picked the selection up: drawn heavier so the lift shows
    *  on a phone whose touch vibration is off. */
@@ -330,7 +332,7 @@ function drawBoard(ctx: CanvasRenderingContext2D, theme: Theme, p: RenderParams)
   // Geometry never reads lod, and the frame's spread copy would defeat the
   // geometry and route caches, which key on the theme object.
   const baseTheme = theme;
-  theme = { ...theme, lod: lodFor(vp.zoom, p.board.components.length) };
+  theme = { ...theme, lod: resolveLod(p.lod, vp.zoom, p.board.components.length) };
 
   const geo = componentGeometry(p.board.components, p.chipLib, baseTheme);
   const routes = p.routeBase

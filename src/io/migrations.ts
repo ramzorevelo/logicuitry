@@ -231,6 +231,18 @@ function renameLegacyFormat(doc: Record<string, unknown>): Record<string, unknow
   return { ...doc, format: `lcir.${format.slice(legacy.length)}` };
 }
 
+function migrateEmbeddedChip(entry: unknown, index: number): Record<string, unknown> {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry))
+    throw new Error(`embedded chip #${index + 1} is not a chip`);
+  const id = (entry as Record<string, unknown>)['id'];
+  const name = typeof id === 'string' ? ` '${id}'` : '';
+  try {
+    return migrate(entry as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(`embedded chip #${index + 1}${name}: ${(e as Error).message}`);
+  }
+}
+
 export function migrate(input: Record<string, unknown>): Record<string, unknown> {
   const doc = renameLegacyFormat(input);
   const format = doc['format'] as LcirFormat;
@@ -249,7 +261,7 @@ export function migrate(input: Record<string, unknown>): Record<string, unknown>
   // A board's chip copies keep their own chip version, so they step through the chip chain.
   const chips = current['chips'];
   if (format === 'lcir.board' && Array.isArray(chips)) {
-    current = { ...current, chips: chips.map((c) => migrate(c as Record<string, unknown>)) };
+    current = { ...current, chips: chips.map(migrateEmbeddedChip) };
   }
   return current;
 }

@@ -72,6 +72,8 @@ import cacheTagLookup from './boards/cache-tag-lookup.lcirb';
 import majorityNandOnly from './boards/majority-vote-nand-only.lcirb';
 import mintermsOn138 from './boards/minterms-on-a-74ls138.lcirb';
 import counterFrom74ls from './boards/three-bit-counter-from-74ls-parts.lcirb';
+import divideByThree from './boards/divide-by-three-counter.lcirb';
+import mooreMealy from './boards/moore-and-mealy-01-recognizers.lcirb';
 
 export interface Example {
   id: string;
@@ -116,6 +118,7 @@ const ARITHMETIC = 'Arithmetic';
 const BLOCKS = 'Multiplexers and decoders';
 const DISPLAYS = 'Seven-segment displays';
 const FLIP_FLOPS = 'Flip-flops and registers';
+const STATE_MACHINES = 'State machines';
 const BUS_COMPUTER = 'Bus computer';
 const MEMORY = 'Memory and caches';
 /** Starter boards carrying a challenge: the parts are on the board, the circuit is not. */
@@ -129,6 +132,7 @@ export const EXAMPLE_GROUPS: readonly string[] = [
   BLOCKS,
   DISPLAYS,
   FLIP_FLOPS,
+  STATE_MACHINES,
   BUS_COMPUTER,
   MEMORY,
   CHALLENGES,
@@ -140,6 +144,7 @@ const arithmetic = inGroup(ARITHMETIC);
 const block = inGroup(BLOCKS);
 const display = inGroup(DISPLAYS);
 const flipFlops = inGroup(FLIP_FLOPS);
+const stateMachines = inGroup(STATE_MACHINES);
 const busComputer = inGroup(BUS_COMPUTER);
 const memory = inGroup(MEMORY);
 const challenge = inGroup(CHALLENGES);
@@ -260,6 +265,14 @@ export const EXAMPLES: readonly Example[] = [
   flipFlops(
     counterModule,
     'A 4-bit count on two 74LS74s that a 74LS283 steps up on UP or down on DN each 555 clock, with a 74LS157 loading 1001 on LOAD, CLEAR zeroing it and a 74LS47 driving the display.',
+  ),
+  stateMachines(
+    divideByThree,
+    'A Moore machine with no input: three states on a 74LS74 and a 74LS02, Y high in one state of every three, once /RST is released.',
+  ),
+  stateMachines(
+    mooreMealy,
+    'Two machines watching A for a 0 then a 1. The Moore output rises on the clock edge after the 1; the Mealy output rises as soon as A does.',
   ),
   busComputer(
     clockModule,

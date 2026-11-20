@@ -44,6 +44,8 @@ export interface Bom {
   looseGates: BomGateRow[];
   problems: PartsProblem[];
   icTotal: number;
+  /** Loose gates with no package chosen: none of them is in `icTotal`. */
+  unpackedGates: number;
 }
 
 /** What a bench build buys besides gates and packages; probes, ports, clocks and constants are not parts. */
@@ -180,6 +182,7 @@ export function bomOf(
     looseGates,
     problems: partsCensus(board, library).problems,
     icTotal,
+    unpackedGates: looseGates.reduce((n, g) => n + (g.choice === undefined ? g.count : 0), 0),
   };
 }
 

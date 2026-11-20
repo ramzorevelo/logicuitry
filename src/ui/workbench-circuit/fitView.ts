@@ -1,7 +1,14 @@
 import type { ChipLibrary, Circuit } from '../../core/model/types';
-import { captionAwareBounds, symbolBounds } from '../../render/glyphs/symbol';
+import {
+  captionAwareBounds,
+  measureMonoText,
+  oneLine,
+  symbolBounds,
+} from '../../render/glyphs/symbol';
 import type { Rect, Vec2, Viewport } from '../../render/scene';
 import type { Theme } from '../../render/theme';
+import { groupNameBox, groupRects } from './editorScene';
+import { circuitRoutes, componentGeometry } from './routeCache';
 
 /** World rect of everything a circuit draws, or null when it has no parts. */
 export function circuitDrawnBounds(
@@ -34,7 +41,37 @@ export function circuitDrawnBounds(
     w.points.forEach(take);
     for (const e of [w.a, w.b]) if (e.kind === 'free' || e.kind === 'tap') take(e.pos);
   }
+  takeGroupFrames(circuit, chipLib, theme, take);
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+/** Group borders and their name boxes draw outside every member, so the
+ *  parts alone clip them in a fit and in an export. */
+function takeGroupFrames(
+  circuit: Circuit,
+  chipLib: ChipLibrary,
+  theme: Theme,
+  take: (p: Vec2) => void,
+): void {
+  if (!circuit.groups?.length) return;
+  const g = theme.gridSchematic;
+  const geo = componentGeometry(circuit.components, chipLib, theme);
+  const routes = circuitRoutes(circuit, chipLib, theme, g);
+  const rects = groupRects(circuit, (id) => geo.get(id)?.bounds, g, routes);
+  for (const group of circuit.groups) {
+    const rect = rects.get(group.id);
+    if (!rect) continue;
+    const name = groupNameBox(
+      group,
+      rect,
+      measureMonoText(oneLine(group.name), theme.glyphText),
+      theme,
+    );
+    for (const r of [rect, name]) {
+      take(r);
+      take({ x: r.x + r.w, y: r.y + r.h });
+    }
+  }
 }
 
 /** Centers `bounds` plus `margin` (world units) in a `viewW` x `viewH` CSS-px

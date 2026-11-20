@@ -424,7 +424,16 @@ function Coach(props: Props) {
   const end = useOnboardingStore((s) => s.end);
   // Coach mounts only while its card shows, so unmounting releases the layer.
   useBackLayer(end);
-  const progress = useProgress();
+  const live = useProgress();
+  const buildCompleted = useOnboardingStore((s) => s.buildCompleted);
+  const completeBuild = useOnboardingStore((s) => s.completeBuild);
+  useEffect(() => {
+    if (live.current === null) completeBuild();
+  }, [live.current, completeBuild]);
+  // Once finished the card stays on its done face, so flipping a switch back
+  // to watch the LED go out does not bring the checklist back.
+  const finished = buildCompleted || live.current === null;
+  const progress = finished ? { ...live, current: null, mustPowerOff: false } : live;
   const step = progress.current;
   // A paused board holds a flip back until Run or Settle, so the LED looks stuck.
   const flipsWaiting = useCircuitStore((s) => s.powered && s.canSettle());

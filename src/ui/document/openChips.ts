@@ -20,20 +20,21 @@ export function openChipFiles(picked: readonly PickedChip[], failed: string[]): 
   const st = store.getState();
   const unsaved = (id: string) =>
     st.tabs.some((t) => t.kind === 'def' && t.defId === id && st.chipTabDirty(t.id));
-  // A chip picked twice: the later file wins.
-  const byId = new Map(picked.map((p) => [p.def.id, p]));
-  const ready = [...byId.values()].filter(({ def }) => {
+  const seen = new Set<string>();
+  const ready = picked.filter(({ def, file }) => {
+    if (seen.has(def.id)) {
+      failed.push(`${file.name}: another picked file already holds chip ${def.id}`);
+      return false;
+    }
+    seen.add(def.id);
     if (!unsaved(def.id)) return true;
     failed.push(`${def.name} has unsaved edits in its tab; save or close it first`);
     return false;
   });
   if (ready.length === 0) return [];
-  const result = st.loadChipDefs(ready.map((p) => p.def));
-  if (!result.ok) {
-    failed.push(result.error);
-    return [];
-  }
-  for (const { def, file } of ready) {
+  const accepted = loadAcceptable(ready, failed);
+  if (accepted.length === 0) return [];
+  for (const { def, file } of accepted) {
     // Same flow as double-clicking an instance. The board tab is untouched; Save
     // follows whichever tab is in front.
     store.getState().openDefTab(def.id, `${def.id}/`, def.name);
@@ -45,7 +46,20 @@ export function openChipFiles(picked: readonly PickedChip[], failed: string[]): 
       // Convenience only.
     });
   }
-  return ready.map((p) => p.def.name);
+  return accepted.map((p) => p.def.name);
+}
+
+/** The whole batch at once, else one by one so a cyclic chip is reported and the rest still load. */
+function loadAcceptable(ready: readonly PickedChip[], failed: string[]): PickedChip[] {
+  const st = useCircuitStore.getState();
+  if (st.loadChipDefs(ready.map((p) => p.def)).ok) return [...ready];
+  const accepted: PickedChip[] = [];
+  for (const p of ready) {
+    const result = st.loadChipDefs([...accepted, p].map((q) => q.def));
+    if (result.ok) accepted.push(p);
+    else failed.push(`${p.def.name}: ${result.error}`);
+  }
+  return accepted;
 }
 
 /** One chip file, reporting a refusal on the notice strip. */
