@@ -170,11 +170,19 @@ export function filePickersSupported(): boolean {
   return typeof window !== 'undefined' && typeof filePicker().showOpenFilePicker === 'function';
 }
 
+/** Android and iOS pickers filter by MIME type only and cannot map our extensions to one, so any
+ *  type filter grays out every document (a downloaded `.lcirb` is octet-stream). On a touch-first
+ *  device the picker shows everything and the content's kind token is the filter. */
+function touchFirst(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+}
+
 export async function pickDocumentFile(startIn?: LibraryDir): Promise<DocFile | undefined> {
   const show = filePicker().showOpenFilePicker;
   if (!show) return (await chooseUploadedFiles(false))[0];
   try {
-    const handles = await show({ types: DOC_TYPES, ...(startIn ? { startIn } : {}) });
+    const types = touchFirst() ? {} : { types: DOC_TYPES };
+    const handles = await show({ ...types, ...(startIn ? { startIn } : {}) });
     return handles[0];
   } catch {
     return undefined; // dismissed
@@ -188,11 +196,15 @@ export async function pickDocumentFiles(
 ): Promise<DocFile[]> {
   const show = filePicker().showOpenFilePicker;
   if (!show) return chooseUploadedFiles(true, accept);
-  const types = accept
-    ? DOC_TYPES.filter((t) => accept.some((e) => t.accept['application/json'].includes(e)))
-    : DOC_TYPES;
+  const types = touchFirst()
+    ? {}
+    : {
+        types: accept
+          ? DOC_TYPES.filter((t) => accept.some((e) => t.accept['application/json'].includes(e)))
+          : DOC_TYPES,
+      };
   try {
-    const handles = await show({ multiple: true, types, ...(startIn ? { startIn } : {}) });
+    const handles = await show({ multiple: true, ...types, ...(startIn ? { startIn } : {}) });
     return [...handles];
   } catch {
     return []; // dismissed
@@ -206,7 +218,9 @@ function chooseUploadedFiles(multiple: boolean, accept?: readonly string[]): Pro
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = multiple;
-    input.accept = (accept ?? [BOARD_EXT, CHIP_EXT, LESSON_EXT]).join(',');
+    if (!touchFirst()) {
+      input.accept = (accept ?? [BOARD_EXT, CHIP_EXT, LESSON_EXT]).join(',');
+    }
     input.hidden = true;
     const done = (files: File[]) => {
       input.remove();
@@ -225,6 +239,12 @@ export function docFileWritable(file: DocFile): boolean {
   return !(file instanceof File);
 }
 
+/** Android renames a JSON save to `copy.lcirb.json`; octet-stream is the one type it leaves alone. */
+const SAVE_TYPES_TOUCH = DOC_TYPES.map((t) => ({
+  description: t.description,
+  accept: { 'application/octet-stream': t.accept['application/json'] },
+}));
+
 export async function pickSavePath(
   suggestedName: string,
   startIn?: LibraryDir,
@@ -232,7 +252,8 @@ export async function pickSavePath(
   const show = filePicker().showSaveFilePicker;
   if (!show) return undefined;
   try {
-    return await show({ suggestedName, types: DOC_TYPES, ...(startIn ? { startIn } : {}) });
+    const types = touchFirst() ? SAVE_TYPES_TOUCH : DOC_TYPES;
+    return await show({ suggestedName, types, ...(startIn ? { startIn } : {}) });
   } catch {
     return undefined; // dismissed
   }
@@ -287,9 +308,14 @@ export async function saveBlob(
   return true;
 }
 
+/** Far above any real document (the largest example is ~0.25 MB). Phone pickers offer every file,
+ *  and reading a video whole just to fail JSON.parse can kill the tab. */
+export const MAX_DOC_BYTES = 32 * 1024 * 1024;
+
 export async function readDocFile(file: DocFile): Promise<string> {
-  if (file instanceof File) return file.text();
-  return (await asFile(file).getFile()).text();
+  const blob = file instanceof File ? file : await asFile(file).getFile();
+  if (blob.size > MAX_DOC_BYTES) throw new Error('too large to be a Logicuitry file');
+  return blob.text();
 }
 
 /** Throws when permission has lapsed, which is the caller's cue to fall back

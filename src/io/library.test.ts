@@ -29,6 +29,7 @@ describe('library: parseDocument', () => {
 
   it('throws on non-JSON', () => {
     expect(() => parseDocument('{ not json')).toThrow(LibraryLoadError);
+    expect(() => parseDocument('PNG binary')).toThrow('not a Logicuitry file');
   });
 
   it('throws with schema errors on an invalid document', () => {

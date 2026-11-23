@@ -23,8 +23,9 @@ export function parseDocument(text: string): LibraryDoc {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
-  } catch (e) {
-    throw new LibraryLoadError(`not valid JSON: ${(e as Error).message}`);
+  } catch {
+    // Not the parser's message: on a photo or video it echoes binary bytes.
+    throw new LibraryLoadError('not a Logicuitry file');
   }
   if (typeof raw !== 'object' || raw === null)
     throw new LibraryLoadError('file is not a JSON object');

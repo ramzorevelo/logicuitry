@@ -1,5 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { pickDocumentFiles as pickBrowser } from './fs/browserFs';
+import {
+  MAX_DOC_BYTES,
+  pickDocumentFiles as pickBrowser,
+  pickSavePath,
+  readDocFile,
+} from './fs/browserFs';
 import { pickDocumentFiles as pickDesktop } from './fs/desktopFs';
 
 const open = vi.fn();
@@ -34,6 +39,13 @@ describe('pickDocumentFiles (browser, picker)', () => {
     const { types } = showOpenFilePicker.mock.calls[0]![0];
     expect(types).toHaveLength(1);
     expect(types[0].accept['application/json']).toEqual(['.lcirc']);
+  });
+
+  it('passes no types on a touch-first device, whose picker would gray every document out', async () => {
+    const showOpenFilePicker = vi.fn().mockResolvedValue([]);
+    vi.stubGlobal('window', { showOpenFilePicker, matchMedia: () => ({ matches: true }) });
+    await pickBrowser(undefined, ['.lcirc']);
+    expect(showOpenFilePicker.mock.calls[0]![0]).not.toHaveProperty('types');
   });
 
   it('resolves to [] when dismissed', async () => {
@@ -72,11 +84,55 @@ describe('pickDocumentFiles (browser, input fallback)', () => {
     await expect(p).resolves.toEqual(files);
   });
 
+  it('leaves accept empty on a touch device, whose picker would gray the files out', async () => {
+    const { input } = stubInput();
+    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+    const p = pickBrowser(undefined, ['.lcirc']);
+    expect(input.accept).toBe('');
+    input.dispatchEvent(new Event('cancel'));
+    await expect(p).resolves.toEqual([]);
+  });
+
   it('resolves [] on cancel', async () => {
     const { input } = stubInput();
     const p = pickBrowser();
     input.dispatchEvent(new Event('cancel'));
     await expect(p).resolves.toEqual([]);
+  });
+});
+
+describe('pickSavePath (browser)', () => {
+  it('offers octet-stream on a touch-first device, so Android keeps the extension', async () => {
+    const showSaveFilePicker = vi.fn().mockResolvedValue({ name: 'a.lcirb' });
+    vi.stubGlobal('window', { showSaveFilePicker, matchMedia: () => ({ matches: true }) });
+    await pickSavePath('a.lcirb');
+    const { types } = showSaveFilePicker.mock.calls[0]![0];
+    expect(types[0].accept).toEqual({ 'application/octet-stream': ['.lcirb'] });
+  });
+
+  it('offers the JSON types on desktop', async () => {
+    const showSaveFilePicker = vi.fn().mockResolvedValue({ name: 'a.lcirb' });
+    vi.stubGlobal('window', { showSaveFilePicker, matchMedia: () => ({ matches: false }) });
+    await pickSavePath('a.lcirb');
+    expect(showSaveFilePicker.mock.calls[0]![0].types[0].accept).toHaveProperty('application/json');
+  });
+});
+
+describe('readDocFile', () => {
+  it('refuses a file over the size cap without reading it', async () => {
+    const text = vi.fn();
+    const big = Object.assign(Object.create(File.prototype) as File, {});
+    Object.defineProperties(big, {
+      size: { value: MAX_DOC_BYTES + 1 },
+      name: { value: 'clip.mp4' },
+      text: { value: text },
+    });
+    await expect(readDocFile(big)).rejects.toThrow('too large to be a Logicuitry file');
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('reads a file under the cap', async () => {
+    await expect(readDocFile(new File(['{}'], 'a.lcirb'))).resolves.toBe('{}');
   });
 });
 

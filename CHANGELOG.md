@@ -7,7 +7,7 @@ patch digit a small feature, fix or follow-up).
 
 ## [Unreleased]
 
-## [0.8.4] - 2026-11-21
+## [0.8.4] - 2026-11-23
 
 ### Added
 
@@ -23,6 +23,10 @@ patch digit a small feature, fix or follow-up).
 
 ### Fixed
 
+- On a phone: board and chip files were grayed out in Open, and Save As added
+  `.json` to the name.
+- Picking a file that is not a board or chip says so plainly, and very large
+  files are refused instead of slowing the app.
 - On a phone, a playing lesson no longer lets a tap select or delete parts.
 - Export image includes group frames and names, draws a dense board in full
   detail, and saves boards with their chips.
