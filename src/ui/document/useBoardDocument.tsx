@@ -24,6 +24,7 @@ import {
   type OpenedDocument,
   type RecentBoard,
 } from '../../io/boardFile';
+import { CHIP_EXT } from '../../io/docExtensions';
 import { parseDocument, serializeDocument } from '../../io/library';
 import { loadSession, saveSession } from '../../io/sessionStore';
 import { loadFileLessons, rememberFileLesson } from '../../io/lessonFiles';
@@ -594,7 +595,8 @@ export function useBoardDocument(): BoardDocument {
   const fileOpenChip = async () => {
     let files: DocFile[];
     try {
-      files = await pickDocumentFiles(boardsDir ?? undefined);
+      // `.json` keeps chips saved before the extensions existed pickable on desktop.
+      files = await pickDocumentFiles(boardsDir ?? undefined, [CHIP_EXT, '.json']);
     } catch (e) {
       useCircuitStore.setState({ error: `open: ${(e as Error).message}` });
       return;

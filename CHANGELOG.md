@@ -34,6 +34,7 @@ patch digit a small feature, fix or follow-up).
 - A chip whose id matches a built-in part asks before replacing it.
 - A restored chip tab no longer overwrites a newer saved copy.
 - Open Chip reports a duplicate or broken file and opens the rest.
+- Open Chip offers chip files first instead of boards.
 - The Parts list total names the gates that have no chip chosen.
 
 ## [0.8.3] - 2026-11-18
